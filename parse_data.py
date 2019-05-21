@@ -30,8 +30,8 @@ class Doench2016Cas9ActivityParser:
             context_nt: nt of target sequence context to include alongside
                 each guide
             split: (train, validation, test) split; must sum to 1.0
-            shuffle_seed: seed to use for the random module (used when
-                shuffling input)
+            shuffle_seed: seed to use for the random module to shuffle rows
+                (if None, do not shuffle rows)
         """
         assert subset in (None, 'mismatch')
         self.subset = subset
@@ -41,7 +41,11 @@ class Doench2016Cas9ActivityParser:
         assert sum(split) == 1.0
         self.split_train, self.split_validate, self.split_test = split
 
-        random.seed(shuffle_seed)
+        if shuffle_seed is None:
+            self.shuffle_rows = False
+        else:
+            self.shuffle_rows = True
+            random.seed(shuffle_seed)
 
         self.was_read = False
 
@@ -155,7 +159,8 @@ class Doench2016Cas9ActivityParser:
             rows = [row for row in rows if row[header_idx['category']] == 'Mismatch']
 
         # Shuffle the rows
-        random.shuffle(rows)
+        if self.shuffle_rows:
+            random.shuffle(rows)
 
         # Generate input and labels for each row
         inputs_and_labels = []
