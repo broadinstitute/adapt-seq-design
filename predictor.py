@@ -22,7 +22,7 @@ tf.random.set_seed(1)
 data_parser = parse_data.Doench2016Cas9ActivityParser(
         subset=None,
         context_nt=20,
-        split=(0.8, 0.1, 0.1),
+        split=(0.6, 0.2, 0.2),
         shuffle_seed=1)
 data_parser.read()
 
@@ -33,6 +33,14 @@ x_test, y_test = data_parser.test_set()
 # Print the size of each data set
 data_sizes = 'DATA SIZES - Train: {}, Validate: {}, Test: {}'
 print(data_sizes.format(len(x_train), len(x_validate), len(x_test)))
+
+# Print the fraction of the training data points that are in each class
+classes = set(tuple(y) for y in y_train)
+for c in classes:
+    num_c = sum(1 for y in y_train if tuple(y) == c)
+    frac_c = float(num_c) / len(y_train)
+    frac_c_msg = 'Fraction of train data in class {}: {}'
+    print(frac_c_msg.format(c, frac_c))
 
 # Create datasets and batch data
 batch_size = 64
@@ -192,7 +200,7 @@ for epoch in range(num_epochs):
     for seqs, labels in validate_ds:
         validate_step(seqs, labels)
 
-    # Log the metrics; note that these are cumulative
+    # Log the metrics from this epoch
     log = ('Epoch {} - Train loss: {}, Train accuracy: {}, ' +
            'Validate loss: {}, Validate accuracy: {}')
     print(log.format(epoch+1,
