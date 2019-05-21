@@ -47,7 +47,8 @@ class Cas9CNN(tf.keras.Model):
                 conv_layer_filter_width,
                 strides=1,  # stride by 1
                 padding='valid',
-                activation='relu')
+                activation='relu',
+                name='conv')
 
         # Construct a pooling layer
         # Take the maximum over a window of width max_pool_window, for
@@ -59,7 +60,8 @@ class Cas9CNN(tf.keras.Model):
         max_pool_stride = 2
         self.pool = tf.keras.layers.MaxPooling1D(
                 pool_size=max_pool_window,
-                strides=max_pool_stride)
+                strides=max_pool_stride,
+                name='maxpool')
 
         # Flatten the max pooling output from above while preserving
         # the batch axis
@@ -71,10 +73,12 @@ class Cas9CNN(tf.keras.Model):
         fc_hidden_dim = 50
         self.fc_1 = tf.keras.layers.Dense(
                 fc_hidden_dim,
-                activation='relu')
+                activation='relu',
+                name='fc_1')
         self.fc_2 = tf.keras.layers.Dense(
                 fc_hidden_dim,
-                activation='relu')
+                activation='relu',
+                name='fc_2')
 
         # Construct the final layer (fully connected)
         # Set the dimension of this final fully connected layer to
@@ -82,7 +86,8 @@ class Cas9CNN(tf.keras.Model):
         fc_final_dim = 1
         self.fc_final = tf.keras.layers.Dense(
                 fc_final_dim,
-                activation='sigmoid')
+                activation='sigmoid',
+                name='fc_final')
 
     def call(self, x):
         x = self.conv(x)
@@ -95,6 +100,7 @@ class Cas9CNN(tf.keras.Model):
 model = Cas9CNN()
 
 # Print a model summary
+model.build(x_train.shape)
 print(model.summary())
 #####################################################################
 #####################################################################
@@ -115,9 +121,9 @@ validate_loss_metric = tf.keras.metrics.Mean(name='validate_loss')
 test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
 
 # Also report on the accuracy, again cumulatively over epochs
-train_accuracy_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-validate_accuracy_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='validate_accuracy')
-test_accuracy_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
+train_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='train_accuracy')
+validate_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='validate_accuracy')
+test_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='test_accuracy')
 
 # Define an optimizer
 optimizer = tf.keras.optimizers.Adam()
@@ -157,7 +163,7 @@ def test_step(seqs, labels):
     test_accuracy_metric(labels, predictions)
 
 # Train (and validate) for each epoch
-num_epochs = 10
+num_epochs = 50
 for epoch in range(num_epochs):
     # Train on each batch
     for seqs, labels in train_ds:
