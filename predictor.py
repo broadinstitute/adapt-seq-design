@@ -1,6 +1,12 @@
-# Simple convnet (CNN) for a guide sequence.
-# This has one convolutional layer, a max pool layer, 2 fully connected hidden
-# layers, and fully connected output layer passed through sigmoid.
+"""Simple convnet (CNN) for a guide sequence.
+
+This is implemented for classifying Cas9 activity.
+
+This has one convolutional layer, a max pool layer, 2 fully connected hidden
+layers, and fully connected output layer passed through sigmoid.
+"""
+
+import parse_data
 
 import numpy as np
 import tensorflow as tf
@@ -12,19 +18,30 @@ tf.random.set_seed(1)
 #####################################################################
 # Read and batch input/output
 #####################################################################
-# TODO: read input/output data
-# x_train, y_train = ...
-# x_validate, y_validate = ...
-# x_test, y_test = ...
+# Read data
+data_parser = parse_data.Doench2016Cas9ActivityParser(
+        subset=None,
+        context_nt=20,
+        split=(0.8, 0.1, 0.1),
+        shuffle_seed=1)
+data_parser.read()
+
+x_train, y_train = data_parser.train_set()
+x_validate, y_validate = data_parser.validate_set()
+x_test, y_test = data_parser.test_set()
+
+# Print the size of each data set
+data_sizes = 'DATA SIZES - Train: {}, Validate: {}, Test: {}'
+print(data_sizes.format(len(x_train), len(x_validate), len(x_test)))
 
 # Create datasets and batch data
 batch_size = 64
-#train_ds = tf.data.Dataset.from_tensor_slices(
-#        (x_train, y_train)).batch(batch_size)
-#validate_ds = tf.data.Dataset.from_tensor_slices(
-#        (x_validate, y_validate)).batch(batch_size)
-#test_ds = tf.data.Dataset.from_tensor_slices(
-#        (x_test, y_test)).batch(batch_size)
+train_ds = tf.data.Dataset.from_tensor_slices(
+        (x_train, y_train)).batch(batch_size)
+validate_ds = tf.data.Dataset.from_tensor_slices(
+        (x_validate, y_validate)).batch(batch_size)
+test_ds = tf.data.Dataset.from_tensor_slices(
+        (x_test, y_test)).batch(batch_size)
 #####################################################################
 #####################################################################
 
