@@ -131,13 +131,12 @@ print(model.summary())
 # calling tf.nn.sigmoid_cross_entropy_with_logits
 bce_per_sample = tf.keras.losses.BinaryCrossentropy()
 
-# When outputting loss, take the mean across the samples from each batch,
-# cumulatively over epochs
+# When outputting loss, take the mean across the samples from each batch
 train_loss_metric = tf.keras.metrics.Mean(name='train_loss')
 validate_loss_metric = tf.keras.metrics.Mean(name='validate_loss')
 test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
 
-# Also report on the accuracy, again cumulatively over epochs
+# Also report on the accuracy, with the mean across each batch
 train_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='train_accuracy')
 validate_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='validate_accuracy')
 test_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='test_accuracy')
@@ -202,11 +201,19 @@ for epoch in range(num_epochs):
                      validate_loss_metric.result(),
                      validate_accuracy_metric.result()))
 
+    # Reset metric states so they are not cumulative over epochs
+    train_loss_metric.reset_states()
+    validate_loss_metric.reset_states()
+    train_accuracy_metric.reset_states()
+    validate_accuracy_metric.reset_states()
+
 # Test the model
 for seqs, labels in test_ds:
     test_step(seqs, labels)
 log = ('TEST - Loss: {}, Accuracy: {}')
 print(log.format(test_loss_metric.result(),
                  test_accuracy_metric.result()))
+test_loss_metric.reset_states()
+test_accuracy_metric.reset_states()
 #####################################################################
 #####################################################################
