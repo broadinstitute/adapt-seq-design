@@ -144,10 +144,23 @@ train_loss_metric = tf.keras.metrics.Mean(name='train_loss')
 validate_loss_metric = tf.keras.metrics.Mean(name='validate_loss')
 test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
 
-# Also report on the accuracy, with the mean across each batch
+# Also report on the accuracy and AUC for each epoch (each metric is updated
+# with data from each batch, and computed using data from all batches)
 train_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='train_accuracy')
+train_auc_roc_metric = tf.keras.metrics.AUC(
+        num_thresholds=200, curve='ROC', name='train_auc_roc')
+train_auc_pr_metric = tf.keras.metrics.AUC(
+        num_thresholds=200, curve='PR', name='train_auc_pr')
 validate_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='validate_accuracy')
+validate_auc_roc_metric = tf.keras.metrics.AUC(
+        num_thresholds=200, curve='ROC', name='validate_auc_roc')
+validate_auc_pr_metric = tf.keras.metrics.AUC(
+        num_thresholds=200, curve='PR', name='validate_auc_pr')
 test_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='test_accuracy')
+test_auc_roc_metric = tf.keras.metrics.AUC(
+        num_thresholds=200, curve='ROC', name='test_auc_roc')
+test_auc_pr_metric = tf.keras.metrics.AUC(
+        num_thresholds=200, curve='PR', name='test_auc_pr')
 
 # Define an optimizer
 optimizer = tf.keras.optimizers.Adam()
@@ -166,6 +179,8 @@ def train_step(seqs, labels):
     # Record metrics
     train_loss_metric(loss)
     train_accuracy_metric(labels, predictions)
+    train_auc_roc_metric(labels, predictions)
+    train_auc_pr_metric(labels, predictions)
 
 # Define functions for computing validation and test metrics; these are
 # called on each batch
@@ -177,6 +192,8 @@ def validate_step(seqs, labels):
     # Record metrics
     validate_loss_metric(loss)
     validate_accuracy_metric(labels, predictions)
+    validate_auc_roc_metric(labels, predictions)
+    validate_auc_pr_metric(labels, predictions)
 @tf.function
 def test_step(seqs, labels):
     # Compute predictions and loss
@@ -185,6 +202,8 @@ def test_step(seqs, labels):
     # Record metrics
     test_loss_metric(loss)
     test_accuracy_metric(labels, predictions)
+    test_auc_roc_metric(labels, predictions)
+    test_auc_pr_metric(labels, predictions)
 
 # Train (and validate) for each epoch
 num_epochs = 50
@@ -202,26 +221,41 @@ for epoch in range(num_epochs):
 
     # Log the metrics from this epoch
     log = ('Epoch {} - Train loss: {}, Train accuracy: {}, ' +
-           'Validate loss: {}, Validate accuracy: {}')
+           'Train AUC-ROC: {}, Train AUC-PR: {}, ' +
+           'Validate loss: {}, Validate accuracy: {}, ' +
+           'Validate AUC-ROC: {}, Validate AUC-PR: {}')
     print(log.format(epoch+1,
                      train_loss_metric.result(),
                      train_accuracy_metric.result(),
+                     train_auc_roc_metric.result(),
+                     train_auc_pr_metric.result(),
                      validate_loss_metric.result(),
-                     validate_accuracy_metric.result()))
+                     validate_accuracy_metric.result(),
+                     validate_auc_roc_metric.result(),
+                     validate_auc_pr_metric.result()))
 
     # Reset metric states so they are not cumulative over epochs
     train_loss_metric.reset_states()
-    validate_loss_metric.reset_states()
     train_accuracy_metric.reset_states()
+    train_auc_roc_metric.reset_states()
+    train_auc_pr_metric.reset_states()
+    validate_loss_metric.reset_states()
     validate_accuracy_metric.reset_states()
+    validate_auc_roc_metric.reset_states()
+    validate_auc_pr_metric.reset_states()
+
 
 # Test the model
 for seqs, labels in test_ds:
     test_step(seqs, labels)
-log = ('TEST - Loss: {}, Accuracy: {}')
+log = ('TEST - Loss: {}, Accuracy: {}, AUC-ROC: {}, AUC-PR: {}')
 print(log.format(test_loss_metric.result(),
-                 test_accuracy_metric.result()))
+                 test_accuracy_metric.result(),
+                 test_auc_roc_metric.result(),
+                 test_auc_pr_metric.result()))
 test_loss_metric.reset_states()
 test_accuracy_metric.reset_states()
+test_auc_roc_metric.reset_states()
+test_auc_pr_metric.reset_states()
 #####################################################################
 #####################################################################
