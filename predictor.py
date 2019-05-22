@@ -6,24 +6,71 @@ This has one convolutional layer, a max pool layer, 2 fully connected hidden
 layers, and fully connected output layer passed through sigmoid.
 """
 
+import argparse
+
 import parse_data
 
 import numpy as np
 import tensorflow as tf
 
 
-# Don't use a random seed
-tf.random.set_seed(1)
+# Parse arguments
+parser = argparse.ArgumentParser()
+parser.add_argument('--subset',
+        choices=['mismatch'],
+        help=("Use a subset of the data. 'mismatch' for only points "
+              "representing guides with canonical PAM but a mismatch "
+              "to the target. To use all data, do not set."))
+parser.add_argument('--context-nt',
+        type=int,
+        default=20,
+        help=("nt of target sequence context to include alongside each "
+              "guide"))
+parser.add_argument('--conv-num-filters',
+        type=int,
+        default=20,
+        help=("Number of convolutional filters (i.e., output channels) "
+              "in the first layer"))
+parser.add_argument('--conv-filter-width',
+        type=int,
+        default=4,
+        help=("Width of the convolutional filter (nt)"))
+parser.add_argument('--max-pool-window-width',
+        type=int,
+        default=4,
+        help=("Width of the max pool window (stride of convolutional "
+              "filter is 1, so this is in nt)"))
+parser.add_argument('--fully-connected-dim',
+        type=int,
+        default=50,
+        help=("Dimension of each fully connected layer (i.e., of its "
+              "output space"))
+parser.add_argument('--epochs',
+        type=int,
+        default=100,
+        help=("Number of training epochs"))
+parser.add_argument('--seed',
+        type=int,
+        default=1,
+        help=("Random seed"))
+args = parser.parse_args()
+
+# Print the arguments provided
+print(args)
+
+
+# Don't use a random seed for tensorflow
+tf.random.set_seed(args.seed)
 
 #####################################################################
 # Read and batch input/output
 #####################################################################
 # Read data
 data_parser = parse_data.Doench2016Cas9ActivityParser(
-        subset=None,
-        context_nt=20,
+        subset=args.subset,
+        context_nt=args.context_nt,
         split=(0.6, 0.2, 0.2),
-        shuffle_seed=1)
+        shuffle_seed=args.seed)
 data_parser.read()
 
 x_train, y_train = data_parser.train_set()
@@ -65,8 +112,8 @@ class Cas9CNN(tf.keras.Model):
         # Construct the convolutional layer
         # Do not pad the input (`padding='valid'`) because all input
         # sequences should be the same length
-        conv_layer_num_filters = 20 # aka, number of output channels
-        conv_layer_filter_width = 4
+        conv_layer_num_filters = args.conv_num_filters # ie, num of output channels
+        conv_layer_filter_width = args.conv_filter_width
         self.conv = tf.keras.layers.Conv1D(
                 conv_layer_num_filters,
                 conv_layer_filter_width,
@@ -81,8 +128,8 @@ class Cas9CNN(tf.keras.Model):
         # Stride by max_pool_stride; note that if
         # max_pool_stride = max_pool_window, then the max pooling
         # windows are non-overlapping
-        max_pool_window = 4
-        max_pool_stride = 2
+        max_pool_window = args.max_pool_window_width
+        max_pool_stride = int(args.max_pool_window_width / 2)
         self.pool = tf.keras.layers.MaxPooling1D(
                 pool_size=max_pool_window,
                 strides=max_pool_stride,
@@ -95,7 +142,7 @@ class Cas9CNN(tf.keras.Model):
         # Construct 2 fully connected hidden layers
         # Set the dimension of each fully connected layer (i.e., dimension
         # of the output space) to fc_hidden_dim
-        fc_hidden_dim = 50
+        fc_hidden_dim = args.fully_connected_dim
         self.fc_1 = tf.keras.layers.Dense(
                 fc_hidden_dim,
                 activation='relu',
@@ -206,8 +253,7 @@ def test_step(seqs, labels):
     test_auc_pr_metric(labels, predictions)
 
 # Train (and validate) for each epoch
-num_epochs = 50
-for epoch in range(num_epochs):
+for epoch in range(args.epochs):
     # Train on each batch
     for seqs, labels in train_ds:
         train_step(seqs, labels)
