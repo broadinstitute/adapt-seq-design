@@ -38,6 +38,10 @@ parser.add_argument('--max-pool-window-width',
         type=int,
         default=2,
         help=("Width of the max pool window"))
+parser.add_argument('--global-average-pool',
+        action='store_true',
+        help=("Use a global average pooling layer before the fully connected "
+              "layer"))
 parser.add_argument('--fully-connected-dim',
         type=int,
         default=20,
@@ -132,14 +136,18 @@ class Cas9CNN(tf.keras.Model):
         # windows are non-overlapping
         max_pool_window = args.max_pool_window_width
         max_pool_stride = int(args.max_pool_window_width / 2)
-        self.pool = tf.keras.layers.MaxPooling1D(
+        self.maxpool = tf.keras.layers.MaxPooling1D(
                 pool_size=max_pool_window,
                 strides=max_pool_stride,
                 name='maxpool')
 
+        if args.global_average_pool:
+            self.globalpool = tf.keras.layers.GlobalAveragePooling1D(
+                    name='globalavgpool')
+
         # Add a batch normalization layer
         # It should not matter whether this comes before or after the
-        # max pool layer, as long as it is after the conv layer (the
+        # pool layer, as long as it is after the conv layer (the
         # result should be the same)
         # This is applied after the relu activation of the conv layer; the
         # original batch norm applies batch normalization before the
@@ -147,7 +155,7 @@ class Cas9CNN(tf.keras.Model):
         # after activation
         self.batchnorm = tf.keras.layers.BatchNormalization()
 
-        # Flatten the max pooling output from above while preserving
+        # Flatten the pooling output from above while preserving
         # the batch axis
         self.flatten = tf.keras.layers.Flatten()
 
@@ -177,7 +185,9 @@ class Cas9CNN(tf.keras.Model):
 
     def call(self, x):
         x = self.conv(x)
-        x = self.pool(x)
+        x = self.maxpool(x)
+        if args.global_average_pool:
+            x = self.globalpool(x)
         x = self.batchnorm(x)
         x = self.flatten(x)
         x = self.fc_1(x)
