@@ -17,10 +17,9 @@ import tensorflow as tf
 # Parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--subset',
-        choices=['mismatch'],
-        help=("Use a subset of the data. 'mismatch' for only points "
-              "representing guides with canonical PAM but a mismatch "
-              "to the target. To use all data, do not set."))
+      choices=['guide-mismatch-and-good-pam', 'guide-match'],
+      help=("Use a subset of the data. See parse_data module for "
+            "descriptions of the subsets. To use all data, do not set."))
 parser.add_argument('--context-nt',
         type=int,
         default=20,

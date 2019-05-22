@@ -23,17 +23,19 @@ class Doench2016Cas9ActivityParser:
             shuffle_seed=None):
         """
         Args:
-            subset: if 'mismatch', only use data points representing guides
-                with the canonical PAM but a mismatch to the target; if None,
-                use all data points (including ones with perfect match and
-                canonical PAM, and ones with wrong PAM but perfect match)
+            subset: if 'guide-mismatch-and-good-pam', only use data points
+                representing guides with the canonical PAM (NGG) but a
+                mismatch to the target; if 'guide-match', only use data points
+                representing guides that perfectly match the target but may or
+                may not have the canonical PAM (NGG); if None, use all data
+                points
             context_nt: nt of target sequence context to include alongside
                 each guide
             split: (train, validation, test) split; must sum to 1.0
             shuffle_seed: seed to use for the random module to shuffle rows
                 (if None, do not shuffle rows)
         """
-        assert subset in (None, 'mismatch')
+        assert subset in (None, 'guide-mismatch-and-good-pam', 'guide-match')
         self.subset = subset
 
         self.context_nt = context_nt
@@ -154,9 +156,19 @@ class Doench2016Cas9ActivityParser:
                 else:
                     rows += [ls]
 
-        if self.subset == 'mismatch':
-            # Only keep rows where category is 'Mismatch'
-            rows = [row for row in rows if row[header_idx['category']] == 'Mismatch']
+        if self.subset == 'guide-mismatch-and-good-pam':
+            # Only keep rows where category is 'Mismatch' and the PAM
+            # (according to guide_wt_context_3 is NGG)
+            rows = [row for row in rows if
+                    (row[header_idx['category']] == 'Mismatch' and
+                     row[header_idx['guide_wt_context_3']][1:3] == 'GG')]
+        if self.subset == 'guide-match':
+            # Only keep rows where the category is 'PAM' (these ones
+            # vary the PAM); and check that, for these, the guide matches
+            # the target (i.e., guide_mutated == guide_wt)
+            rows = [row for row in rows if row[header_idx['category']] == 'PAM']
+            for row in rows:
+                assert row[header_idx['guide_mutated']] == row[header_idx['guide_wt']]
 
         # Shuffle the rows
         if self.shuffle_rows:
