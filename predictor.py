@@ -220,19 +220,17 @@ for epoch in range(num_epochs):
         validate_step(seqs, labels)
 
     # Log the metrics from this epoch
-    log = ('Epoch {} - Train loss: {}, Train accuracy: {}, ' +
-           'Train AUC-ROC: {}, Train AUC-PR: {}, ' +
-           'Validate loss: {}, Validate accuracy: {}, ' +
-           'Validate AUC-ROC: {}, Validate AUC-PR: {}')
-    print(log.format(epoch+1,
-                     train_loss_metric.result(),
-                     train_accuracy_metric.result(),
-                     train_auc_roc_metric.result(),
-                     train_auc_pr_metric.result(),
-                     validate_loss_metric.result(),
-                     validate_accuracy_metric.result(),
-                     validate_auc_roc_metric.result(),
-                     validate_auc_pr_metric.result()))
+    print('EPOCH {}'.format(epoch+1))
+    print('  Train metrics:')
+    print('    Loss: {}'.format(train_loss_metric.result()))
+    print('    Accuracy: {}'.format(train_accuracy_metric.result()))
+    print('    AUC-ROC: {}'.format(train_auc_roc_metric.result()))
+    print('    AUC-PR: {}'.format(train_auc_pr_metric.result()))
+    print('  Validate metrics:')
+    print('    Loss: {}'.format(validate_loss_metric.result()))
+    print('    Accuracy: {}'.format(validate_accuracy_metric.result()))
+    print('    AUC-ROC: {}'.format(validate_auc_roc_metric.result()))
+    print('    AUC-PR: {}'.format(validate_auc_pr_metric.result()))
 
     # Reset metric states so they are not cumulative over epochs
     train_loss_metric.reset_states()
@@ -248,11 +246,12 @@ for epoch in range(num_epochs):
 # Test the model
 for seqs, labels in test_ds:
     test_step(seqs, labels)
-log = ('TEST - Loss: {}, Accuracy: {}, AUC-ROC: {}, AUC-PR: {}')
-print(log.format(test_loss_metric.result(),
-                 test_accuracy_metric.result(),
-                 test_auc_roc_metric.result(),
-                 test_auc_pr_metric.result()))
+print('DONE')
+print('  Test metrics:')
+print('    Loss: {}'.format(test_loss_metric.result()))
+print('    Accuracy: {}'.format(test_accuracy_metric.result()))
+print('    AUC-ROC: {}'.format(test_auc_roc_metric.result()))
+print('    AUC-PR: {}'.format(test_auc_pr_metric.result()))
 test_loss_metric.reset_states()
 test_accuracy_metric.reset_states()
 test_auc_roc_metric.reset_states()
