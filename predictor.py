@@ -33,21 +33,24 @@ parser.add_argument('--conv-num-filters',
               "in the first layer"))
 parser.add_argument('--conv-filter-width',
         type=int,
-        default=4,
+        default=2,
         help=("Width of the convolutional filter (nt)"))
 parser.add_argument('--max-pool-window-width',
         type=int,
-        default=4,
-        help=("Width of the max pool window (stride of convolutional "
-              "filter is 1, so this is in nt)"))
+        default=2,
+        help=("Width of the max pool window"))
 parser.add_argument('--fully-connected-dim',
         type=int,
-        default=50,
+        default=20,
         help=("Dimension of each fully connected layer (i.e., of its "
               "output space"))
+parser.add_argument('--dropout-rate',
+        type=float,
+        default=0.25,
+        help=("Rate of dropout in between the 2 fully connected layers"))
 parser.add_argument('--epochs',
         type=int,
-        default=100,
+        default=50,
         help=("Number of training epochs"))
 parser.add_argument('--seed',
         type=int,
@@ -135,11 +138,22 @@ class Cas9CNN(tf.keras.Model):
                 strides=max_pool_stride,
                 name='maxpool')
 
+        # Add a batch normalization layer
+        # It should not matter whether this comes before or after the
+        # max pool layer, as long as it is after the conv layer (the
+        # result should be the same)
+        # This is applied after the relu activation of the conv layer; the
+        # original batch norm applies batch normalization before the
+        # activation function, but more recent work seems to apply it
+        # after activation
+        self.batchnorm = tf.keras.layers.BatchNormalization()
+
         # Flatten the max pooling output from above while preserving
         # the batch axis
         self.flatten = tf.keras.layers.Flatten()
 
         # Construct 2 fully connected hidden layers
+        # Insert dropout between them for regularization
         # Set the dimension of each fully connected layer (i.e., dimension
         # of the output space) to fc_hidden_dim
         fc_hidden_dim = args.fully_connected_dim
@@ -147,6 +161,7 @@ class Cas9CNN(tf.keras.Model):
                 fc_hidden_dim,
                 activation='relu',
                 name='fc_1')
+        self.dropout = tf.keras.layers.Dropout(args.dropout_rate)
         self.fc_2 = tf.keras.layers.Dense(
                 fc_hidden_dim,
                 activation='relu',
@@ -164,8 +179,10 @@ class Cas9CNN(tf.keras.Model):
     def call(self, x):
         x = self.conv(x)
         x = self.pool(x)
+        x = self.batchnorm(x)
         x = self.flatten(x)
         x = self.fc_1(x)
+        x = self.dropout(x)
         x = self.fc_2(x)
         return self.fc_final(x)
 
