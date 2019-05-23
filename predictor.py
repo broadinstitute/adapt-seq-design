@@ -38,15 +38,17 @@ parser.add_argument('--max-pool-window-width',
         type=int,
         default=2,
         help=("Width of the max pool window"))
-parser.add_argument('--global-average-pool',
-        action='store_true',
-        help=("Use a global average pooling layer before the fully connected "
-              "layer"))
 parser.add_argument('--fully-connected-dim',
         type=int,
         default=20,
         help=("Dimension of each fully connected layer (i.e., of its "
               "output space"))
+parser.add_argument('--deeper-conv-model',
+        action='store_true',
+        help=("Use a model with 3 convolutional layers to reduce spatial "
+              "dependence before the fully connected layers; note that "
+              "this uses hard-coded hyperparameters that assume default "
+              "values for the above arguments and context-nt==20"))
 parser.add_argument('--dropout-rate',
         type=float,
         default=0.25,
@@ -141,10 +143,6 @@ class Cas9CNN(tf.keras.Model):
                 strides=max_pool_stride,
                 name='maxpool')
 
-        if args.global_average_pool:
-            self.globalpool = tf.keras.layers.GlobalAveragePooling1D(
-                    name='globalavgpool')
-
         # Add a batch normalization layer
         # It should not matter whether this comes before or after the
         # pool layer, as long as it is after the conv layer (the
@@ -186,8 +184,6 @@ class Cas9CNN(tf.keras.Model):
     def call(self, x):
         x = self.conv(x)
         x = self.maxpool(x)
-        if args.global_average_pool:
-            x = self.globalpool(x)
         x = self.batchnorm(x)
         x = self.flatten(x)
         x = self.fc_1(x)
@@ -195,7 +191,109 @@ class Cas9CNN(tf.keras.Model):
         x = self.fc_2(x)
         return self.fc_final(x)
 
-model = Cas9CNN()
+
+class Cas9CNNWithDeeperConv(tf.keras.Model):
+    def __init__(self):
+        super(Cas9CNNWithDeeperConv, self).__init__()
+
+        # Construct the convolutional layer
+        conv1_layer_num_filters = args.conv_num_filters # ie, num of output channels
+        conv1_layer_filter_width = args.conv_filter_width
+        self.conv1 = tf.keras.layers.Conv1D(
+                conv1_layer_num_filters,
+                conv1_layer_filter_width,
+                strides=1,  # stride by 1
+                padding='valid',
+                activation='relu',
+                name='conv1')
+
+        # Construct a pooling layer
+        max_pool_window = args.max_pool_window_width
+        max_pool_stride = int(args.max_pool_window_width / 2)
+        self.maxpool = tf.keras.layers.MaxPooling1D(
+                pool_size=max_pool_window,
+                strides=max_pool_stride,
+                name='maxpool1')
+
+        # Add a batch normalization layer
+        self.batchnorm1 = tf.keras.layers.BatchNormalization()
+
+        # Add another convolutional layer
+        conv2_layer_num_filters = 30
+        conv2_layer_filter_width = 6
+        conv2_layer_filter_stride = 3
+        self.conv2 = tf.keras.layers.Conv1D(
+                conv2_layer_num_filters,
+                conv2_layer_filter_width,
+                strides=conv2_layer_filter_stride,
+                padding='valid',
+                activation='relu',
+                name='conv2')
+
+        # Construct another pooling layer
+        self.maxpool2 = tf.keras.layers.MaxPooling1D(
+                pool_size=max_pool_window,
+                strides=max_pool_stride,
+                name='maxpool2')
+
+        # Add another batch normalization layer
+        self.batchnorm2 = tf.keras.layers.BatchNormalization()
+
+        # Add a final convolutional layer
+        conv3_layer_num_filters = 40
+        conv3_layer_filter_width = 4
+        conv3_layer_filter_stride = 2
+        self.conv3 = tf.keras.layers.Conv1D(
+                conv3_layer_num_filters,
+                conv3_layer_filter_width,
+                strides=conv2_layer_filter_stride,
+                padding='valid',
+                activation='relu',
+                name='conv3')
+
+        # Flatten the pooling output from above while preserving
+        # the batch axis
+        self.flatten = tf.keras.layers.Flatten()
+
+        # Construct 2 fully connected hidden layers
+        # Insert dropout between them for regularization
+        fc_hidden_dim = args.fully_connected_dim
+        self.fc_1 = tf.keras.layers.Dense(
+                fc_hidden_dim,
+                activation='relu',
+                name='fc_1')
+        self.dropout = tf.keras.layers.Dropout(args.dropout_rate)
+        self.fc_2 = tf.keras.layers.Dense(
+                fc_hidden_dim,
+                activation='relu',
+                name='fc_2')
+
+        # Construct the final layer (fully connected)
+        fc_final_dim = 1
+        self.fc_final = tf.keras.layers.Dense(
+                fc_final_dim,
+                activation='sigmoid',
+                name='fc_final')
+
+    def call(self, x):
+        x = self.conv1(x)
+        x = self.maxpool(x)
+        x = self.batchnorm1(x)
+        x = self.conv2(x)
+        x = self.maxpool2(x)
+        x = self.batchnorm2(x)
+        x = self.conv3(x)
+        x = self.flatten(x)
+        x = self.fc_1(x)
+        x = self.dropout(x)
+        x = self.fc_2(x)
+        return self.fc_final(x)
+
+
+if args.deeper_conv_model:
+    model = Cas9CNNWithDeeperConv()
+else:
+    model = Cas9CNN()
 
 # Print a model summary
 model.build(x_train.shape)
