@@ -16,6 +16,10 @@ import tensorflow as tf
 
 # Parse arguments
 parser = argparse.ArgumentParser()
+parser.add_argument('--simulate-cas13',
+        action='store_true',
+        help=("Instead of Cas9 data, use Cas13 data simulated from the "
+              "Cas9 data"))
 parser.add_argument('--subset',
       choices=['guide-mismatch-and-good-pam', 'guide-match'],
       help=("Use a subset of the data. See parse_data module for "
@@ -74,7 +78,11 @@ tf.random.set_seed(args.seed)
 # Read and batch input/output
 #####################################################################
 # Read data
-data_parser = parse_data.Doench2016Cas9ActivityParser(
+if args.simulate_cas13:
+    parser_class = parse_data.Cas13SimulatedData
+else:
+    parser_class = parse_data.Doench2016Cas9ActivityParser
+data_parser = parser_class(
         subset=args.subset,
         context_nt=args.context_nt,
         split=(0.6, 0.2, 0.2),
