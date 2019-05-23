@@ -240,3 +240,133 @@ class Doench2016Cas9ActivityParser:
         """
         return self._data_set(self._test_set)
 
+
+class Cas13SimulatedData(Doench2016Cas9ActivityParser):
+    """Simulate Cas13 data from the Cas9 data.
+    """
+    def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
+            shuffle_seed=None):
+        super(Cas13SimulatedData, self).__init__(
+                subset=subset, context_nt=context_nt,
+                split=split, shuffle_seed=shuffle_seed)
+
+    def _gen_input_and_label(self, row):
+        """Modify target and guide sequence to make it resemble Cas13
+        before generating vectors.
+
+        Args:
+            row: dict representing row of data (key'd by column
+                name)
+
+        Returns:
+            tuple (input, label) where i is a one-hot encoding of the input
+            and label is 0 or 1
+        """
+        # Make lists out of the target and guide, to modify them
+        target_list = list(row['guide_wt'])
+        guide_list = list(row['guide_mutated'])
+        assert len(target_list) == 20
+        assert len(guide_list) == 20
+
+        # The 'seed' region of Cas9 (where mismatches matter a lot) is
+        # the ~10 nt proximal to the PAM on the 3' end; for Cas13, the
+        # seed region seems to be in the middle (~9-15 nt out of its 28 nt,
+        # or ~6-11 out of 20 nt in terms of fractional position)
+        # Swap the last 6 nt of the Cas9 guide (in its seed region) with
+        # positions 6-11 (inclusive); this way, if there are mismatches
+        # at the end of Cas9 (which should hurt performance), they'll
+        # move toward the middle of the simulated Cas13 guide
+        target_end = target_list[14:20]
+        target_list[14:20] = target_list[6:12]
+        target_list[6:12] = target_end
+        guide_end = guide_list[14:20]
+        guide_list[14:20] = guide_list[6:12]
+        guide_list[6:12] = guide_end
+
+        # Add 8 random matching nucleotides to the guide and target
+        # so that they are 28 nt (Cas13 guides are 28 nt, Cas9 are 20 nt)
+        for k in range(8):
+            insert_pos = random.randint(0, len(target_list))
+            b = random.choice(['A','C','G','T'])
+            target_list.insert(insert_pos, b)
+            guide_list.insert(insert_pos, b)
+
+        # Randomly change the target and guide to have some G-U base
+        # pairing, as Cas13 acts on RNA-RNA binding; this does not affect
+        # the output variable
+        for i in range(len(target_list)):
+            if target_list[i] == guide_list[i]:
+                if random.random() < 0.25:
+                    # Make a change for this position to have G-U pairing
+                    # The two possibilities are: (target=G and guide=A)
+                    # OR (target=T and guide=C)
+                    if target_list[i] == 'A':
+                        # Make target=G, guide=A
+                        target_list[i] = 'G'
+                    elif target_list[i] == 'C':
+                        # Make target=T, guide=C
+                        target_list[i] = 'T'
+                    elif target_list[i] == 'G':
+                        # Make target=G, guide=A
+                        guide_list[i] = 'A'
+                    elif target_list[i] == 'T':
+                        # Make target=T, guide=C
+                        guide_list[i] = 'C'
+            else:
+                # This is a mismatch between target and guide; if it
+                # is G-U paired, make it not G-U paired because it may
+                # have had an effect for Cas9
+                if target_list[i] == 'G' and guide_list[i] == 'A':
+                    if random.random() < 0.5:
+                        # Make the target be C or T
+                        target_list[i] = random.choice(['C','T'])
+                    else:
+                        # Make the guide be C or T
+                        guide_list[i] = random.choice(['C','T'])
+                elif target_list[i] == 'T' and guide_list[i] == 'C':
+                    if random.random() < 0.5:
+                        # Make the target be A or G
+                        target_list[i] = random.choice(['A','G'])
+                    else:
+                        # Make the guide be A or G
+                        guide_list[i] = random.choice(['A','G'])
+
+        # Update what is stored for the target and guide with the
+        # modified versions
+        row['guide_wt'] = ''.join(target_list)
+        row['guide_mutated'] = ''.join(guide_list)
+
+        # Alter the PAM/PFS: if it was good, make it good; if it was bad,
+        # make it bad
+        # A 'good' PAM for Cas9 is 'NGG' on the 3' end; a 'good' PFS for
+        # Cas13 is 'H' on the 5' end
+        context_5 = row['guide_wt_context_5']
+        context_3 = row['guide_wt_context_3']
+        if context_3[1:3] == 'GG':
+            # This guide has the canonical 'NGG' PAM
+            # Mutate the PAM to some random trinucleotide
+            context_3_list = list(context_3)
+            context_3_list[0:3] = random.choices(['A','C','G','T'], k=3)
+            context_3 = ''.join(context_3_list)
+
+            # Give the guide a 'good' PFS on the 5' end -- i.e., give it
+            # 'H' (not 'G')
+            context_5_list = list(context_5)
+            context_5_list[-1] = random.choice(['A','C','T'])
+            context_5 = ''.join(context_5_list)
+        else:
+            # This guide does *not* have the canonical 'NGG' PAM
+            # Mutate the PAM to some random trinucleotide
+            context_3_list = list(context_3)
+            context_3_list[0:3] = random.choices(['A','C','G','T'], k=3)
+            context_3 = ''.join(context_3_list)
+
+            # Give the guide a 'bad' PFS on the 5' end -- i.e., 'G'
+            context_5_list = list(context_5)
+            context_5_list[-1] = 'G'
+            context_5 = ''.join(context_5_list)
+        row['guide_wt_context_5'] = context_5
+        row['guide_wt_context_3'] = context_3
+
+        return super(Cas13SimulatedData, self)._gen_input_and_label(row)
+
