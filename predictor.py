@@ -146,6 +146,15 @@ class Cas9CNN(tf.keras.Model):
                 activation='relu',
                 name='conv')
 
+        # Add a batch normalization layer
+        # It should not matter whether this comes before or after the
+        # pool layer, as long as it is after the conv layer
+        # This is applied after the relu activation of the conv layer; the
+        # original batch norm applies batch normalization before the
+        # activation function, but more recent work seems to apply it
+        # after activation
+        self.batchnorm = tf.keras.layers.BatchNormalization()
+
         # Construct a pooling layer
         # Take the maximum over a window of width max_pool_window, for
         # each output channel of the conv layer (and, of course, for each batch)
@@ -158,16 +167,6 @@ class Cas9CNN(tf.keras.Model):
                 pool_size=max_pool_window,
                 strides=max_pool_stride,
                 name='maxpool')
-
-        # Add a batch normalization layer
-        # It should not matter whether this comes before or after the
-        # pool layer, as long as it is after the conv layer (the
-        # result should be the same)
-        # This is applied after the relu activation of the conv layer; the
-        # original batch norm applies batch normalization before the
-        # activation function, but more recent work seems to apply it
-        # after activation
-        self.batchnorm = tf.keras.layers.BatchNormalization()
 
         # Flatten the pooling output from above while preserving
         # the batch axis
@@ -197,13 +196,13 @@ class Cas9CNN(tf.keras.Model):
                 activation='sigmoid',
                 name='fc_final')
 
-    def call(self, x):
+    def call(self, x, training=False):
         x = self.conv(x)
+        x = self.batchnorm(x, training=training)
         x = self.maxpool(x)
-        x = self.batchnorm(x)
         x = self.flatten(x)
         x = self.fc_1(x)
-        x = self.dropout(x)
+        x = self.dropout(x, training=training)
         x = self.fc_2(x)
         return self.fc_final(x)
 
@@ -291,17 +290,17 @@ class Cas9CNNWithDeeperConv(tf.keras.Model):
                 activation='sigmoid',
                 name='fc_final')
 
-    def call(self, x):
+    def call(self, x, training=False):
         x = self.conv1(x)
         x = self.maxpool(x)
-        x = self.batchnorm1(x)
+        x = self.batchnorm1(x, training=training)
         x = self.conv2(x)
         x = self.maxpool2(x)
-        x = self.batchnorm2(x)
+        x = self.batchnorm2(x, training=training)
         x = self.conv3(x)
         x = self.flatten(x)
         x = self.fc_1(x)
-        x = self.dropout(x)
+        x = self.dropout(x, training=training)
         x = self.fc_2(x)
         return self.fc_final(x)
 
@@ -378,18 +377,18 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
                 activation='sigmoid',
                 name='fc_final')
 
-    def call(self, x):
+    def call(self, x, training=False):
         group_outputs = []
         for group in self.groups:
             conv, batchnorm, maxpool = group
             group_x = conv(x)
-            group_x = batchnorm(group_x)
+            group_x = batchnorm(group_x, training=training)
             group_x = maxpool(group_x)
             group_outputs += [group_x]
         x = self.merge(group_outputs)
         x = self.flatten(x)
         x = self.fc_1(x)
-        x = self.dropout(x)
+        x = self.dropout(x, training=training)
         x = self.fc_2(x)
         return self.fc_final(x)
 
@@ -447,7 +446,11 @@ optimizer = tf.keras.optimizers.Adam()
 def train_step(seqs, labels):
     with tf.GradientTape() as tape:
         # Compute predictions and loss
-        predictions = model(seqs)
+        # Pass along `training=True` so that this can be given to
+        # the batchnorm and dropout layers; an alternative to passing
+        # it along would be to use `tf.keras.backend.set_learning_phase(1)`
+        # to set the training phase
+        predictions = model(seqs, training=True)
         loss = bce_per_sample(labels, predictions)
     # Compute gradients and opitmize parameters
     gradients = tape.gradient(loss, model.trainable_variables)
@@ -464,7 +467,7 @@ def train_step(seqs, labels):
 @tf.function
 def validate_step(seqs, labels):
     # Compute predictions and loss
-    predictions = model(seqs)
+    predictions = model(seqs, training=False)
     loss = bce_per_sample(labels, predictions)
     # Record metrics
     validate_loss_metric(loss)
@@ -474,7 +477,7 @@ def validate_step(seqs, labels):
 @tf.function
 def test_step(seqs, labels):
     # Compute predictions and loss
-    predictions = model(seqs)
+    predictions = model(seqs, training=False)
     loss = bce_per_sample(labels, predictions)
     # Record metrics
     test_loss_metric(loss)
