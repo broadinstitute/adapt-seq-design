@@ -284,12 +284,21 @@ class Cas13SimulatedData(Doench2016Cas9ActivityParser):
         guide_list[6:12] = guide_end
 
         # Add 8 random matching nucleotides to the guide and target
-        # so that they are 28 nt (Cas13 guides are 28 nt, Cas9 are 20 nt)
-        for k in range(8):
-            insert_pos = random.randint(0, len(target_list))
-            b = random.choice(['A','C','G','T'])
-            target_list.insert(insert_pos, b)
-            guide_list.insert(insert_pos, b)
+        # so that they are 28 nt (Cas13 guides are 28 nt, Cas9 are 20 nt);
+        # draw these from the same distribution of bases already in the
+        # target, so that the nucleotide composition does not change
+        # Add 4 to the start and 4 to the end -- this previously added
+        # the bases at random positions, but that adds too much noise
+        # (the effect of a particular position becomes less meaningful)
+        target_bases = list(target_list)
+        for k in range(4):
+            b = random.choice(target_bases)
+            target_list.insert(0, b)
+            guide_list.insert(0, b)
+        for k in range(4):
+            b = random.choice(target_bases)
+            target_list.insert(len(target_list), b)
+            guide_list.insert(len(guide_list), b)
 
         # Randomly change the target and guide to have some G-U base
         # pairing, as Cas13 acts on RNA-RNA binding; this does not affect
