@@ -53,6 +53,11 @@ parser.add_argument('--deeper-conv-model',
               "dependence before the fully connected layers; note that "
               "this uses hard-coded hyperparameters that assume default "
               "values for the above arguments and context-nt==20"))
+parser.add_argument('--parallel-filter-model',
+        action='store_true',
+        help=("Use a model with multiple filter widths in the first "
+              "convolutional layer; note that this uses hard-coded "
+              "choices for the widths, so --conv-filter-width is ignored"))
 parser.add_argument('--dropout-rate',
         type=float,
         default=0.25,
@@ -66,6 +71,9 @@ parser.add_argument('--seed',
         default=1,
         help=("Random seed"))
 args = parser.parse_args()
+
+if args.deeper_conv_model and args.parallel_filter_model:
+    raise Exception("Cannot set two kinds of models simultaneously")
 
 # Print the arguments provided
 print(args)
@@ -227,7 +235,7 @@ class Cas9CNNWithDeeperConv(tf.keras.Model):
         self.batchnorm1 = tf.keras.layers.BatchNormalization()
 
         # Add another convolutional layer
-        conv2_layer_num_filters = 30
+        conv2_layer_num_filters = 20
         conv2_layer_filter_width = 6
         conv2_layer_filter_stride = 3
         self.conv2 = tf.keras.layers.Conv1D(
@@ -248,7 +256,7 @@ class Cas9CNNWithDeeperConv(tf.keras.Model):
         self.batchnorm2 = tf.keras.layers.BatchNormalization()
 
         # Add a final convolutional layer
-        conv3_layer_num_filters = 40
+        conv3_layer_num_filters = 20
         conv3_layer_filter_width = 4
         conv3_layer_filter_stride = 2
         self.conv3 = tf.keras.layers.Conv1D(
@@ -298,8 +306,98 @@ class Cas9CNNWithDeeperConv(tf.keras.Model):
         return self.fc_final(x)
 
 
+class Cas9CNNWithParallelFilters(tf.keras.Model):
+    def __init__(self):
+        super(Cas9CNNWithParallelFilters, self).__init__()
+
+        # Construct groups, where each consists of a convolutional
+        # layer with a particular width, a batch normalization layer, and
+        # a max pooling layer
+        self.groups = []
+        for filter_width in (1, 2, 3, 4):
+            # Construct the convolutional layer
+            conv_layer_num_filters = args.conv_num_filters # ie, num of output channels
+            conv = tf.keras.layers.Conv1D(
+                    conv_layer_num_filters,
+                    filter_width,
+                    strides=1,  # stride by 1
+                    padding='valid',
+                    activation='relu',
+                    name='conv_w' + str(filter_width))
+            # Note that the total number of filters in this layer will be
+            # 4*conv_layer_num_filters since there are 4 groups
+
+            # Add a batch normalization layer
+            batchnorm = tf.keras.layers.BatchNormalization()
+
+            # Add a pooling layer
+            max_pool_window = args.max_pool_window_width
+            max_pool_stride = max(1, int(args.max_pool_window_width / 2))
+            maxpool = tf.keras.layers.MaxPooling1D(
+                    pool_size=max_pool_window,
+                    strides=max_pool_stride,
+                    name='conv_w' + str(filter_width) + '_maxpool')
+
+            self.groups += [(conv, batchnorm, maxpool)]
+
+        # Merge the outputs of the groups
+        # The concatenation needs to happen along an axis, and all
+        # inputs must have the same dimension along each axis except
+        # for the concat axis
+        # The axes are: (batch size, width, filters)
+        # The concatenation can happen along either the width axis (1)
+        # or the filters axis (2); it should not make a difference
+        # Because the filters axis will all be the same dimension
+        # (conv_layer_num_filters) but the width axis may be slightly
+        # different (as each filter/kernel has a different width, so
+        # the number that span the input may differ slightly), let's
+        # concatenate along the width axis (axis=1)
+        self.merge = tf.keras.layers.Concatenate(axis=1)
+
+        # Flatten the pooling output from above while preserving
+        # the batch axis
+        self.flatten = tf.keras.layers.Flatten()
+
+        # Construct 2 fully connected hidden layers
+        # Insert dropout between them for regularization
+        fc_hidden_dim = args.fully_connected_dim
+        self.fc_1 = tf.keras.layers.Dense(
+                fc_hidden_dim,
+                activation='relu',
+                name='fc_1')
+        self.dropout = tf.keras.layers.Dropout(args.dropout_rate)
+        self.fc_2 = tf.keras.layers.Dense(
+                fc_hidden_dim,
+                activation='relu',
+                name='fc_2')
+
+        # Construct the final layer (fully connected)
+        fc_final_dim = 1
+        self.fc_final = tf.keras.layers.Dense(
+                fc_final_dim,
+                activation='sigmoid',
+                name='fc_final')
+
+    def call(self, x):
+        group_outputs = []
+        for group in self.groups:
+            conv, batchnorm, maxpool = group
+            group_x = conv(x)
+            group_x = batchnorm(group_x)
+            group_x = maxpool(group_x)
+            group_outputs += [group_x]
+        x = self.merge(group_outputs)
+        x = self.flatten(x)
+        x = self.fc_1(x)
+        x = self.dropout(x)
+        x = self.fc_2(x)
+        return self.fc_final(x)
+
+
 if args.deeper_conv_model:
     model = Cas9CNNWithDeeperConv()
+elif args.parallel_filter_model:
+    model = Cas9CNNWithParallelFilters()
 else:
     model = Cas9CNN()
 
