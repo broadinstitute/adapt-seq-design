@@ -296,7 +296,7 @@ class Cas13SimulatedData(Doench2016Cas9ActivityParser):
         # the output variable
         for i in range(len(target_list)):
             if target_list[i] == guide_list[i]:
-                if random.random() < 0.25:
+                if random.random() < 1.0/3:
                     # Make a change for this position to have G-U pairing
                     # The two possibilities are: (target=G and guide=A)
                     # OR (target=T and guide=C)
