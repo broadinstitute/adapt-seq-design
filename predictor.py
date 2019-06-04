@@ -312,7 +312,11 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
         # Construct groups, where each consists of a convolutional
         # layer with a particular width, a batch normalization layer, and
         # a max pooling layer
-        self.groups = []
+        # Store these in separate lists, rather than as tuples in a single
+        # list, so that they get stored in self.layers
+        self.convs = []
+        self.batchnorms = []
+        self.maxpools = []
         for filter_width in (1, 2, 3, 4):
             # Construct the convolutional layer
             conv_layer_num_filters = args.conv_num_filters # ie, num of output channels
@@ -327,7 +331,8 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
             # 4*conv_layer_num_filters since there are 4 groups
 
             # Add a batch normalization layer
-            batchnorm = tf.keras.layers.BatchNormalization()
+            batchnorm = tf.keras.layers.BatchNormalization(
+                    name='conv_w' + str(filter_width) + '_batchnorm')
 
             # Add a pooling layer
             max_pool_window = args.max_pool_window_width
@@ -337,7 +342,9 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
                     strides=max_pool_stride,
                     name='conv_w' + str(filter_width) + '_maxpool')
 
-            self.groups += [(conv, batchnorm, maxpool)]
+            self.convs += [conv]
+            self.batchnorms += [batchnorm]
+            self.maxpools += [maxpool]
 
         # Merge the outputs of the groups
         # The concatenation needs to happen along an axis, and all
@@ -379,8 +386,7 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
 
     def call(self, x, training=False):
         group_outputs = []
-        for group in self.groups:
-            conv, batchnorm, maxpool = group
+        for conv, batchnorm, maxpool in zip(self.convs, self.batchnorms, self.maxpools):
             group_x = conv(x)
             group_x = batchnorm(group_x, training=training)
             group_x = maxpool(group_x)
