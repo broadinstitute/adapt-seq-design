@@ -62,6 +62,12 @@ parser.add_argument('--dropout-rate',
         type=float,
         default=0.25,
         help=("Rate of dropout in between the 2 fully connected layers"))
+parser.add_argument('--l2-factor',
+        type=float,
+        default=0,
+        help=("L2 regularization factor. This is applied to weights "
+              "(kernal_regularizer). Note that this does not regularize "
+              "bias of activity."))
 parser.add_argument('--epochs',
         type=int,
         default=50,
@@ -196,6 +202,12 @@ class Cas9CNN(tf.keras.Model):
                 activation='sigmoid',
                 name='fc_final')
 
+        # Regularize weights on each layer
+        l2_regularizer = tf.keras.regularizers.l2(args.l2_factor)
+        for layer in self.layers:
+            if hasattr(layer, 'kernel_regularizer'):
+                layer.kernel_regularizer = l2_regularizer
+
     def call(self, x, training=False):
         x = self.conv(x)
         x = self.batchnorm(x, training=training)
@@ -289,6 +301,12 @@ class Cas9CNNWithDeeperConv(tf.keras.Model):
                 fc_final_dim,
                 activation='sigmoid',
                 name='fc_final')
+
+        # Regularize weights on each layer
+        l2_regularizer = tf.keras.regularizers.l2(args.l2_factor)
+        for layer in self.layers:
+            if hasattr(layer, 'kernel_regularizer'):
+                layer.kernel_regularizer = l2_regularizer
 
     def call(self, x, training=False):
         x = self.conv1(x)
@@ -384,6 +402,12 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
                 activation='sigmoid',
                 name='fc_final')
 
+        # Regularize weights on each layer
+        l2_regularizer = tf.keras.regularizers.l2(args.l2_factor)
+        for layer in self.layers:
+            if hasattr(layer, 'kernel_regularizer'):
+                layer.kernel_regularizer = l2_regularizer
+
     def call(self, x, training=False):
         group_outputs = []
         for conv, batchnorm, maxpool in zip(self.convs, self.batchnorms, self.maxpools):
@@ -457,7 +481,10 @@ def train_step(seqs, labels):
         # it along would be to use `tf.keras.backend.set_learning_phase(1)`
         # to set the training phase
         predictions = model(seqs, training=True)
-        loss = bce_per_sample(labels, predictions)
+        prediction_loss = bce_per_sample(labels, predictions)
+        # Add the regularization losses
+        regularization_loss = tf.add_n(model.losses)
+        loss = prediction_loss + regularization_loss
     # Compute gradients and opitmize parameters
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
@@ -474,7 +501,9 @@ def train_step(seqs, labels):
 def validate_step(seqs, labels):
     # Compute predictions and loss
     predictions = model(seqs, training=False)
-    loss = bce_per_sample(labels, predictions)
+    prediction_loss = bce_per_sample(labels, predictions)
+    regularization_loss = tf.add_n(model.losses)
+    loss = prediction_loss + regularization_loss
     # Record metrics
     validate_loss_metric(loss)
     validate_accuracy_metric(labels, predictions)
@@ -484,7 +513,9 @@ def validate_step(seqs, labels):
 def test_step(seqs, labels):
     # Compute predictions and loss
     predictions = model(seqs, training=False)
-    loss = bce_per_sample(labels, predictions)
+    prediction_loss = bce_per_sample(labels, predictions)
+    regularization_loss = tf.add_n(model.losses)
+    loss = prediction_loss + regularization_loss
     # Record metrics
     test_loss_metric(loss)
     test_accuracy_metric(labels, predictions)
