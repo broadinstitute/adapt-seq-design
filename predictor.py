@@ -43,9 +43,11 @@ parser.add_argument('--pool-window-width',
         help=("Width of the pooling window"))
 parser.add_argument('--fully-connected-dim',
         type=int,
-        default=20,
+        nargs='+',
+        default=[20],
         help=("Dimension of each fully connected layer (i.e., of its "
-              "output space"))
+              "output space); specify multiple dimensions for multiple "
+              "fully connected layers"))
 parser.add_argument('--pool-strategy',
         choices=['max', 'avg', 'max-and-avg'],
         default='max',
@@ -221,20 +223,22 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
         # the batch axis
         self.flatten = tf.keras.layers.Flatten()
 
-        # Construct 2 fully connected hidden layers
-        # Insert dropout between them for regularization
+        # Setup fully connected layers
+        # Insert dropout before each of them for regularization
         # Set the dimension of each fully connected layer (i.e., dimension
-        # of the output space) to fc_hidden_dim
-        fc_hidden_dim = args.fully_connected_dim
-        self.fc_1 = tf.keras.layers.Dense(
-                fc_hidden_dim,
-                activation='relu',
-                name='fc_1')
-        self.dropout = tf.keras.layers.Dropout(args.dropout_rate)
-        self.fc_2 = tf.keras.layers.Dense(
-                fc_hidden_dim,
-                activation='relu',
-                name='fc_2')
+        # of the output space) to args.fully_connected_dim[i]
+        self.dropouts = []
+        self.fcs = []
+        for i, fc_hidden_dim in enumerate(args.fully_connected_dim):
+            dropout = tf.keras.layers.Dropout(
+                    args.dropout_rate,
+                    name='dropout_' + str(i+1))
+            fc = tf.keras.layers.Dense(
+                    fc_hidden_dim,
+                    activation='relu',
+                    name='fc_' + str(i+1))
+            self.dropouts += [dropout]
+            self.fcs += [fc]
 
         # Construct the final layer (fully connected)
         fc_final_dim = 1
@@ -250,6 +254,8 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
                 layer.kernel_regularizer = l2_regularizer
 
     def call(self, x, training=False):
+        # Run parallel convolution filters of different widths, each with
+        # batch norm and pooling
         group_outputs = []
         for conv, batchnorm, pool_1, pool_2 in zip(self.convs, self.batchnorms,
                 self.pools, self.pools_2):
@@ -262,15 +268,20 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
                 group_x_2 = pool_2(group_x)
                 group_x = self.pool_merge([group_x_1, group_x_2])
             group_outputs += [group_x]
+
+        # Merge the above groups
         if len(group_outputs) == 1:
             # Only 1 filter width; cannot merge across 1 input
             x = group_outputs[0]
         else:
             x = self.merge(group_outputs)
         x = self.flatten(x)
-        x = self.fc_1(x)
-        x = self.dropout(x, training=training)
-        x = self.fc_2(x)
+
+        # Run through fully connected layers
+        for dropout, fc in zip(self.dropouts, self.fcs):
+            x = dropout(x, training=training)
+            x = fc(x)
+
         return self.fc_final(x)
 
 
