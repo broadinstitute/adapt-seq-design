@@ -36,12 +36,14 @@ parser.add_argument('--conv-num-filters',
               "in the first layer"))
 parser.add_argument('--conv-filter-width',
         type=int,
-        default=2,
-        help=("Width of the convolutional filter (nt)"))
-parser.add_argument('--max-pool-window-width',
+        nargs='+',
+        help=("Width of the convolutional filter (nt) (if "
+              "--parallel-filter-model is set, then this is a collection "
+              "of widths)"))
+parser.add_argument('--pool-window-width',
         type=int,
         default=2,
-        help=("Width of the max pool window"))
+        help=("Width of the pooling window"))
 parser.add_argument('--fully-connected-dim',
         type=int,
         default=20,
@@ -56,8 +58,13 @@ parser.add_argument('--deeper-conv-model',
 parser.add_argument('--parallel-filter-model',
         action='store_true',
         help=("Use a model with multiple filter widths in the first "
-              "convolutional layer; note that this uses hard-coded "
-              "choices for the widths, so --conv-filter-width is ignored"))
+              "convolutional layer; the number of widths and value for "
+              "each width is given by --conv-filter-width"))
+parser.add_argument('--pool-strategy',
+        choices=['max', 'avg', 'max-and-avg'],
+        help=("For pooling, 'max' only does max pooling; 'avg' only does "
+              "average pooling; 'max-and-avg' does both and concatenates. "
+              "Only implemented for --parallel-filter-model."))
 parser.add_argument('--dropout-rate',
         type=float,
         default=0.25,
@@ -78,8 +85,26 @@ parser.add_argument('--seed',
         help=("Random seed"))
 args = parser.parse_args()
 
+# Check arguments and set defaults
 if args.deeper_conv_model and args.parallel_filter_model:
     raise Exception("Cannot set two kinds of models simultaneously")
+
+if not args.parallel_filter_model:
+    if len(args.conv_filter_width) > 1:
+        raise Exception(("Cannot set multiple widths (--conv-filter-width) without "
+            "--parallel-filter-model"))
+    args.conv_filter_width = args.conv_filter_width[0]
+if args.conv_filter_width is None:
+    if args.parallel_filter_model:
+        args.conv_filter_width = [1, 2, 3, 4]   # default
+    else:
+        args.conv_filter_width = 2  # default
+
+if args.pool_strategy is not None and not args.parallel_filter_model:
+    raise Exception(("--pool-strategy is only implemented with "
+        "--parallel-filter-model"))
+if args.pool_strategy is None:
+    args.pool_strategy = 'max'
 
 # Print the arguments provided
 print(args)
@@ -162,13 +187,13 @@ class Cas9CNN(tf.keras.Model):
         self.batchnorm = tf.keras.layers.BatchNormalization()
 
         # Construct a pooling layer
-        # Take the maximum over a window of width max_pool_window, for
+        # Take the maximum over a window of width pool_window, for
         # each output channel of the conv layer (and, of course, for each batch)
         # Stride by max_pool_stride; note that if
-        # max_pool_stride = max_pool_window, then the max pooling
+        # max_pool_stride = pool_window, then the max pooling
         # windows are non-overlapping
-        max_pool_window = args.max_pool_window_width
-        max_pool_stride = int(args.max_pool_window_width / 2)
+        max_pool_window = args.pool_window_width
+        max_pool_stride = int(max_pool_window / 2)
         self.maxpool = tf.keras.layers.MaxPooling1D(
                 pool_size=max_pool_window,
                 strides=max_pool_stride,
@@ -235,8 +260,8 @@ class Cas9CNNWithDeeperConv(tf.keras.Model):
                 name='conv1')
 
         # Construct a pooling layer
-        max_pool_window = args.max_pool_window_width
-        max_pool_stride = int(args.max_pool_window_width / 2)
+        max_pool_window = args.pool_window_width
+        max_pool_stride = int(max_pool_window / 2)
         self.maxpool = tf.keras.layers.MaxPooling1D(
                 pool_size=max_pool_window,
                 strides=max_pool_stride,
@@ -329,13 +354,14 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
 
         # Construct groups, where each consists of a convolutional
         # layer with a particular width, a batch normalization layer, and
-        # a max pooling layer
+        # a pooling layer
         # Store these in separate lists, rather than as tuples in a single
         # list, so that they get stored in self.layers
         self.convs = []
         self.batchnorms = []
-        self.maxpools = []
-        for filter_width in (1, 2, 3, 4):
+        self.pools = []
+        self.pools_2 = []
+        for filter_width in args.conv_filter_width:
             # Construct the convolutional layer
             conv_layer_num_filters = args.conv_num_filters # ie, num of output channels
             conv = tf.keras.layers.Conv1D(
@@ -353,16 +379,36 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
                     name='conv_w' + str(filter_width) + '_batchnorm')
 
             # Add a pooling layer
-            max_pool_window = args.max_pool_window_width
-            max_pool_stride = max(1, int(args.max_pool_window_width / 2))
+            pool_window_width = args.pool_window_width
+            pool_stride = max(1, int(pool_window_width / 2))
             maxpool = tf.keras.layers.MaxPooling1D(
-                    pool_size=max_pool_window,
-                    strides=max_pool_stride,
+                    pool_size=pool_window_width,
+                    strides=pool_stride,
                     name='conv_w' + str(filter_width) + '_maxpool')
+            avgpool = tf.keras.layers.AveragePooling1D(
+                    pool_size=pool_window_width,
+                    strides=pool_stride,
+                    name='conv_w' + str(filter_width) + '_avgpool')
 
             self.convs += [conv]
             self.batchnorms += [batchnorm]
-            self.maxpools += [maxpool]
+
+            # If only using 1 pool, store this in self.pools
+            # If using 2 pools, store one in self.pools and the other in
+            # self.pools_2, and create self.pool_merge to concatenate the
+            # outputs of these 2 pools
+            if args.pool_strategy == 'max':
+                self.pools += [maxpool]
+                self.pools_2 += [None]
+            elif args.pool_strategy == 'avg':
+                self.pools += [avgpool]
+                self.pools_2 += [None]
+            elif args.pool_strategy == 'max-and-avg':
+                self.pools += [maxpool]
+                self.pools_2 += [avgpool]
+                self.pool_merge = tf.keras.layers.Concatenate(axis=1)
+            else:
+                raise Exception(("Unknown --pool-strategy"))
 
         # Merge the outputs of the groups
         # The concatenation needs to happen along an axis, and all
@@ -376,7 +422,10 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
         # different (as each filter/kernel has a different width, so
         # the number that span the input may differ slightly), let's
         # concatenate along the width axis (axis=1)
-        self.merge = tf.keras.layers.Concatenate(axis=1)
+        # Only create the merge layer if it is needed (i.e., there are
+        # multiple filter widths)
+        if len(args.conv_filter_width) > 1:
+            self.merge = tf.keras.layers.Concatenate(axis=1)
 
         # Flatten the pooling output from above while preserving
         # the batch axis
@@ -410,12 +459,22 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
 
     def call(self, x, training=False):
         group_outputs = []
-        for conv, batchnorm, maxpool in zip(self.convs, self.batchnorms, self.maxpools):
+        for conv, batchnorm, pool_1, pool_2 in zip(self.convs, self.batchnorms,
+                self.pools, self.pools_2):
             group_x = conv(x)
             group_x = batchnorm(group_x, training=training)
-            group_x = maxpool(group_x)
+            if pool_2 is None:
+                group_x = pool_1(group_x)
+            else:
+                group_x_1 = pool_1(group_x)
+                group_x_2 = pool_2(group_x)
+                group_x = self.pool_merge([group_x_1, group_x_2])
             group_outputs += [group_x]
-        x = self.merge(group_outputs)
+        if len(group_outputs) == 1:
+            # Only 1 filter width; cannot merge across 1 input
+            x = group_outputs[0]
+        else:
+            x = self.merge(group_outputs)
         x = self.flatten(x)
         x = self.fc_1(x)
         x = self.dropout(x, training=training)
