@@ -53,6 +53,18 @@ parser.add_argument('--pool-strategy',
         default='max',
         help=("For pooling, 'max' only does max pooling; 'avg' only does "
               "average pooling; 'max-and-avg' does both and concatenates."))
+parser.add_argument('--locally-connected-width',
+        type=int,
+        nargs='+',
+        help=("If set, width (kernel size) of the locally connected layer. "
+              "Use multiple widths to have parallel locally connected layers "
+              "that get concatenated. If not set, do use have a locally "
+              "connected layer."))
+parser.add_argument('--locally-connected-dim',
+        type=int,
+        default=1,
+        help=("Dimension of each locally connected layer (i.e., of its "
+              "output space)"))
 parser.add_argument('--dropout-rate',
         type=float,
         default=0.25,
@@ -140,6 +152,7 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
         self.batchnorms = []
         self.pools = []
         self.pools_2 = []
+        self.lcs = []
         for filter_width in args.conv_filter_width:
             # Construct the convolutional layer
             # Do not pad the input (`padding='valid'`) because all input
@@ -151,7 +164,7 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
                     strides=1,  # stride by 1
                     padding='valid',
                     activation='relu',
-                    name='conv_w' + str(filter_width))
+                    name='group_w' + str(filter_width) + '_conv')
             # Note that the total number of filters in this layer will be
             # len(conv_filter_width)*conv_layer_num_filters since there are
             # len(conv_filter_width) groups
@@ -164,7 +177,7 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
             # activation function, but more recent work seems to apply it
             # after activation
             batchnorm = tf.keras.layers.BatchNormalization(
-                    name='conv_w' + str(filter_width) + '_batchnorm')
+                    name='group_w' + str(filter_width) + '_batchnorm')
 
             # Add a pooling layer
             # Pool over a window of width pool_window, for
@@ -176,11 +189,11 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
             maxpool = tf.keras.layers.MaxPooling1D(
                     pool_size=pool_window_width,
                     strides=pool_stride,
-                    name='conv_w' + str(filter_width) + '_maxpool')
+                    name='group_w' + str(filter_width) + '_maxpool')
             avgpool = tf.keras.layers.AveragePooling1D(
                     pool_size=pool_window_width,
                     strides=pool_stride,
-                    name='conv_w' + str(filter_width) + '_avgpool')
+                    name='group_w' + str(filter_width) + '_avgpool')
 
             self.convs += [conv]
             self.batchnorms += [batchnorm]
@@ -198,9 +211,51 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
             elif args.pool_strategy == 'max-and-avg':
                 self.pools += [maxpool]
                 self.pools_2 += [avgpool]
-                self.pool_merge = tf.keras.layers.Concatenate(axis=1)
             else:
                 raise Exception(("Unknown --pool-strategy"))
+
+            # Setup locally connected layers (if set)
+            # Use one for each convolution filter grouping (if applied after
+            # concatenating the groups, then the position-dependence may be
+            # less meaningful because a single locally connected neuron may
+            # be connected across two different groups)
+            # This layer can be useful in this application because (unlike
+            # convolution layers) it explicitly models the position-dependence --
+            # i.e., weights can differ across a guide and across the sequence
+            # context. Moreover, it can help collapse the different convolutional
+            # filters down to a smaller number of values (dimensions) at
+            # each position, effectively serving as a dimensionality reduction
+            # before the fully connected layers.
+            if args.locally_connected_width is not None:
+                lcs_for_conv = []
+                locally_connected_dim = args.locally_connected_dim
+                for i, lc_width in enumerate(args.locally_connected_width):
+                    # Stride by 1/2 the width
+                    stride = max(1, int(lc_width / 2))
+                    lc = tf.keras.layers.LocallyConnected1D(
+                        locally_connected_dim,
+                        lc_width,
+                        strides=stride,
+                        activation='relu',
+                        name='group_w' + str(filter_width) + '_lc_w' + str(lc_width))
+                    lcs_for_conv += [lc]
+                self.lcs += [lcs_for_conv]
+            else:
+                self.lcs += [None]
+
+        if args.pool_strategy == 'max-and-avg':
+            # Setup layer to concatenate each max/avg pooling in each group
+            self.pool_merge = tf.keras.layers.Concatenate(
+                    axis=1,
+                    name='merge_pool')
+
+        if args.locally_connected_width is not None:
+            if len(args.locally_connected_width) > 1:
+                # Setup layer to concatenate the locally connected layers
+                # in each group
+                self.lc_merge = tf.keras.layers.Concatenate(
+                        axis=1,
+                        name='merge_lc')
 
         # Merge the outputs of the groups
         # The concatenation needs to happen along an axis, and all
@@ -210,14 +265,17 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
         # The concatenation can happen along either the width axis (1)
         # or the filters axis (2); it should not make a difference
         # Because the filters axis will all be the same dimension
-        # (conv_layer_num_filters) but the width axis may be slightly
+        # (conv_layer_num_filters or, if there are locally connected layers,
+        # then locally_connected_dim) but the width axis may be slightly
         # different (as each filter/kernel has a different width, so
         # the number that span the input may differ slightly), let's
         # concatenate along the width axis (axis=1)
         # Only create the merge layer if it is needed (i.e., there are
         # multiple filter widths)
         if len(args.conv_filter_width) > 1:
-            self.merge = tf.keras.layers.Concatenate(axis=1)
+            self.merge = tf.keras.layers.Concatenate(
+                    axis=1,
+                    name='merge_groups')
 
         # Flatten the pooling output from above while preserving
         # the batch axis
@@ -256,17 +314,38 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
     def call(self, x, training=False):
         # Run parallel convolution filters of different widths, each with
         # batch norm and pooling
+        # If set, also add a locally connected layer(s) for each group
         group_outputs = []
-        for conv, batchnorm, pool_1, pool_2 in zip(self.convs, self.batchnorms,
-                self.pools, self.pools_2):
+        for conv, batchnorm, pool_1, pool_2, lcs in zip(self.convs, self.batchnorms,
+                self.pools, self.pools_2, self.lcs):
+            # Run the convolutional layer and batch norm on x, to
+            # start this group
             group_x = conv(x)
             group_x = batchnorm(group_x, training=training)
+
+            # Run the pooling layer on the current group output (group_x)
             if pool_2 is None:
                 group_x = pool_1(group_x)
             else:
                 group_x_1 = pool_1(group_x)
                 group_x_2 = pool_2(group_x)
                 group_x = self.pool_merge([group_x_1, group_x_2])
+
+            if lcs is not None:
+                # Run the locally connected layer (1 or more)
+                if len(lcs) == 1:
+                    # Only 1 locally connected layer
+                    lc = lcs[0]
+                    group_x = lc(group_x)
+                else:
+                    lc_outputs = []
+                    for lc in lcs:
+                        # Run the locally connected layer (lc) on the
+                        # current output for this group (group_x)
+                        lc_outputs += [lc(group_x)]
+                    # Merge the outputs of the locally connected layers
+                    group_x = self.lc_merge(lc_outputs)
+
             group_outputs += [group_x]
 
         # Merge the above groups
