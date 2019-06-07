@@ -75,10 +75,11 @@ parser.add_argument('--l2-factor',
         help=("L2 regularization factor. This is applied to weights "
               "(kernal_regularizer). Note that this does not regularize "
               "bias of activity."))
-parser.add_argument('--epochs',
+parser.add_argument('--max-num-epochs',
         type=int,
-        default=50,
-        help=("Number of training epochs"))
+        default=1000,
+        help=("Maximum number of training epochs (this employs early "
+              "stopping)"))
 parser.add_argument('--seed',
         type=int,
         default=1,
@@ -458,8 +459,17 @@ def test_step(seqs, labels):
     test_auc_roc_metric(labels, predictions)
     test_auc_pr_metric(labels, predictions)
 
+# Here we will effectively implement tf.keras.callbacks.EarlyStopping() to
+# decide when to stop training; because we are not using model.fit(..) we
+# cannot use this callback out-of-the-box
+# Set the number of epochs that must pass with no improvement in the
+# validation loss, after which we will stop training
+STOPPING_PATIENCE = 5
+
 # Train (and validate) for each epoch
-for epoch in range(args.epochs):
+best_val_loss = None
+num_epochs_past_best_loss = 0
+for epoch in range(args.max_num_epochs):
     # Train on each batch
     for seqs, labels in train_ds:
         train_step(seqs, labels)
@@ -484,6 +494,8 @@ for epoch in range(args.epochs):
     print('    AUC-ROC: {}'.format(validate_auc_roc_metric.result()))
     print('    AUC-PR: {}'.format(validate_auc_pr_metric.result()))
 
+    val_loss = validate_loss_metric.result()
+
     # Reset metric states so they are not cumulative over epochs
     train_loss_metric.reset_states()
     train_accuracy_metric.reset_states()
@@ -493,6 +505,19 @@ for epoch in range(args.epochs):
     validate_accuracy_metric.reset_states()
     validate_auc_roc_metric.reset_states()
     validate_auc_pr_metric.reset_states()
+
+    # Decide whether to stop at this epoch
+    if best_val_loss is None or val_loss < best_val_loss:
+        # Update the best validation loss
+        best_val_loss = val_loss
+        num_epochs_past_best_loss = 0
+    else:
+        # This loss is worse than one seen before
+        num_epochs_past_best_loss += 1
+    if num_epochs_past_best_loss >= STOPPING_PATIENCE:
+        # Stop here
+        print('  Stopping at EPOCH {}'.format(epoch+1))
+        break
 
 
 # Test the model
