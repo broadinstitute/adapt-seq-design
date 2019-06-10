@@ -3,15 +3,15 @@
 This is implemented for classifying Cas9 activity.
 """
 
-__author__ = 'Hayden Metsky <hayden@mit.edu>'
-
-
 import argparse
 
 import parse_data
 
 import numpy as np
 import tensorflow as tf
+
+
+__author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
 def parse_args():
@@ -453,7 +453,6 @@ test_auc_pr_metric = tf.keras.metrics.AUC(
 optimizer = tf.keras.optimizers.Adam()
 
 # Train the model using GradientTape; this is called on each batch
-@tf.function
 def train_step(model, seqs, labels):
     with tf.GradientTape() as tape:
         # Compute predictions and loss
@@ -478,7 +477,6 @@ def train_step(model, seqs, labels):
 
 # Define functions for computing validation and test metrics; these are
 # called on each batch
-@tf.function
 def validate_step(model, seqs, labels):
     # Compute predictions and loss
     predictions = model(seqs, training=False)
@@ -490,7 +488,7 @@ def validate_step(model, seqs, labels):
     validate_accuracy_metric(labels, predictions)
     validate_auc_roc_metric(labels, predictions)
     validate_auc_pr_metric(labels, predictions)
-@tf.function
+
 def test_step(model, seqs, labels):
     # Compute predictions and loss
     predictions = model(seqs, training=False)
@@ -524,6 +522,14 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     Returns:
         validation loss at end, validation AUC (ROC) at end
     """
+    # model may be new, but calling train_step on a new model will yield
+    # an error; tf.function was designed such that a new one is needed
+    # whenever there is a new model
+    # (see
+    # https://github.com/tensorflow/tensorflow/issues/27525#issuecomment-481025914)
+    tf_train_step = tf.function(train_step)
+    tf_validate_step = tf.function(validate_step)
+
     train_ds = make_dataset_and_batch(x_train, y_train)
     validate_ds = make_dataset_and_batch(x_validate, y_validate)
 
@@ -533,14 +539,14 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     for epoch in range(max_num_epochs):
         # Train on each batch
         for seqs, labels in train_ds:
-            train_step(model, seqs, labels)
+            tf_train_step(model, seqs, labels)
 
         # Validate on each batch
         # Note that we could run the validation data through the model all
         # at once (not batched), but batching may help with memory usage by
         # reducing how much data is run through the network at once
         for seqs, labels in validate_ds:
-            validate_step(model, seqs, labels)
+            tf_validate_step(model, seqs, labels)
 
         # Log the metrics from this epoch
         print('EPOCH {}'.format(epoch+1))
@@ -593,10 +599,12 @@ def test(model, x_test, y_test):
         model: model object
         x_test, y_test: testing input and labels
     """
+    tf_test_step = tf.function(test_step)
+
     test_ds = make_dataset_and_batch(x_test, y_test)
 
     for seqs, labels in test_ds:
-        test_step(model, seqs, labels)
+        tf_test_step(model, seqs, labels)
     print('TEST DONE')
     print('  Test metrics:')
     print('    Loss: {}'.format(test_loss_metric.result()))

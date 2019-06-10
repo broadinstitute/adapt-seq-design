@@ -4,6 +4,7 @@
 import random
 
 import numpy as np
+from sklearn.model_selection import StratifiedKFold
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -379,3 +380,34 @@ class Cas13SimulatedData(Doench2016Cas9ActivityParser):
 
         return super(Cas13SimulatedData, self)._gen_input_and_label(row)
 
+
+def split(x, y, num_splits, shuffle=False):
+    """Split the data using stratified folds, for k-fold cross validation.
+
+    This is useful for ensuring that the distribution of output variables
+    (here, classes) is roughly the same across the different folds.
+
+    Args:
+        x: input data
+        y: labels
+        num_splits: number of folds
+        shuffle: if True, shuffle before splitting
+
+    Iterates:
+        (x_train_i, y_train_i, x_validate_i, y_validate_i) where each is
+        for a fold of the data
+    """
+    assert len(x) == len(y)
+    if shuffle:
+        idx = list(range(len(x)))
+        random.shuffle(idx)
+        x_shuffled = [x[i] for i in idx]
+        y_shuffled = [y[i] for i in idx]
+        x = np.array(x_shuffled)
+        y = np.array(y_shuffled)
+
+    skf = StratifiedKFold(n_splits=num_splits)
+    for train_index, test_index in skf.split(x, y):
+        x_train_i, y_train_i = x[train_index], y[train_index]
+        x_validate_i, y_validate_i = x[test_index], y[test_index]
+        yield (x_train_i, y_train_i, x_validate_i, y_validate_i)
