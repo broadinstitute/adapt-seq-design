@@ -93,6 +93,8 @@ def parse_args():
             type=int,
             default=1,
             help=("Random seed"))
+    parser.add_argument('--plot-roc-curve',
+            help=("If set, path to PDF at which to save plot of ROC curve"))
     args = parser.parse_args()
 
     # Print the arguments provided
@@ -500,6 +502,7 @@ def test_step(model, seqs, labels):
     test_accuracy_metric(labels, predictions)
     test_auc_roc_metric(labels, predictions)
     test_auc_pr_metric(labels, predictions)
+    return predictions
 
 
 # Here we will effectively implement tf.keras.callbacks.EarlyStopping() to
@@ -590,7 +593,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     return (val_loss, val_auc_roc)
 
 
-def test(model, x_test, y_test):
+def test(model, x_test, y_test, plot_roc_curve=None):
     """Test a model.
 
     This prints metrics.
@@ -598,13 +601,19 @@ def test(model, x_test, y_test):
     Args:
         model: model object
         x_test, y_test: testing input and labels
+        plot_roc_curve: if set, path to PDF at which to save plot of ROC curve
     """
     tf_test_step = tf.function(test_step)
 
     test_ds = make_dataset_and_batch(x_test, y_test)
 
+    all_labels = []
+    all_predictions = []
     for seqs, labels in test_ds:
-        tf_test_step(model, seqs, labels)
+        predictions = tf_test_step(model, seqs, labels)
+        all_labels += list(tf.reshape(labels, [-1]))
+        all_predictions += list(tf.reshape(predictions, [-1]))
+
     print('TEST DONE')
     print('  Test metrics:')
     print('    Loss: {}'.format(test_loss_metric.result()))
@@ -615,6 +624,18 @@ def test(model, x_test, y_test):
     test_accuracy_metric.reset_states()
     test_auc_roc_metric.reset_states()
     test_auc_pr_metric.reset_states()
+
+    if plot_roc_curve:
+        from sklearn.metrics import roc_curve
+        import matplotlib.pyplot as plt
+        fpr, tpr, thresholds = roc_curve(all_labels, all_predictions)
+        plt.figure(1)
+        plt.plot(fpr, tpr)
+        plt.xlabel('False positive rate')
+        plt.ylabel('True positive rate')
+        plt.title('ROC curve')
+        plt.show()
+        plt.savefig(plot_roc_curve)
 
 
 def main():
@@ -632,7 +653,7 @@ def main():
             args.max_num_epochs)
 
     # Test the model
-    test(model, x_test, y_test)
+    test(model, x_test, y_test, plot_roc_curve=args.plot_roc_curve)
 
 
 if __name__ == "__main__":
