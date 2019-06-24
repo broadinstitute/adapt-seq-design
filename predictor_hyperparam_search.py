@@ -83,7 +83,7 @@ def hyperparam_grid():
         yield params
 
 
-def hyperparam_random_dist(num_samples=100):
+def hyperparam_random_dist(num_samples=250):
     """Construct distribution of hyperparameters.
 
     Args:
@@ -126,18 +126,20 @@ def hyperparam_random_dist(num_samples=100):
 
     # Map each parameter to a distribution of values
     space = {
-             'conv_num_filters': uniform_int(5, 30),
-             'conv_filter_width': uniform_discrete([[1], [2], [1, 2], [1, 2, 3,
-                 4]]),
-             'pool_window_width': uniform_int(1, 5),
-             'fully_connected_dim': uniform_nested_dist(1, 4,
-                 uniform_int(20, 50)),
+             'conv_num_filters': uniform_int(5, 100),
+             'conv_filter_width': uniform_discrete([
+                 [1], [2], [3], [4],
+                 [1, 2], [1, 2, 3], [1, 2, 4], [1, 2, 3, 4]]),
+             'pool_window_width': uniform_int(1, 8),
+             'fully_connected_dim': uniform_nested_dist(1, 5,
+                 uniform_int(10, 50)),
              'pool_strategy': uniform_discrete(['max', 'avg', 'max-and-avg']),
              'locally_connected_width': uniform_discrete([None,
-                 [1], [2], [1, 2], [1, 2, 3, 4]]),
-             'locally_connected_dim': uniform_int(1, 5),
+                 [1], [2], [3],
+                 [1, 2], [2, 3], [1, 2, 3]]),
+             'locally_connected_dim': uniform_int(1, 10),
              'dropout_rate': uniform_continuous(0, 0.75),
-             'l2_factor': lognormal(-7.0, 4.0),
+             'l2_factor': lognormal(-9.0, 4.0),
              'max_num_epochs': constant(1000)
     }
     for i in range(num_samples):
@@ -416,7 +418,7 @@ if __name__ == "__main__":
                   "HYPERPARAM_SEARCH_CROSS_VAL_NUM_SPLITS splits)"))
     parser.add_argument('--search-type',
             choices=['grid', 'random'],
-            default='grid',
+            default='random',
             help=("Type of hyperparameter search ('grid' or 'random')"))
     parser.add_argument('--params-mean-val-loss-out-tsv',
             help=("If set, path to out TSV at which to write the mean "
