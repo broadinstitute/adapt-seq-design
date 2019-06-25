@@ -1,6 +1,6 @@
 # Plot distribution of output variable describing Cas9 activity.
 #
-# This should be comparable to Figure 5b in Doench et al. 2016, except
+# The first plot should be comparable to Figure 5b in Doench et al. 2016, except
 # the data here is a curated subset of that data.
 #
 # By Hayden Metsky <hayden@mit.edu>
@@ -10,7 +10,8 @@ require(ggplot2)
 require(reshape2)
 
 IN.TABLE <- "data/doench2016-nbt.supp-table-18.curated.with-context.tsv"
-OUT.PDF <- "out/activity-dist.pdf"
+OUT.DIST.PDF <- "out/activity-dist.pdf"
+OUT.ALONG.PROTEIN.PDF <- "out/activity-along-protein.pdf"
 
 # Read table and replace '_' in column names with '.'
 all.data <- read.table(IN.TABLE, header=TRUE, sep="\t")
@@ -49,8 +50,15 @@ names(df)[names(df) == "L1"] <- "dataset"
 p <- ggplot(df, aes(x=day21.minus.etp, fill=dataset, color=dataset))
 # Use position='identity' to overlay plots
 p <- p + geom_density(alpha=0.1, position='identity')
+p <- p + ggsave(OUT.DIST.PDF, width=8, height=8, useDingbats=FALSE)
 
-p <- p + ggsave(OUT.PDF, width=8, height=8, useDingbats=FALSE)
+# For guide.mismatch.and.good.pam (most of the data), plot a distribution
+# of the output variable for each position along the protein
+guide.mismatch.and.good.pam$protein.pos.pct <- factor(guide.mismatch.and.good.pam$protein.pos.pct)
+p <- ggplot(guide.mismatch.and.good.pam, aes(protein.pos.pct, day21.minus.etp))
+p <- p + geom_boxplot(outlier.shape=NA, outlier.size=0.5) + geom_jitter(width=0.1)
+p <- p + theme(axis.text.x=element_text(angle=90, hjust=1))
+p <- p + ggsave(OUT.ALONG.PROTEIN.PDF, width=16, height=8, useDingbats=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
