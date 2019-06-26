@@ -4,6 +4,7 @@
 import random
 
 import numpy as np
+from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -20,8 +21,13 @@ class Doench2016Cas9ActivityParser:
     # consistent with Figure 5b of the paper
     ACTIVITY_THRESHOLD = 1.0
 
+    # Have at least 2.5% of position (in protein space) between the
+    # train/validate and test sets, to ensure there is no overlap
+    # In the data, the percents are out of 100
+    TEST_NONOVERLAP_MIN = 2.5
+
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
-            shuffle_seed=None):
+            shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
         """
         Args:
             subset: if 'guide-mismatch-and-good-pam', only use data points
@@ -33,8 +39,11 @@ class Doench2016Cas9ActivityParser:
             context_nt: nt of target sequence context to include alongside
                 each guide
             split: (train, validation, test) split; must sum to 1.0
-            shuffle_seed: seed to use for the random module to shuffle rows
-                (if None, do not shuffle rows)
+            shuffle_seed: seed to use for the random module to shuffle
+            stratify_randomly: if set, shuffle rows before splitting into
+                train/validate/test
+            stratify_by_pos: if set, sort by position on the genome and
+                split based on this
         """
         assert subset in (None, 'guide-mismatch-and-good-pam', 'guide-match')
         self.subset = subset
@@ -44,11 +53,12 @@ class Doench2016Cas9ActivityParser:
         assert sum(split) == 1.0
         self.split_train, self.split_validate, self.split_test = split
 
-        if shuffle_seed is None:
-            self.shuffle_rows = False
-        else:
-            self.shuffle_rows = True
-            random.seed(shuffle_seed)
+        if stratify_randomly and stratify_by_pos:
+            raise ValueError("Cannot set by stratify_randomly and stratify_by_pos")
+        self.stratify_randomly = stratify_randomly
+        self.stratify_by_pos = stratify_by_pos
+
+        random.seed(shuffle_seed)
 
         self.was_read = False
 
@@ -171,16 +181,26 @@ class Doench2016Cas9ActivityParser:
             for row in rows:
                 assert row[header_idx['guide_mutated']] == row[header_idx['guide_wt']]
 
-        # Shuffle the rows
-        if self.shuffle_rows:
+        # Shuffle the rows before splitting
+        if self.stratify_randomly:
             random.shuffle(rows)
+
+        # Sort by position before splitting
+        if self.stratify_by_pos:
+            rows = sorted(rows, key=lambda x: float(x[header_idx['protein_pos_pct']]))
 
         # Generate input and labels for each row
         inputs_and_labels = []
-        for row in rows:
+        self.input_feats_pos = {}
+        self.row_idx_pos = {}
+        for i, row in enumerate(rows):
             row_dict = {k: row[header_idx[k]] for k in header_idx.keys()}
             input_feats, label = self._gen_input_and_label(row_dict)
             inputs_and_labels += [(input_feats, label)]
+
+            input_feats_key = np.array(input_feats, dtype='f').tostring()
+            self.input_feats_pos[input_feats_key] = float(row[header_idx['protein_pos_pct']])
+            self.row_idx_pos[i] = float(row[header_idx['protein_pos_pct']])
 
         # Split into train, validate, and test sets
         train_end_idx = int(len(inputs_and_labels) * self.split_train)
@@ -196,7 +216,46 @@ class Doench2016Cas9ActivityParser:
             else:
                 self._test_set += [inputs_and_labels[i]]
 
+        if self.stratify_by_pos:
+            # Make sure there is no overlap (or leakage) between the
+            # train/validate and test sets in the split; to do this, toss
+            # test data that is too "close" (within the given parameter) to
+            # the train/validate data
+            largest_train_validate_pos = 0
+            largest_test_idx_to_remove = 0
+            for i in range(len(inputs_and_labels)):
+                pos = self.row_idx_pos[i]
+                if i <= validate_end_idx:
+                    # This corresponds to a point in the train/validate set
+                    largest_train_validate_pos = max(largest_train_validate_pos, pos)
+                else:
+                    # This corresponds to a point in the test set
+                    if pos < largest_train_validate_pos + self.TEST_NONOVERLAP_MIN:
+                        # This is too close; remove it
+                        largest_test_idx_to_remove = max(largest_test_idx_to_remove,
+                                i - validate_end_idx - 1)
+            del self._test_set[0:(largest_test_idx_to_remove+1)]
+
+            # The data points should still be shuffled; currently they
+            # are sorted within each data set by protein position
+            random.shuffle(self._train_set)
+            random.shuffle(self._validate_set)
+            random.shuffle(self._test_set)
+
         self.was_read = True
+
+    def pos_for_input(self, x):
+        """Return position (in protein) of a data point.
+
+        Args:
+            x: data point, namely input features
+
+        Returns:
+            protein_pos_pct value corresponding to the data point
+        """
+        if not self.was_read:
+            raise Exception("read() must be called first")
+        return self.input_feats_pos[x.tostring()]
 
     def _data_set(self, data):
         """Return data set.
@@ -246,10 +305,11 @@ class Cas13SimulatedData(Doench2016Cas9ActivityParser):
     """Simulate Cas13 data from the Cas9 data.
     """
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
-            shuffle_seed=None):
+            shuffle_seed=None, stratify_by_pos=False):
         super(Cas13SimulatedData, self).__init__(
                 subset=subset, context_nt=context_nt,
-                split=split, shuffle_seed=shuffle_seed)
+                split=split, shuffle_seed=shuffle_seed,
+                stratify_by_pos=stratify_by_pos)
 
     def _gen_input_and_label(self, row):
         """Modify target and guide sequence to make it resemble Cas13
@@ -381,33 +441,64 @@ class Cas13SimulatedData(Doench2016Cas9ActivityParser):
         return super(Cas13SimulatedData, self)._gen_input_and_label(row)
 
 
-def split(x, y, num_splits, shuffle=False):
+_split_parser = None
+def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False):
     """Split the data using stratified folds, for k-fold cross validation.
-
-    This is useful for ensuring that the distribution of output variables
-    (here, classes) is roughly the same across the different folds.
 
     Args:
         x: input data
         y: labels
         num_splits: number of folds
-        shuffle: if True, shuffle before splitting
+        shuffle_and_split: if True, shuffle before splitting and stratify based
+            on the distribution of output variables (here, classes) to ensure they
+            are roughly the same across the different folds
+        stratify_by_pos: if True, determine the different folds based on
+            the protein position of each data point (ensuring that the
+            validate set is a contiguous region of the protein); this is
+            similar to leave-one-gene-out cross-validation
 
     Iterates:
         (x_train_i, y_train_i, x_validate_i, y_validate_i) where each is
         for a fold of the data
     """
     assert len(x) == len(y)
-    if shuffle:
+
+    if ((shuffle_and_split is False and stratify_by_pos is False) or
+            (shuffle_and_split is True and stratify_by_pos is True)):
+        raise ValueError(("Exactly one of shuffle_and_split or stratify_by_pos "
+            "must be set"))
+
+    if shuffle_and_split:
         idx = list(range(len(x)))
         random.shuffle(idx)
         x_shuffled = [x[i] for i in idx]
         y_shuffled = [y[i] for i in idx]
         x = np.array(x_shuffled)
         y = np.array(y_shuffled)
+        skf = StratifiedKFold(n_splits=num_splits)
+        def split_iter():
+            return sfk.split(x, y)
+    elif stratify_by_pos:
+        x_with_pos = [(xi, _split_parser.pos_for_input(xi)) for xi in x]
+        all_pos = np.array(sorted(set(pos for xi, pos in x_with_pos)))
+        kf = KFold(n_splits=num_splits)
+        def split_iter():
+            for train_pos_idx, test_pos_idx in kf.split(all_pos):
+                train_pos = set(all_pos[train_pos_idx])
+                test_pos = set(all_pos[test_pos_idx])
+                train_index, test_index = [], []
+                for i, (xi, pos) in enumerate(x_with_pos):
+                    assert pos in train_pos or pos in test_pos
+                    if pos in train_pos:
+                        train_index += [i]
+                    if pos in test_pos:
+                        test_index += [i]
+                # Shuffle order of data points within the train and test sets
+                random.shuffle(train_index)
+                random.shuffle(test_index)
+                yield train_index, test_index
 
-    skf = StratifiedKFold(n_splits=num_splits)
-    for train_index, test_index in skf.split(x, y):
+    for train_index, test_index in split_iter():
         x_train_i, y_train_i = x[train_index], y[train_index]
         x_validate_i, y_validate_i = x[test_index], y[test_index]
         yield (x_train_i, y_train_i, x_validate_i, y_validate_i)

@@ -33,7 +33,8 @@ def cross_validate(params, x, y, num_splits):
     """
     val_losses = []
     i = 0
-    split_iter = parse_data.split(x, y, num_splits=num_splits)
+    split_iter = parse_data.split(x, y, num_splits=num_splits,
+            stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in split_iter:
         print('STARTING FOLD {} of {}'.format(i+1, num_splits))
 
@@ -228,7 +229,8 @@ def nested_cross_validate(x, y, search_type,
     """
     optimal_choices = []
     i = 0
-    outer_split_iter = parse_data.split(x, y, num_splits=num_outer_splits)
+    outer_split_iter = parse_data.split(x, y, num_splits=num_outer_splits,
+            stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in outer_split_iter:
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
 
@@ -273,8 +275,10 @@ def main(args):
             subset=args.subset,
             context_nt=args.context_nt,
             split=(train_split_frac, 0, args.test_split_frac),
-            shuffle_seed=args.seed)
+            shuffle_seed=args.seed,
+            stratify_by_pos=True)
     data_parser.read()
+    parse_data._split_parser = data_parser
 
     x, y = data_parser.train_set()
     x_test, y_test = data_parser.test_set()
@@ -333,7 +337,7 @@ def main(args):
         model = predictor.construct_model(params, x.shape)
         split_iter = parse_data.split(x, y,
                 args.hyperparam_search_cross_val_num_splits,
-                shuffle=True)
+                stratify_by_pos=True)
         # Only take the first split of the generator as the train/validation
         # split
         x_train, y_train, x_validate, y_validate = next(split_iter)
@@ -394,7 +398,7 @@ if __name__ == "__main__":
                   "guide"))
     parser.add_argument('--test-split-frac',
             type=float,
-            default=0.2,
+            default=0.3,
             help=("Fraction of the dataset to use for testing the final "
                   "model"))
     parser.add_argument('--command',

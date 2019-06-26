@@ -53,7 +53,8 @@ data_parser = parser_class(
         subset=args.subset,
         context_nt=args.context_nt,
         split=(0.6, 0.2, 0.2),
-        shuffle_seed=args.seed)
+        shuffle_seed=args.seed,
+        stratify_by_pos=True)
 data_parser.read()
 
 x_train, y_train = data_parser.train_set()
