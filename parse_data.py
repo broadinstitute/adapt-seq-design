@@ -21,10 +21,9 @@ class Doench2016Cas9ActivityParser:
     # consistent with Figure 5b of the paper
     ACTIVITY_THRESHOLD = 1.0
 
-    # Have at least 2.5% of position (in protein space) between the
-    # train/validate and test sets, to ensure there is no overlap
-    # In the data, the percents are out of 100
-    TEST_NONOVERLAP_MIN = 2.5
+    # Set the number of nucleotides represented by each percent in the
+    # 'protein_pos_pct' value for a data point
+    PROTEIN_POS_PCT_NT = 1462 / 100.0
 
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
             shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
@@ -191,16 +190,16 @@ class Doench2016Cas9ActivityParser:
 
         # Generate input and labels for each row
         inputs_and_labels = []
-        self.input_feats_pos = {}
-        self.row_idx_pos = {}
+        self.input_feats_pct_pos = {}
+        row_idx_pct_pos = {}
         for i, row in enumerate(rows):
             row_dict = {k: row[header_idx[k]] for k in header_idx.keys()}
             input_feats, label = self._gen_input_and_label(row_dict)
             inputs_and_labels += [(input_feats, label)]
 
             input_feats_key = np.array(input_feats, dtype='f').tostring()
-            self.input_feats_pos[input_feats_key] = float(row[header_idx['protein_pos_pct']])
-            self.row_idx_pos[i] = float(row[header_idx['protein_pos_pct']])
+            self.input_feats_pct_pos[input_feats_key] = float(row[header_idx['protein_pos_pct']])
+            row_idx_pct_pos[i] = float(row[header_idx['protein_pos_pct']])
 
         # Split into train, validate, and test sets
         train_end_idx = int(len(inputs_and_labels) * self.split_train)
@@ -214,27 +213,31 @@ class Doench2016Cas9ActivityParser:
             elif i <= validate_end_idx:
                 self._validate_set += [inputs_and_labels[i]]
             else:
-                self._test_set += [inputs_and_labels[i]]
+                if self.stratify_by_pos:
+                    # If there are points with the exact same position that
+                    # are split across the validate/test sets, then the ones
+                    # from the test set will get removed because they overlap
+                    # the validate set; instead of letting these ones get
+                    # tossed, just put them in the validate set
+                    last_validate_pct_pos = row_idx_pct_pos[validate_end_idx]
+                    if row_idx_pct_pos[i] == last_validate_pct_pos:
+                        self._validate_set += [inputs_and_labels[i]]
+                    else:
+                        self._test_set += [inputs_and_labels[i]]
+                else:
+                    self._test_set += [inputs_and_labels[i]]
+
+        self.was_read = True
 
         if self.stratify_by_pos:
             # Make sure there is no overlap (or leakage) between the
             # train/validate and test sets in the split; to do this, toss
             # test data that is too "close" (within the given parameter) to
             # the train/validate data
-            largest_train_validate_pos = 0
-            largest_test_idx_to_remove = 0
-            for i in range(len(inputs_and_labels)):
-                pos = self.row_idx_pos[i]
-                if i <= validate_end_idx:
-                    # This corresponds to a point in the train/validate set
-                    largest_train_validate_pos = max(largest_train_validate_pos, pos)
-                else:
-                    # This corresponds to a point in the test set
-                    if pos < largest_train_validate_pos + self.TEST_NONOVERLAP_MIN:
-                        # This is too close; remove it
-                        largest_test_idx_to_remove = max(largest_test_idx_to_remove,
-                                i - validate_end_idx - 1)
-            del self._test_set[0:(largest_test_idx_to_remove+1)]
+            train_and_validate = self._train_set + self._validate_set
+            test_set_nonoverlapping, _ = self.make_nonoverlapping_datasets(
+                    train_and_validate, self._test_set)
+            self._test_set = test_set_nonoverlapping
 
             # The data points should still be shuffled; currently they
             # are sorted within each data set by protein position
@@ -242,20 +245,78 @@ class Doench2016Cas9ActivityParser:
             random.shuffle(self._validate_set)
             random.shuffle(self._test_set)
 
-        self.was_read = True
-
     def pos_for_input(self, x):
-        """Return position (in protein) of a data point.
+        """Return position (in nucleotide space) of a data point.
 
         Args:
             x: data point, namely input features
 
         Returns:
-            protein_pos_pct value corresponding to the data point
+            x's position in nucleotide space
         """
         if not self.was_read:
             raise Exception("read() must be called first")
-        return self.input_feats_pos[x.tostring()]
+        x_key = np.array(x, dtype='f').tostring()
+        return int(self.input_feats_pct_pos[x_key] * self.PROTEIN_POS_PCT_NT)
+
+    def make_nonoverlapping_datasets(self, data1, data2):
+        """Make sure there is no overlap (leakage) between two datasets.
+
+        Each data point takes up some region in nucleotide space. This
+        makes sure that points from two datasets to not overlap in that
+        nucleotide space -- i.e., there is not leakage between the two.
+        To do this, this modifies data2 by removing points that overlap
+        in nucleotide space with points in data1.
+
+        Args:
+            data1: list of tuples (X, y) where X is input data and y is labels
+            data2: list of tuples (X, y) where X is input data and y is labels
+
+        Returns:
+            tuple (a, b) where a is data2, after having removed any data
+            points in data2 that overlap with ones in data1, and b is
+            the indices in data2 that were kept
+        """
+        def range_for_input(x):
+            # Compute x's range in nucleotide space: (start, end) where start
+            # is inclusive and end is exclusive
+            start_pos_nt = self.pos_for_input(x)
+            length_in_nt = len(x)
+            return (start_pos_nt, start_pos_nt + length_in_nt)
+
+        # The nucleotide space in this dataset is small (~1000 nt); just
+        # create a set of all nucleotides in data1 and check data2 against
+        # this
+        # Since many ranges will be the same (i.e., points are at the exact
+        # same position), first create a set of ranges and then create
+        # a set of nucleotide positions from those
+        data1_ranges = set()
+        for X, y in data1:
+            X_start, X_end = range_for_input(X)
+            data1_ranges.add((X_start, X_end))
+        data1_nt = set()
+        for start, end in data1_ranges:
+            for p in range(start, end):
+                data1_nt.add(p)
+
+        # Find which points in data2 to remove because they overlap a
+        # nucleotide in data1
+        # Make a copy of data2, only including points that do not overlap
+        data2_nonoverlapping = []
+        data2_idx_kept = []
+        for i, (X, y) in enumerate(data2):
+            X_start, X_end = range_for_input(X)
+            include = True
+            for p in range(X_start, X_end):
+                if p in data1_nt:
+                    # Remove this data point from data2
+                    include = False
+                    break
+            if include:
+                data2_nonoverlapping += [(X, y)]
+                data2_idx_kept += [i]
+
+        return (data2_nonoverlapping, data2_idx_kept)
 
     def _data_set(self, data):
         """Return data set.
@@ -493,6 +554,20 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False):
                         train_index += [i]
                     if pos in test_pos:
                         test_index += [i]
+
+                # Get rid of test indices for data points that overlap with
+                # ones in the train set
+                x_train = [(x[i], y[i]) for i in train_index]
+                x_test = [(x[i], y[i]) for i in test_index]
+                _, test_index_idx_to_keep = _split_parser.make_nonoverlapping_datasets(
+                        x_train, x_test)
+                test_index_idx_to_keep = set(test_index_idx_to_keep)
+                test_index_nonoverlapping = []
+                for i in range(len(test_index)):
+                    if i in test_index_idx_to_keep:
+                        test_index_nonoverlapping += [test_index[i]]
+                test_index = test_index_nonoverlapping
+
                 # Shuffle order of data points within the train and test sets
                 random.shuffle(train_index)
                 random.shuffle(test_index)

@@ -410,12 +410,12 @@ if __name__ == "__main__":
                   "model and hyperparameter search"))
     parser.add_argument('--hyperparam-search-cross-val-num-splits',
             type=int,
-            default=5,
+            default=3,
             help=("Number of data splits to use (i.e., k in k-fold) for "
                   "hyperparameter search"))
     parser.add_argument('--nested-cross-val-outer-num-splits',
             type=int,
-            default=5,
+            default=3,
             help=("Number of splits to use in the outer fold for nested "
                   "cross-validation (the inner fold uses "
                   "HYPERPARAM_SEARCH_CROSS_VAL_NUM_SPLITS splits)"))
