@@ -524,7 +524,8 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         max_num_epochs: maximum number of epochs to train for
 
     Returns:
-        validation loss at end, validation AUC (ROC) at end
+        dict with validation metrics at the end (keys are 'loss'
+        and 'auc-roc')
     """
     # model may be new, but calling train_step on a new model will yield
     # an error; tf.function was designed such that a new one is needed
@@ -591,7 +592,8 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
             print('  Stopping at EPOCH {}'.format(epoch+1))
             break
 
-    return (val_loss, val_auc_roc)
+    val_metrics = {'loss': val_loss, 'auc-roc': val_auc_roc}
+    return val_metrics
 
 
 def test(model, x_test, y_test, plot_roc_curve=None):

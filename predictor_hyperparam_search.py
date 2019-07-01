@@ -17,6 +17,24 @@ import numpy as np
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
+def determine_val_loss(results):
+    """Determine loss on validation data.
+
+    The value is computed by predictor during validation; this selects it from
+    different possibilities.
+
+    This currently uses 1-AUC, where AUC is from the ROC curve, as the loss.
+
+    Args:
+        results: dict returned by predictor.train_and_validate()
+
+    Returns:
+        loss value
+    """
+    val_auc_roc = results['auc-roc']
+    return 1.0 - val_auc_roc
+
+
 def cross_validate(params, x, y, num_splits):
     """Perform k-fold cross-validation.
 
@@ -44,7 +62,7 @@ def cross_validate(params, x, y, num_splits):
         # Train and validate this fold
         results = predictor.train_and_validate(model, x_train, y_train,
                 x_validate, y_validate, params['max_num_epochs'])
-        val_loss, _ = results
+        val_loss = determine_val_loss(results)
         val_losses += [val_loss]
 
         print(('FINISHED FOLD {} of {}; current mean validation loss is '
@@ -250,7 +268,7 @@ def nested_cross_validate(x, y, search_type,
         best_model = predictor.construct_model(best_params, x_train.shape)
         results = predictor.train_and_validate(best_model, x_train, y_train,
                 x_validate, y_validate, best_params['max_num_epochs'])
-        val_loss, _ = results
+        val_loss = determine_val_loss(results)
         optimal_choices += [(best_params, val_loss)]
         print(('FINISHED OUTER FOLD {} of {}; validation loss on this outer '
             'fold is {}').format(i+1, num_outer_splits, val_loss))
