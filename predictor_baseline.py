@@ -28,7 +28,7 @@ parser.add_argument('--context-nt',
               "guide"))
 parser.add_argument('--l1-factor',
         type=float,
-        default=0.001,
+        default=0.0001,
         help=("L1 regularization factor"))
 parser.add_argument('--seed',
         type=int,
@@ -52,7 +52,7 @@ else:
 data_parser = parser_class(
         subset=args.subset,
         context_nt=args.context_nt,
-        split=(0.6, 0.2, 0.2),
+        split=(0.6, 0.1, 0.3),
         shuffle_seed=args.seed,
         stratify_by_pos=True)
 data_parser.read()
