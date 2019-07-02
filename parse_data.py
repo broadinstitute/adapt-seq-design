@@ -221,7 +221,12 @@ class Doench2016Cas9ActivityParser:
                     # tossed, just put them in the validate set
                     last_validate_pct_pos = row_idx_pct_pos[validate_end_idx]
                     if row_idx_pct_pos[i] == last_validate_pct_pos:
-                        self._validate_set += [inputs_and_labels[i]]
+                        if self.split_validate == 0:
+                            # There should be no validate set; put it in train
+                            # set instead
+                            self._train_set += [inputs_and_labels[i]]
+                        else:
+                            self._validate_set += [inputs_and_labels[i]]
                     else:
                         self._test_set += [inputs_and_labels[i]]
                 else:
