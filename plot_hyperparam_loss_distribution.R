@@ -47,7 +47,7 @@ hyperparams[hyperparams$has.lc.layer == FALSE, ]$lc.dim <- 0
 p <- ggplot(hyperparams, aes(has.lc.layer, mean.val.loss))
 p <- p + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2)
 
-p <- p + ylab("Mean validation loss")
+p <- p + ylab("Mean validation loss (1-AUC)")
 p <- p + xlab("Uses LC layer")
 
 # Make axis labels bigger
