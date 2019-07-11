@@ -507,6 +507,358 @@ class Cas13SimulatedData(Doench2016Cas9ActivityParser):
         return super(Cas13SimulatedData, self)._gen_input_and_label(row)
 
 
+class Cas13ActivityParser:
+    """Parse data from paired crRNA/target Cas13 data tested with CARMEN.
+
+    Unlike Doench2016Cas9ActivityParser, this has the output be numeric
+    values (for regression) rather than labels (for classification).
+    """
+    INPUT_TSV='data/CCF005_pairs_annotated.curated.tsv'
+
+    # Define crRNA (guide) length; used for determining range of crRNA
+    # in nucleotide space
+    CRRNA_LEN = 28
+
+    def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
+            shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
+        """
+        Args:
+            subset: either 'exp' (use only experimental data points, which
+                generally have a mismatch between guide/target), 'pos' (use
+                only data points corresponding to a positive guide/target
+                match with no mismatches (i.e., the wildtype target)), or
+                'neg' (use only data points corresponding to negative guide/
+                target (i.e., high divergence between the two)); if 'None',
+                use all data points
+            context_nt: nt of target sequence context to include alongside
+                each guide
+            split: (train, validation, test) split; must sum to 1.0
+            shuffle_seed: seed to use for the random module to shuffle
+            stratify_randomly: if set, shuffle rows before splitting into
+                train/validate/test
+            stratify_by_pos: if set, consider the position along the target
+                and split based on this
+        """
+        assert subset in (None, 'exp', 'pos', 'neg')
+        self.subset = subset
+
+        self.context_nt = context_nt
+
+        assert sum(split) == 1.0
+        self.split_train, self.split_validate, self.split_test = split
+
+        if stratify_randomly and stratify_by_pos:
+            raise ValueError("Cannot set by stratify_randomly and stratify_by_pos")
+        self.stratify_randomly = stratify_randomly
+        self.stratify_by_pos = stratify_by_pos
+
+        random.seed(shuffle_seed)
+
+        self.was_read = False
+
+    def _gen_input_and_output(self, row):
+        """Generate input features and output for each row.
+
+        This generates a one-hot encoding for each sequence. Because we have
+        the target ('target_at_guide') and guide sequence ('guide_seq'),
+        we must encode how they compare to each other. Here, for each nucleotide
+        position, we use an 8-bit vector (4 to encode the target sequence and
+        4 for the guide sequence). For example, 'A' in the target and 'G' in the
+        guide will be [1,0,0,0,0,0,1,0] for [A,C,G,T] one-hot encoding. There are
+        other ways to do this as well: e.g., a 4-bit vector that represents an OR
+        between the one-hot encoding of the target and guide (e.g., 'A' in the
+        target and 'G' in the guide would be [1,0,1,0]), but this does not
+        distinguish between bases in the target and guide (i.e., the encoding
+        is the same for 'G' in the target and 'A' in the guide) which might
+        be important here.
+
+        This assigns the output to be the value of 'out_logk_median'.
+
+        Args:
+            row: dict representing row of data (key'd by column
+                name)
+
+        Returns:
+            tuple (i, out) where i is a one-hot encoding of the input
+            and out is the output
+        """
+        onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
+        def onehot(b):
+            # One-hot encoding of base b
+            assert b in onehot_idx.keys()
+            v = [0, 0, 0, 0]
+            v[onehot_idx[b]] = 1
+            return v
+
+        # Create the input features for target sequence context on
+        # the end before the guide
+        input_feats_context_before = []
+        context_before = row['target_before']
+        assert self.context_nt <= len(context_before)
+        start = len(context_before) - self.context_nt
+        for pos in range(start, len(context_before)):
+            # Make a one-hot encoding for this position of the target sequence
+            v = onehot(context_before[pos])
+            # For the 4 bits of guide sequence, use [0,0,0,0] (there is
+            # no guide at this position)
+            v += [0, 0, 0, 0]
+            input_feats_context_before += [v]
+
+        # Create the input features for target and guide sequence
+        input_feats_guide = []
+        target = row['target_at_guide']
+        guide = row['guide_seq']
+        assert len(target) == len(guide)
+        for pos in range(len(guide)):
+            # Make a one-hot encoding (4 bits) for each of the target
+            # and the guide
+            v_target = onehot(target[pos])
+            v_guide = onehot(guide[pos])
+            # Combine them into an 8-bit vector
+            v = v_target + v_guide
+            input_feats_guide += [v]
+
+        # Create the input features for target sequence context on
+        # the end after the guide
+        input_feats_context_after = []
+        context_after = row['target_after']
+        assert self.context_nt <= len(context_after)
+        for pos in range(self.context_nt):
+            # Make a one-hot encoding for this position of the target sequence
+            v = onehot(context_after[pos])
+            # For the 4 bits of guide sequence, use [0,0,0,0] (there is
+            # no guide at this position)
+            v += [0, 0, 0, 0]
+            input_feats_context_after += [v]
+
+        # Combine the input features
+        input_feats = input_feats_context_before + input_feats_guide + input_feats_context_after
+        input_feats = np.array(input_feats)
+
+        # Determine an output for this row
+        activity = float(row['out_logk_median'])
+
+        return (input_feats, activity)
+
+    def read(self):
+        """Read and parse TSV file.
+        """
+        # Read all rows
+        header_idx = {}
+        rows = []
+        with open(self.INPUT_TSV) as f:
+            for i, line in enumerate(f):
+                ls = line.rstrip().split('\t')
+                if i == 0:
+                    # Parse header
+                    for j in range(len(ls)):
+                        header_idx[ls[j]] = j
+                else:
+                    rows += [ls]
+
+        if self.subset == 'exp':
+            # Only keep rows where type is 'exp'
+            rows = [row for row in rows if row[header_idx['type']] == 'exp']
+        if self.subset == 'pos':
+            # Only keep rows where type is 'pos'
+            rows = [row for row in rows if row[header_idx['type']] == 'pos']
+        if self.subset == 'neg':
+            # Only keep rows where type is 'neg'
+            rows = [row for row in rows if row[header_idx['type']] == 'neg']
+
+        # Shuffle the rows before splitting
+        if self.stratify_randomly:
+            random.shuffle(rows)
+
+        # Sort by position before splitting
+        if self.stratify_by_pos:
+            rows = sorted(rows, key=lambda x: float(x[header_idx['guide_pos_nt']]))
+
+        # Generate input and outputs for each row
+        inputs_and_outputs = []
+        self.input_feats_pos = {}
+        row_idx_pos = {}
+        for i, row in enumerate(rows):
+            row_dict = {k: row[header_idx[k]] for k in header_idx.keys()}
+            input_feats, output = self._gen_input_and_output(row_dict)
+            inputs_and_outputs += [(input_feats, output)]
+
+            input_feats_key = np.array(input_feats, dtype='f').tostring()
+            pos = int(row[header_idx['guide_pos_nt']])
+            self.input_feats_pos[input_feats_key] = pos
+            row_idx_pos[i] = pos
+
+        # Split into train, validate, and test sets
+        train_end_idx = int(len(inputs_and_outputs) * self.split_train)
+        validate_end_idx = int(len(inputs_and_outputs) * (self.split_train + self.split_validate))
+        self._train_set = []
+        self._validate_set = []
+        self._test_set = []
+        for i in range(len(inputs_and_outputs)):
+            if i <= train_end_idx:
+                self._train_set += [inputs_and_outputs[i]]
+            elif i <= validate_end_idx:
+                self._validate_set += [inputs_and_outputs[i]]
+            else:
+                if self.stratify_by_pos:
+                    # If there are points with the exact same position that
+                    # are split across the validate/test sets, then the ones
+                    # from the test set will get removed because they overlap
+                    # the validate set; instead of letting these ones get
+                    # tossed, just put them in the validate set
+                    last_validate_pos = row_idx_pos[validate_end_idx]
+                    if row_idx_pos[i] == last_validate_pos:
+                        if self.split_validate == 0:
+                            # There should be no validate set; put it in train
+                            # set instead
+                            self._train_set += [inputs_and_outputs[i]]
+                        else:
+                            self._validate_set += [inputs_and_outputs[i]]
+                    else:
+                        self._test_set += [inputs_and_outputs[i]]
+                else:
+                    self._test_set += [inputs_and_outputs[i]]
+
+        self.was_read = True
+
+        if self.stratify_by_pos:
+            # Make sure there is no overlap (or leakage) between the
+            # train/validate and test sets in the split; to do this, toss
+            # test data that is too "close" (according to the below function) to
+            # the train/validate data
+            train_and_validate = self._train_set + self._validate_set
+            test_set_nonoverlapping, _ = self.make_nonoverlapping_datasets(
+                    train_and_validate, self._test_set)
+            self._test_set = test_set_nonoverlapping
+
+            # The data points should still be shuffled; currently they
+            # are sorted within each data set by position in the target
+            random.shuffle(self._train_set)
+            random.shuffle(self._validate_set)
+            random.shuffle(self._test_set)
+
+    def pos_for_input(self, x):
+        """Return position (in nucleotide space) of the crRNA of a data point.
+
+        Args:
+            x: data point, namely input features
+
+        Returns:
+            x's position in nucleotide space
+        """
+        if not self.was_read:
+            raise Exception("read() must be called first")
+        x_key = np.array(x, dtype='f').tostring()
+        return self.input_feats_pos[x_key]
+
+    def make_nonoverlapping_datasets(self, data1, data2):
+        """Make sure there is no overlap (leakage) between two datasets.
+
+        Each data point takes up some region in nucleotide space. This
+        makes sure that the crRNAs from two datasets do not overlap in that
+        nucleotide space -- i.e., there is not leakage between the two.
+        To do this, this modifies data2 by removing points that overlap
+        in nucleotide space with points in data1.
+
+        Note that this permits sequence context of points in data2 to overlap
+        with crRNAs for points in data1, and vice-versa. Ensuring no overlap
+        of sequence context would probably require tossing too many data
+        points, if self.context_nt is large.
+
+        Args:
+            data1: list of tuples (X, y) where X is input data and y is outputs
+            data2: list of tuples (X, y) where X is input data and y is outputs
+
+        Returns:
+            tuple (a, b) where a is data2, after having removed any data
+            points in data2 that overlap with ones in data1, and b is
+            the indices in data2 that were kept
+        """
+        def range_for_input(x):
+            # Compute x's crRNA range in nucleotide space: (start, end) where
+            # start is inclusive and end is exclusive
+            start_pos_nt = self.pos_for_input(x)
+            length_in_nt = CRRNA_LEN
+            return (start_pos_nt, start_pos_nt + length_in_nt)
+
+        # The nucleotide space in this dataset is small (~1000 nt); just
+        # create a set of all nucleotides in data1 and check data2 against
+        # this
+        # Since many ranges will be the same (i.e., points are at the exact
+        # same position), first create a set of ranges and then create
+        # a set of nucleotide positions from those
+        data1_ranges = set()
+        for X, y in data1:
+            X_start, X_end = range_for_input(X)
+            data1_ranges.add((X_start, X_end))
+        data1_nt = set()
+        for start, end in data1_ranges:
+            for p in range(start, end):
+                data1_nt.add(p)
+
+        # Find which points in data2 to remove because they overlap a
+        # nucleotide in data1
+        # Make a copy of data2, only including points that do not overlap
+        data2_nonoverlapping = []
+        data2_idx_kept = []
+        for i, (X, y) in enumerate(data2):
+            X_start, X_end = range_for_input(X)
+            include = True
+            for p in range(X_start, X_end):
+                if p in data1_nt:
+                    # Remove this data point from data2
+                    include = False
+                    break
+            if include:
+                data2_nonoverlapping += [(X, y)]
+                data2_idx_kept += [i]
+
+        return (data2_nonoverlapping, data2_idx_kept)
+
+    def _data_set(self, data):
+        """Return data set.
+
+        Args:
+            data: one of self._train_set, self._validate_set, or
+                self._test_set
+
+        Returns:
+            (X, y) where X is input vectors and y is outputs
+        """
+        if not self.was_read:
+            raise Exception("read() must be called first")
+        inputs = []
+        outputs = []
+        for input_feats, output in data:
+            inputs += [input_feats]
+            outputs += [[output]]
+        return np.array(inputs, dtype='f'), np.array(outputs, dtype='f')
+
+    def train_set(self):
+        """Return training set.
+
+        Returns:
+            (X, y) where X is input vectors and y is outputs
+        """
+        return self._data_set(self._train_set)
+
+    def validate_set(self):
+        """Return validation set.
+
+        Returns:
+            (X, y) where X is input vectors and y is outputs
+        """
+        return self._data_set(self._validate_set)
+
+    def test_set(self):
+        """Return test set.
+
+        Returns:
+            (X, y) where X is input vectors and y is outputs
+        """
+        return self._data_set(self._test_set)
+
+
 _split_parser = None
 def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False):
     """Split the data using stratified folds, for k-fold cross validation.
