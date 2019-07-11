@@ -32,7 +32,7 @@ guide.target.neg <- subset(all.data, type == "neg")
 # Melt all data and the different subsets into a single
 # data frame
 # Leave out guide.target.neg, which has the same value (-4) for
-# out.k.median at every data point; when including this, the density plot
+# out.logk.median at every data point; when including this, the density plot
 # smooths by too much and doesn't show a strong peak at -4
 df <- melt(list(all=all.data,
                 guide.target.exp=guide.target.exp,
@@ -41,8 +41,8 @@ df <- melt(list(all=all.data,
 names(df)[names(df) == "L1"] <- "dataset"
 
 # Show a density plot for each dataset (all.data, guide.target.exp, etc.)
-# In particular, show density of the output variable (out.k.median)
-p <- ggplot(df, aes(x=out.k.median, fill=dataset, color=dataset))
+# In particular, show density of the output variable (out.logk.median)
+p <- ggplot(df, aes(x=out.logk.median, fill=dataset, color=dataset))
 # Use position='identity' to overlay plots
 p <- p + geom_density(alpha=0.1, position='identity')
 p + ggsave(OUT.DIST.PDF, width=8, height=8, useDingbats=FALSE)

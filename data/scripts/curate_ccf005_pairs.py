@@ -135,8 +135,8 @@ def reformat_row(row):
     row_new['crrna_block'] = block
     row_new['type'] = row['target_type']
     row_new['guide_target_hamming_dist'] = hd
-    row_new['out_k_median'] = float(row['median'])
-    row_new['out_k_stdev'] = float(row['std']) if row['count'] != '1' else 0
+    row_new['out_logk_median'] = float(row['median'])
+    row_new['out_logk_stdev'] = float(row['std']) if row['count'] != '1' else 0
     row_new['out_replicate_count'] = int(row['count'])
 
     return row_new
@@ -147,7 +147,7 @@ def write_output(rows):
     """
     cols = ['guide_seq', 'guide_pos_nt', 'target_at_guide', 'target_before',
             'target_after', 'crrna_block', 'type', 'guide_target_hamming_dist',
-            'out_k_median', 'out_k_stdev', 'out_replicate_count']
+            'out_logk_median', 'out_logk_stdev', 'out_replicate_count']
     with open(OUT, 'w') as fw:
         def write_list(l):
             fw.write('\t'.join([str(x) for x in l]) + '\n')
