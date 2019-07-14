@@ -778,7 +778,7 @@ class Cas13ActivityParser:
             # Compute x's crRNA range in nucleotide space: (start, end) where
             # start is inclusive and end is exclusive
             start_pos_nt = self.pos_for_input(x)
-            length_in_nt = CRRNA_LEN
+            length_in_nt = self.CRRNA_LEN
             return (start_pos_nt, start_pos_nt + length_in_nt)
 
         # The nucleotide space in this dataset is small (~1000 nt); just
