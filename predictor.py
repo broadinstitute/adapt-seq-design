@@ -8,6 +8,7 @@ import argparse
 import parse_data
 
 import numpy as np
+import scipy
 import tensorflow as tf
 
 
@@ -22,14 +23,21 @@ def parse_args():
     """
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--simulate-cas13',
-            action='store_true',
-            help=("Instead of Cas9 data, use Cas13 data simulated from the "
-                  "Cas9 data"))
-    parser.add_argument('--subset',
-          choices=['guide-mismatch-and-good-pam', 'guide-match'],
-          help=("Use a subset of the data. See parse_data module for "
-                "descriptions of the subsets. To use all data, do not set."))
+    parser.add_argument('--dataset',
+            choices=['cas9', 'simulated-cas13', 'cas13'],
+            required=True,
+            help=("Dataset to use. 'simulated-cas13' is simulated Cas13 data "
+                  "from the Cas9 data"))
+    parser.add_argument('--cas9-subset',
+            choices=['guide-mismatch-and-good-pam', 'guide-match'],
+            help=("Use a subset of the Cas9 data or simulated Cas13 data. See "
+                "parse_data module for descriptions of the subsets. To use all "
+                "data, do not set."))
+    parser.add_argument('--cas13-subset',
+            choices=['exp', 'pos', 'neg'],
+            help=("Use a subset of the Cas13 data. See parse_data module "
+                  "for descriptions of the subsets. To use all data, do not "
+                  "set."))
     parser.add_argument('--context-nt',
             type=int,
             default=20,
@@ -95,6 +103,9 @@ def parse_args():
             help=("Random seed"))
     parser.add_argument('--plot-roc-curve',
             help=("If set, path to PDF at which to save plot of ROC curve"))
+    parser.add_argument('--plot-predictions',
+            help=("If set, path to PDF at which to save plot of predictions "
+                  "vs. true values"))
     args = parser.parse_args()
 
     # Print the arguments provided
@@ -122,12 +133,20 @@ def read_data(args):
         train, validate, test data where each is a tuple (x, y)
     """
     # Read data
-    if args.simulate_cas13:
-        parser_class = parse_data.Cas13SimulatedData
-    else:
+    if args.dataset == 'cas9':
         parser_class = parse_data.Doench2016Cas9ActivityParser
+        subset = args.cas9_subset
+        regression = False
+    elif args.dataset == 'simulated-cas13':
+        parser_class = parse_data.Cas13SimulatedData
+        subset = args.cas9_subset
+        regression = False
+    elif args.dataset == 'cas13':
+        parser_class = parse_data.Cas13ActivityParser
+        subset = args.cas13_subset
+        regression = True
     data_parser = parser_class(
-            subset=args.subset,
+            subset=subset,
             context_nt=args.context_nt,
             split=(0.6, 0.2, 0.2),
             shuffle_seed=args.seed,
@@ -142,25 +161,29 @@ def read_data(args):
     data_sizes = 'DATA SIZES - Train: {}, Validate: {}, Test: {}'
     print(data_sizes.format(len(x_train), len(x_validate), len(x_test)))
 
-    # Print the fraction of the training data points that are in each class
-    classes = set(tuple(y) for y in y_train)
-    for c in classes:
-        num_c = sum(1 for y in y_train if tuple(y) == c)
-        frac_c = float(num_c) / len(y_train)
-        frac_c_msg = 'Fraction of train data in class {}: {}'
-        print(frac_c_msg.format(c, frac_c))
+    if regression:
+        # Print the mean outputs
+        print('Mean train output: {}'.format(np.mean(y_train)))
+    else:
+        # Print the fraction of the training data points that are in each class
+        classes = set(tuple(y) for y in y_train)
+        for c in classes:
+            num_c = sum(1 for y in y_train if tuple(y) == c)
+            frac_c = float(num_c) / len(y_train)
+            frac_c_msg = 'Fraction of train data in class {}: {}'
+            print(frac_c_msg.format(c, frac_c))
 
     return ((x_train, y_train),
             (x_validate, y_validate),
             (x_test, y_test))
 
 
-def make_dataset_and_batch(x, y, batch_size=64):
+def make_dataset_and_batch(x, y, batch_size=16):
     """Make tensorflow dataset and batch.
 
     Args:
         x: input data
-        y: labels
+        y: outputs (labels if classification)
         batch_size: batch size
 
     Returns:
@@ -172,13 +195,16 @@ def make_dataset_and_batch(x, y, batch_size=64):
 #####################################################################
 # Construct a convolutional network model
 #####################################################################
-class Cas9CNNWithParallelFilters(tf.keras.Model):
-    def __init__(self, params):
+class CasCNNWithParallelFilters(tf.keras.Model):
+    def __init__(self, params, regression):
         """
         Args:
             params: dict of hyperparameters
+            regression: if True, perform regression; if False, classification
         """
-        super(Cas9CNNWithParallelFilters, self).__init__()
+        super(CasCNNWithParallelFilters, self).__init__()
+
+        self.regression = regression
 
         # Construct groups, where each consists of a convolutional
         # layer with a particular width, a batch normalization layer, and
@@ -337,9 +363,13 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
 
         # Construct the final layer (fully connected)
         fc_final_dim = 1
+        if regression:
+            final_activation = 'linear'
+        else:
+            final_activation = 'sigmoid'
         self.fc_final = tf.keras.layers.Dense(
                 fc_final_dim,
-                activation='sigmoid',
+                activation=final_activation,
                 name='fc_final')
 
         # Regularize weights on each layer
@@ -401,17 +431,18 @@ class Cas9CNNWithParallelFilters(tf.keras.Model):
         return self.fc_final(x)
 
 
-def construct_model(params, shape):
+def construct_model(params, shape, regression=False):
     """Construct model.
 
     Args:
         params: dict of hyperparameters
         shape: shape of input data; only used for printing model summary
+        regression: if True, perform regression; if False, classification
 
     Returns:
-        Cas9CNNWithParallelFilters object
+        CasCNNWithParallelFilters object
     """
-    model = Cas9CNNWithParallelFilters(params)
+    model = CasCNNWithParallelFilters(params, regression)
 
     # Print a model summary
     model.build(shape)
@@ -423,18 +454,66 @@ def construct_model(params, shape):
 #####################################################################
 # Perform training and testing
 #####################################################################
-# Setup cross-entropy as the loss function
+# For classification, use cross-entropy as the loss function
 # This expects sigmoids (values in [0,1]) as the output; it will
 # transform back to logits (not bounded betweem 0 and 1) before
 # calling tf.nn.sigmoid_cross_entropy_with_logits
 bce_per_sample = tf.keras.losses.BinaryCrossentropy()
+
+# For regression, use mean squared error as the loss function
+mse_per_sample = tf.keras.losses.MeanSquaredError()
 
 # When outputting loss, take the mean across the samples from each batch
 train_loss_metric = tf.keras.metrics.Mean(name='train_loss')
 validate_loss_metric = tf.keras.metrics.Mean(name='validate_loss')
 test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
 
-# Also report on the accuracy and AUC for each epoch (each metric is updated
+# Define metrics for regression
+# tf.keras.metrics does not have Pearson correlation or Spearman's correlation,
+# so we have to define these; note that it becomes much easier to use these
+# outside of the tf.function functions rather than inside of them (like the
+# other metrics are used)
+def pearson_corr(y_true, y_pred):
+    r, _ = scipy.stats.pearsonr(y_true, y_pred)
+    return r
+def spearman_corr(y_true, y_pred):
+    rho, _ = scipy.stats.spearmanr(y_true, y_pred)
+    return rho
+class Correlation:
+    def __init__(self, corrtype, name='correlation'):
+        assert corrtype in ('pearson_corr', 'spearman_corr')
+        if corrtype == 'pearson_corr':
+            self.corr_fn = pearson_corr
+        if corrtype == 'spearman_corr':
+            self.corr_fn = spearman_corr
+        self.y_true = []
+        self.y_pred = []
+    def __call__(self, y_true, y_pred):
+        # Convert from tensors to numpy arrays, then to regular Python lists
+        y_true = list(tf.reshape(y_true, [-1]).numpy())
+        y_pred = list(tf.reshape(y_pred, [-1]).numpy())
+        self.y_true += y_true
+        self.y_pred += y_pred
+    def result(self):
+        return self.corr_fn(self.y_true, self.y_pred)
+    def reset_states(self):
+        self.y_true = []
+        self.y_pred = []
+train_mae_metric = tf.keras.metrics.MeanAbsoluteError(name='train_mae')
+train_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='train_mape')
+train_pearson_corr_metric = Correlation('pearson_corr', name='train_pearson_corr')
+train_spearman_corr_metric = Correlation('spearman_corr', name='train_spearman_corr')
+validate_mae_metric = tf.keras.metrics.MeanAbsoluteError(name='validate_mae')
+validate_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='validate_mape')
+validate_pearson_corr_metric = Correlation('pearson_corr', name='validate_pearson_corr')
+validate_spearman_corr_metric = Correlation('spearman_corr', name='validate_spearman_corr')
+test_mae_metric = tf.keras.metrics.MeanAbsoluteError(name='test_mae')
+test_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='test_mape')
+test_pearson_corr_metric = Correlation('pearson_corr', name='test_pearson_corr')
+test_spearman_corr_metric = Correlation('spearman_corr', name='test_spearman_corr')
+
+# Define metrics for classification
+# Report on the accuracy and AUC for each epoch (each metric is updated
 # with data from each batch, and computed using data from all batches)
 train_accuracy_metric = tf.keras.metrics.BinaryAccuracy(name='train_accuracy')
 train_auc_roc_metric = tf.keras.metrics.AUC(
@@ -453,10 +532,16 @@ test_auc_pr_metric = tf.keras.metrics.AUC(
         num_thresholds=200, curve='PR', name='test_auc_pr')
 
 # Define an optimizer
-optimizer = tf.keras.optimizers.Adam()
+# (Note: When doing regression, sometimes the output would always be the
+# same value regardless of input; decreasing the learning rate fixed this.)
+optimizer = tf.keras.optimizers.Adam(lr=0.00001)
 
 # Train the model using GradientTape; this is called on each batch
-def train_step(model, seqs, labels):
+def train_step(model, seqs, outputs):
+    if model.regression:
+        loss_fn = mse_per_sample
+    else:
+        loss_fn = bce_per_sample
     with tf.GradientTape() as tape:
         # Compute predictions and loss
         # Pass along `training=True` so that this can be given to
@@ -464,7 +549,7 @@ def train_step(model, seqs, labels):
         # it along would be to use `tf.keras.backend.set_learning_phase(1)`
         # to set the training phase
         predictions = model(seqs, training=True)
-        prediction_loss = bce_per_sample(labels, predictions)
+        prediction_loss = loss_fn(outputs, predictions)
         # Add the regularization losses
         regularization_loss = tf.add_n(model.losses)
         loss = prediction_loss + regularization_loss
@@ -474,36 +559,59 @@ def train_step(model, seqs, labels):
 
     # Record metrics
     train_loss_metric(loss)
-    train_accuracy_metric(labels, predictions)
-    train_auc_roc_metric(labels, predictions)
-    train_auc_pr_metric(labels, predictions)
+    if model.regression:
+        train_mae_metric(outputs, predictions)
+        train_mape_metric(outputs, predictions)
+    else:
+        train_accuracy_metric(outputs, predictions)
+        train_auc_roc_metric(outputs, predictions)
+        train_auc_pr_metric(outputs, predictions)
+
+    return outputs, predictions
 
 # Define functions for computing validation and test metrics; these are
 # called on each batch
-def validate_step(model, seqs, labels):
+def validate_step(model, seqs, outputs):
     # Compute predictions and loss
     predictions = model(seqs, training=False)
-    prediction_loss = bce_per_sample(labels, predictions)
+    if model.regression:
+        loss_fn = mse_per_sample
+    else:
+        loss_fn = bce_per_sample
+    prediction_loss = loss_fn(outputs, predictions)
     regularization_loss = tf.add_n(model.losses)
     loss = prediction_loss + regularization_loss
     # Record metrics
     validate_loss_metric(loss)
-    validate_accuracy_metric(labels, predictions)
-    validate_auc_roc_metric(labels, predictions)
-    validate_auc_pr_metric(labels, predictions)
+    if model.regression:
+        validate_mae_metric(outputs, predictions)
+        validate_mape_metric(outputs, predictions)
+    else:
+        validate_accuracy_metric(outputs, predictions)
+        validate_auc_roc_metric(outputs, predictions)
+        validate_auc_pr_metric(outputs, predictions)
+    return outputs, predictions
 
-def test_step(model, seqs, labels):
+def test_step(model, seqs, outputs):
     # Compute predictions and loss
     predictions = model(seqs, training=False)
-    prediction_loss = bce_per_sample(labels, predictions)
+    if model.regression:
+        loss_fn = mse_per_sample
+    else:
+        loss_fn = bce_per_sample
+    prediction_loss = loss_fn(outputs, predictions)
     regularization_loss = tf.add_n(model.losses)
     loss = prediction_loss + regularization_loss
     # Record metrics
     test_loss_metric(loss)
-    test_accuracy_metric(labels, predictions)
-    test_auc_roc_metric(labels, predictions)
-    test_auc_pr_metric(labels, predictions)
-    return predictions
+    if model.regression:
+        test_mae_metric(outputs, predictions)
+        test_mape_metric(outputs, predictions)
+    else:
+        test_accuracy_metric(outputs, predictions)
+        test_auc_roc_metric(outputs, predictions)
+        test_auc_pr_metric(outputs, predictions)
+    return outputs, predictions
 
 
 # Here we will effectively implement tf.keras.callbacks.EarlyStopping() to
@@ -519,13 +627,15 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
 
     Args:
         model: model object
-        x_train, y_train: training input and labels
-        x_validate, y_validate: validation input and labels
+        x_train, y_train: training input and outputs (labels, if
+            classification)
+        x_validate, y_validate: validation input and outputs (labels, if
+            classification)
         max_num_epochs: maximum number of epochs to train for
 
     Returns:
         dict with validation metrics at the end (keys are 'loss'
-        and 'auc-roc')
+        and ('auc-roc' or 'r-spearman'))
     """
     # model may be new, but calling train_step on a new model will yield
     # an error; tf.function was designed such that a new one is needed
@@ -543,37 +653,66 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
 
     for epoch in range(max_num_epochs):
         # Train on each batch
-        for seqs, labels in train_ds:
-            tf_train_step(model, seqs, labels)
+        for seqs, outputs in train_ds:
+            y_true, y_pred = tf_train_step(model, seqs, outputs)
+            if model.regression:
+                train_pearson_corr_metric(y_true, y_pred)
+                train_spearman_corr_metric(y_true, y_pred)
 
         # Validate on each batch
         # Note that we could run the validation data through the model all
         # at once (not batched), but batching may help with memory usage by
         # reducing how much data is run through the network at once
-        for seqs, labels in validate_ds:
-            tf_validate_step(model, seqs, labels)
+        for seqs, outputs in validate_ds:
+            y_true, y_pred =tf_validate_step(model, seqs, outputs)
+            if model.regression:
+                validate_pearson_corr_metric(y_true, y_pred)
+                validate_spearman_corr_metric(y_true, y_pred)
 
         # Log the metrics from this epoch
         print('EPOCH {}'.format(epoch+1))
         print('  Train metrics:')
         print('    Loss: {}'.format(train_loss_metric.result()))
-        print('    Accuracy: {}'.format(train_accuracy_metric.result()))
-        print('    AUC-ROC: {}'.format(train_auc_roc_metric.result()))
-        print('    AUC-PR: {}'.format(train_auc_pr_metric.result()))
+        if model.regression:
+            print('    MAE: {}'.format(train_mae_metric.result()))
+            print('    MAPE: {}'.format(train_mape_metric.result()))
+            print('    r-Pearson: {}'.format(train_pearson_corr_metric.result()))
+            print('    r-Spearman: {}'.format(train_spearman_corr_metric.result()))
+        else:
+            print('    Accuracy: {}'.format(train_accuracy_metric.result()))
+            print('    AUC-ROC: {}'.format(train_auc_roc_metric.result()))
+            print('    AUC-PR: {}'.format(train_auc_pr_metric.result()))
         print('  Validate metrics:')
         print('    Loss: {}'.format(validate_loss_metric.result()))
-        print('    Accuracy: {}'.format(validate_accuracy_metric.result()))
-        print('    AUC-ROC: {}'.format(validate_auc_roc_metric.result()))
-        print('    AUC-PR: {}'.format(validate_auc_pr_metric.result()))
+        if model.regression:
+            print('    MAE: {}'.format(validate_mae_metric.result()))
+            print('    MAPE: {}'.format(validate_mape_metric.result()))
+            print('    r-Pearson: {}'.format(validate_pearson_corr_metric.result()))
+            print('    r-Spearman: {}'.format(validate_spearman_corr_metric.result()))
+        else:
+            print('    Accuracy: {}'.format(validate_accuracy_metric.result()))
+            print('    AUC-ROC: {}'.format(validate_auc_roc_metric.result()))
+            print('    AUC-PR: {}'.format(validate_auc_pr_metric.result()))
 
         val_loss = validate_loss_metric.result()
-        val_auc_roc = validate_auc_roc_metric.result()
+        if model.regression:
+            val_spearman_corr = validate_spearman_corr_metric.result()
+        else:
+            val_auc_roc = validate_auc_roc_metric.result()
 
         # Reset metric states so they are not cumulative over epochs
         train_loss_metric.reset_states()
+        train_mae_metric.reset_states()
+        train_mape_metric.reset_states()
+        train_pearson_corr_metric.reset_states()
+        train_spearman_corr_metric.reset_states()
         train_accuracy_metric.reset_states()
         train_auc_roc_metric.reset_states()
         train_auc_pr_metric.reset_states()
+        validate_mae_metric.reset_states()
+        validate_mape_metric.reset_states()
+        validate_pearson_corr_metric.reset_states()
+        validate_spearman_corr_metric.reset_states()
         validate_loss_metric.reset_states()
         validate_accuracy_metric.reset_states()
         validate_auc_roc_metric.reset_states()
@@ -592,38 +731,57 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
             print('  Stopping at EPOCH {}'.format(epoch+1))
             break
 
-    val_metrics = {'loss': val_loss, 'auc-roc': val_auc_roc}
+    if model.regression:
+        val_metrics = {'loss': val_loss, 'r-spearman': val_spearman_corr}
+    else:
+        val_metrics = {'loss': val_loss, 'auc-roc': val_auc_roc}
     return val_metrics
 
 
-def test(model, x_test, y_test, plot_roc_curve=None):
+def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None):
     """Test a model.
 
     This prints metrics.
 
     Args:
         model: model object
-        x_test, y_test: testing input and labels
+        x_test, y_test: testing input and outputs (labels, if
+            classification)
         plot_roc_curve: if set, path to PDF at which to save plot of ROC curve
+        plot_predictions: if set, path to PDF at which to save plot of
+            predictions vs. true values
     """
     tf_test_step = tf.function(test_step)
 
     test_ds = make_dataset_and_batch(x_test, y_test)
 
-    all_labels = []
+    all_outputs = []
     all_predictions = []
-    for seqs, labels in test_ds:
-        predictions = tf_test_step(model, seqs, labels)
-        all_labels += list(tf.reshape(labels, [-1]))
-        all_predictions += list(tf.reshape(predictions, [-1]))
+    for seqs, outputs in test_ds:
+        y_true, y_pred = tf_test_step(model, seqs, outputs)
+        if model.regression:
+            test_pearson_corr_metric(y_true, y_pred)
+            test_spearman_corr_metric(y_true, y_pred)
+        all_outputs += list(tf.reshape(y_true, [-1]).numpy())
+        all_predictions += list(tf.reshape(y_pred, [-1]).numpy())
 
     print('TEST DONE')
     print('  Test metrics:')
     print('    Loss: {}'.format(test_loss_metric.result()))
-    print('    Accuracy: {}'.format(test_accuracy_metric.result()))
-    print('    AUC-ROC: {}'.format(test_auc_roc_metric.result()))
-    print('    AUC-PR: {}'.format(test_auc_pr_metric.result()))
+    if model.regression:
+        print('    MAE: {}'.format(test_mae_metric.result()))
+        print('    MAPE: {}'.format(test_mape_metric.result()))
+        print('    r-Pearson: {}'.format(test_pearson_corr_metric.result()))
+        print('    r-Spearman: {}'.format(test_spearman_corr_metric.result()))
+    else:
+        print('    Accuracy: {}'.format(test_accuracy_metric.result()))
+        print('    AUC-ROC: {}'.format(test_auc_roc_metric.result()))
+        print('    AUC-PR: {}'.format(test_auc_pr_metric.result()))
     test_loss_metric.reset_states()
+    test_mae_metric.reset_states()
+    test_mape_metric.reset_states()
+    test_pearson_corr_metric.reset_states()
+    test_spearman_corr_metric.reset_states()
     test_accuracy_metric.reset_states()
     test_auc_roc_metric.reset_states()
     test_auc_pr_metric.reset_states()
@@ -631,7 +789,7 @@ def test(model, x_test, y_test, plot_roc_curve=None):
     if plot_roc_curve:
         from sklearn.metrics import roc_curve
         import matplotlib.pyplot as plt
-        fpr, tpr, thresholds = roc_curve(all_labels, all_predictions)
+        fpr, tpr, thresholds = roc_curve(all_outputs, all_predictions)
         plt.figure(1)
         plt.plot(fpr, tpr)
         plt.xlabel('False positive rate')
@@ -639,6 +797,15 @@ def test(model, x_test, y_test, plot_roc_curve=None):
         plt.title('ROC curve')
         plt.show()
         plt.savefig(plot_roc_curve)
+    if plot_predictions:
+        import matplotlib.pyplot as plt
+        plt.figure(1)
+        plt.scatter(all_outputs, all_predictions)
+        plt.xlabel('True value')
+        plt.ylabel('Predicted value')
+        plt.title('True vs. predicted values')
+        plt.show()
+        plt.savefig(plot_predictions)
 
 
 def main():
@@ -647,16 +814,31 @@ def main():
     set_seed(args.seed)
     (x_train, y_train), (x_validate, y_validate), (x_test, y_test) = read_data(args)
 
+    # Determine, based on the dataset, whether to do regression or
+    # classification
+    if args.dataset == 'cas13':
+        regression = True
+    elif args.dataset == 'cas9' or args.dataset == 'simulated-cas13':
+        regression = False
+
+    if regression and args.plot_roc_curve:
+        raise Exception(("Can only use --plot-roc-curve when doing "
+            "classification"))
+    if not regression and args.plot_predictions:
+        raise Exception(("Can only use --plot-predictions when doing "
+            "regression"))
+
     # Construct model
     params = vars(args)
-    model = construct_model(params, x_train.shape)
+    model = construct_model(params, x_train.shape, regression)
 
     # Train the model, with validation
     train_and_validate(model, x_train, y_train, x_validate, y_validate,
             args.max_num_epochs)
 
     # Test the model
-    test(model, x_test, y_test, plot_roc_curve=args.plot_roc_curve)
+    test(model, x_test, y_test, plot_roc_curve=args.plot_roc_curve,
+            plot_predictions=args.plot_predictions)
 
 
 if __name__ == "__main__":

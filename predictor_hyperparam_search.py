@@ -24,6 +24,8 @@ def determine_val_loss(results):
     different possibilities.
 
     This currently uses 1-AUC, where AUC is from the ROC curve, as the loss.
+    If doing regression, this uses 1-RS where RS is the Spearman rank
+    correlation coefficient.
 
     Args:
         results: dict returned by predictor.train_and_validate()
@@ -31,11 +33,16 @@ def determine_val_loss(results):
     Returns:
         loss value
     """
-    val_auc_roc = results['auc-roc']
-    return 1.0 - val_auc_roc
+    assert not ('auc-roc' in results and 'r-spearman' in results)
+    if 'auc-roc' in results:
+        val_auc_roc = results['auc-roc']
+        return 1.0 - val_auc_roc
+    elif 'r-spearman' in results:
+        val_r_spearman = results['r-spearman']
+        return 1.0 - val_r_spearman
 
 
-def cross_validate(params, x, y, num_splits):
+def cross_validate(params, x, y, num_splits, regression):
     """Perform k-fold cross-validation.
 
     This uses parse_data.split() to split data, which uses stratified
@@ -44,7 +51,9 @@ def cross_validate(params, x, y, num_splits):
     Args:
         params: dict of hyperparameters
         x: input data
-        y: labels
+        y: output (labels, if classification)
+        num_splits: number of folds
+        regression: if True, perform regression; if False, classification
 
     Returns:
         list of validation losses, one for each fold
@@ -57,7 +66,7 @@ def cross_validate(params, x, y, num_splits):
         print('STARTING FOLD {} of {}'.format(i+1, num_splits))
 
         # Start a new model for this fold
-        model = predictor.construct_model(params, x_train.shape)
+        model = predictor.construct_model(params, x_train.shape, regression)
 
         # Train and validate this fold
         results = predictor.train_and_validate(model, x_train, y_train,
@@ -168,7 +177,8 @@ def hyperparam_random_dist(num_samples=250):
         yield params
 
 
-def search_for_hyperparams(x, y, search_type, num_splits=5, loss_out=None):
+def search_for_hyperparams(x, y, search_type, regression,
+        num_splits=5, loss_out=None):
     """Search for optimal hyperparameters.
 
     This uses hyperparam_grid() to find the grid of hyperparameters over
@@ -182,6 +192,7 @@ def search_for_hyperparams(x, y, search_type, num_splits=5, loss_out=None):
         x: input data
         y: labels
         search_type: 'grid' or 'random' search
+        regression: if True, perform regression; if False, classification
         num_splits: number of splits of the data to make (i.e., k in k-fold)
         loss_out: if set, an opened file object to write to write the mean
             validation loss for each choice of hyperparameters
@@ -201,7 +212,7 @@ def search_for_hyperparams(x, y, search_type, num_splits=5, loss_out=None):
     best_loss = None
     for params in params_iter:
         # Compute a mean validation loss at this choice of params
-        val_losses = cross_validate(params, x, y, num_splits)
+        val_losses = cross_validate(params, x, y, num_splits, regression)
         mean_loss = np.mean(val_losses)
         if best_params is None or mean_loss < best_loss:
             # This is the current best choice of params
@@ -213,7 +224,7 @@ def search_for_hyperparams(x, y, search_type, num_splits=5, loss_out=None):
     return (best_params, best_loss)
 
 
-def nested_cross_validate(x, y, search_type,
+def nested_cross_validate(x, y, search_type, regression,
         num_outer_splits=5, num_inner_splits=5, loss_out=None):
     """Perform nested cross-validation to validate model and search.
 
@@ -230,6 +241,7 @@ def nested_cross_validate(x, y, search_type,
         x: input data
         y: labels
         search_type: 'grid' or 'random' search
+        regression: if True, perform regression; if False, classification
         num_outer_splits: number of folds in the outer cross-validation
             procedure
         num_inner_splits: number of folds in the inner cross-validation
@@ -265,7 +277,8 @@ def nested_cross_validate(x, y, search_type,
         #   (2) test the model on the outer validation data (x_validate,
         #       y_validate), effectively treating this outer validation data
         #       as a test set for best_params
-        best_model = predictor.construct_model(best_params, x_train.shape)
+        best_model = predictor.construct_model(best_params, x_train.shape,
+                regression)
         results = predictor.train_and_validate(best_model, x_train, y_train,
                 x_validate, y_validate, best_params['max_num_epochs'])
         val_loss = determine_val_loss(results)
@@ -284,12 +297,20 @@ def main(args):
 
     # Read the data
     train_split_frac = 1.0 - args.test_split_frac
-    if args.simulate_cas13:
-        parser_class = parse_data.Cas13SimulatedData
-    else:
+    if args.dataset == 'cas9':
         parser_class = parse_data.Doench2016Cas9ActivityParser
+        subset = args.cas9_subset
+        regression = False
+    elif args.dataset == 'simulated-cas13':
+        parser_class = parse_data.Cas13SimulatedData
+        subset = args.cas9_subset
+        regression = False
+    elif args.dataset == 'cas13':
+        parser_class = parse_data.Cas13ActivityParser
+        subset = args.cas13_subset
+        regression = True
     data_parser = parser_class(
-            subset=args.subset,
+            subset=subset,
             context_nt=args.context_nt,
             split=(train_split_frac, 0, args.test_split_frac),
             shuffle_seed=args.seed,
@@ -304,13 +325,17 @@ def main(args):
     print('DATA SIZES - (Train + validation): {}, Test: {}'.format(
         len(x), len(x_test)))
 
-    # Print the fraction of the training data points that are in each class
-    classes = set(tuple(yv) for yv in y)
-    for c in classes:
-        num_c = sum(1 for yv in y if tuple(yv) == c)
-        frac_c = float(num_c) / len(y)
-        print('Fraction of train data in class {}: {}'.format(
-            c, frac_c))
+    if regression:
+        # Print the mean outputs
+        print('Mean train output: {}'.format(np.mean(y)))
+    else:
+        # Print the fraction of the training data points that are in each class
+        classes = set(tuple(yv) for yv in y)
+        for c in classes:
+            num_c = sum(1 for yv in y if tuple(yv) == c)
+            frac_c = float(num_c) / len(y)
+            print('Fraction of train data in class {}: {}'.format(
+                c, frac_c))
 
     if args.command == 'hyperparam-search':
         # Search for optimal hyperparameters
@@ -323,6 +348,7 @@ def main(args):
 
         params, loss = search_for_hyperparams(x, y,
                 args.search_type,
+                regression,
                 num_splits=args.hyperparam_search_cross_val_num_splits,
                 loss_out=params_mean_val_loss_out_tsv_f)
 
@@ -351,7 +377,7 @@ def main(args):
         # the validation data can also be used for early stopping during
         # training. Here, do the split on shuffled data.
         print('Testing model with optimal parameters')
-        model = predictor.construct_model(params, x.shape)
+        model = predictor.construct_model(params, x.shape, regression)
         split_iter = parse_data.split(x, y,
                 args.hyperparam_search_cross_val_num_splits,
                 stratify_by_pos=True)
@@ -379,6 +405,7 @@ def main(args):
 
         fold_results = nested_cross_validate(x, y,
                 args.search_type,
+                regression,
                 num_outer_splits=args.nested_cross_val_outer_num_splits,
                 num_inner_splits=args.hyperparam_search_cross_val_num_splits,
                 loss_out=params_mean_val_loss_out_tsv_f)
@@ -400,14 +427,21 @@ def main(args):
 if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--simulate-cas13',
-            action='store_true',
-            help=("Instead of Cas9 data, use Cas13 data simulated from the "
-                  "Cas9 data"))
-    parser.add_argument('--subset',
-          choices=['guide-mismatch-and-good-pam', 'guide-match'],
-          help=("Use a subset of the data. See parse_data module for "
-                "descriptions of the subsets. To use all data, do not set."))
+    parser.add_argument('--dataset',
+            choices=['cas9', 'simulated-cas13', 'cas13'],
+            required=True,
+            help=("Dataset to use. 'simulated-cas13' is simulated Cas13 data "
+                  "from the Cas9 data"))
+    parser.add_argument('--cas9-subset',
+            choices=['guide-mismatch-and-good-pam', 'guide-match'],
+            help=("Use a subset of the Cas9 data or simulated Cas13 data. See "
+                "parse_data module for descriptions of the subsets. To use all "
+                "data, do not set."))
+    parser.add_argument('--cas13-subset',
+            choices=['exp', 'pos', 'neg'],
+            help=("Use a subset of the Cas13 data. See parse_data module "
+                  "for descriptions of the subsets. To use all data, do not "
+                  "set."))
     parser.add_argument('--context-nt',
             type=int,
             default=20,
