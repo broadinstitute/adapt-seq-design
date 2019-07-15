@@ -130,7 +130,8 @@ def read_data(args):
         args: argument namespace
 
     Returns:
-        train, validate, test data where each is a tuple (x, y)
+        train, validate, test data where each is a tuple (x, y) and
+        positions of each element in the test data
     """
     # Read data
     if args.dataset == 'cas9':
@@ -148,7 +149,7 @@ def read_data(args):
     data_parser = parser_class(
             subset=subset,
             context_nt=args.context_nt,
-            split=(0.6, 0.2, 0.2),
+            split=(0.6, 0.1, 0.3),
             shuffle_seed=args.seed,
             stratify_by_pos=True)
     data_parser.read()
@@ -173,9 +174,12 @@ def read_data(args):
             frac_c_msg = 'Fraction of train data in class {}: {}'
             print(frac_c_msg.format(c, frac_c))
 
+    test_pos = [data_parser.pos_for_input(xi) for xi in x_test]
+
     return ((x_train, y_train),
             (x_validate, y_validate),
-            (x_test, y_test))
+            (x_test, y_test),
+            test_pos)
 
 
 def make_dataset_and_batch(x, y, batch_size=16):
@@ -738,7 +742,8 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     return val_metrics
 
 
-def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None):
+def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
+            x_test_pos=None):
     """Test a model.
 
     This prints metrics.
@@ -750,6 +755,8 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None):
         plot_roc_curve: if set, path to PDF at which to save plot of ROC curve
         plot_predictions: if set, path to PDF at which to save plot of
             predictions vs. true values
+        x_test_pos: if set, position of each element in x_test (used for
+            plotting with plot_predictions)
     """
     tf_test_step = tf.function(test_step)
 
@@ -800,7 +807,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None):
     if plot_predictions:
         import matplotlib.pyplot as plt
         plt.figure(1)
-        plt.scatter(all_outputs, all_predictions)
+        plt.scatter(all_outputs, all_predictions, c=x_test_pos)
         plt.xlabel('True value')
         plt.ylabel('Predicted value')
         plt.title('True vs. predicted values')
@@ -812,7 +819,7 @@ def main():
     # Read arguments and data
     args = parse_args()
     set_seed(args.seed)
-    (x_train, y_train), (x_validate, y_validate), (x_test, y_test) = read_data(args)
+    (x_train, y_train), (x_validate, y_validate), (x_test, y_test), x_test_pos = read_data(args)
 
     # Determine, based on the dataset, whether to do regression or
     # classification
@@ -838,7 +845,8 @@ def main():
 
     # Test the model
     test(model, x_test, y_test, plot_roc_curve=args.plot_roc_curve,
-            plot_predictions=args.plot_predictions)
+            plot_predictions=args.plot_predictions,
+            x_test_pos=x_test_pos)
 
 
 if __name__ == "__main__":
