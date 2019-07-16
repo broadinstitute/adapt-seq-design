@@ -308,13 +308,21 @@ def main(args):
     elif args.dataset == 'cas13':
         parser_class = parse_data.Cas13ActivityParser
         subset = args.cas13_subset
-        regression = True
+        if args.cas13_classify:
+            regression = False
+        else:
+            regression = True
     data_parser = parser_class(
             subset=subset,
             context_nt=args.context_nt,
             split=(train_split_frac, 0, args.test_split_frac),
             shuffle_seed=args.seed,
             stratify_by_pos=True)
+    if args.dataset == 'cas13':
+        classify_activity = args.cas13_classify
+        regress_only_on_active = args.cas13_regress_only_on_active
+        data_parser.set_activity_mode(
+                classify_activity, regress_only_on_active)
     data_parser.read()
     parse_data._split_parser = data_parser
 
@@ -442,6 +450,13 @@ if __name__ == "__main__":
             help=("Use a subset of the Cas13 data. See parse_data module "
                   "for descriptions of the subsets. To use all data, do not "
                   "set."))
+    parser.add_argument('--cas13-classify',
+            action='store_true',
+            help=("If set, only classify Cas13 activity into inactive/active"))
+    parser.add_argument('--cas13-regress-only-on-active',
+            action='store_true',
+            help=("If set, perform regression for Cas13 data only on the "
+                  "active class"))
     parser.add_argument('--context-nt',
             type=int,
             default=20,

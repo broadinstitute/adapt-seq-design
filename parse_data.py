@@ -519,6 +519,11 @@ class Cas13ActivityParser:
     # in nucleotide space
     CRRNA_LEN = 28
 
+    # A threshold is of 1.0 for negative/positive points is reasonable based
+    # on the distribution of the output variable (out_logk_median)
+    ACTIVITY_THRESHOLD = -2.5
+
+
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
             shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
         """
@@ -554,7 +559,25 @@ class Cas13ActivityParser:
 
         random.seed(shuffle_seed)
 
+        self.classify_activity = False
+        self.regress_only_on_active = False
+
         self.was_read = False
+
+    def set_activity_mode(self, classify_activity, regress_only_on_active):
+        """Set mode for which points to read regarding their activity.
+
+        Args:
+            classify_activity: if True, have the output variable be a label
+                (False/True) regarding activity of a guide/target pair
+            only_regress_on_active: if True, only output guide/target pairs
+                corresponding to high activity
+        """
+        if classify_activity and regress_only_on_active:
+            raise Exception(("Only one of 'classify_activity' and "
+                "'regress_only_on_active' can be set"))
+        self.classify_activity = classify_activity
+        self.regress_only_on_active = regress_only_on_active
 
     def _gen_input_and_output(self, row):
         """Generate input features and output for each row.
@@ -637,6 +660,12 @@ class Cas13ActivityParser:
 
         # Determine an output for this row
         activity = float(row['out_logk_median'])
+        if self.classify_activity:
+            # Make the output by a 1/0 label
+            if activity >= self.ACTIVITY_THRESHOLD:
+                activity = 1
+            else:
+                activity = 0
 
         return (input_feats, activity)
 
@@ -673,6 +702,11 @@ class Cas13ActivityParser:
         # Sort by position before splitting
         if self.stratify_by_pos:
             rows = sorted(rows, key=lambda x: float(x[header_idx['guide_pos_nt']]))
+
+        # Remove the inactive points
+        if self.regress_only_on_active:
+            rows = [row for row in rows if
+                    float(row[header_idx['out_logk_median']]) >= self.ACTIVITY_THRESHOLD]
 
         # Generate input and outputs for each row
         inputs_and_outputs = []

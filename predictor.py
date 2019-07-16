@@ -38,6 +38,13 @@ def parse_args():
             help=("Use a subset of the Cas13 data. See parse_data module "
                   "for descriptions of the subsets. To use all data, do not "
                   "set."))
+    parser.add_argument('--cas13-classify',
+            action='store_true',
+            help=("If set, only classify Cas13 activity into inactive/active"))
+    parser.add_argument('--cas13-regress-only-on-active',
+            action='store_true',
+            help=("If set, perform regression for Cas13 data only on the "
+                  "active class"))
     parser.add_argument('--context-nt',
             type=int,
             default=20,
@@ -145,13 +152,21 @@ def read_data(args):
     elif args.dataset == 'cas13':
         parser_class = parse_data.Cas13ActivityParser
         subset = args.cas13_subset
-        regression = True
+        if args.cas13_classify:
+            regression = False
+        else:
+            regression = True
     data_parser = parser_class(
             subset=subset,
             context_nt=args.context_nt,
             split=(0.6, 0.1, 0.3),
             shuffle_seed=args.seed,
             stratify_by_pos=True)
+    if args.dataset == 'cas13':
+        classify_activity = args.cas13_classify
+        regress_only_on_active = args.cas13_regress_only_on_active
+        data_parser.set_activity_mode(
+                classify_activity, regress_only_on_active)
     data_parser.read()
 
     x_train, y_train = data_parser.train_set()
@@ -535,13 +550,9 @@ test_auc_roc_metric = tf.keras.metrics.AUC(
 test_auc_pr_metric = tf.keras.metrics.AUC(
         num_thresholds=200, curve='PR', name='test_auc_pr')
 
-# Define an optimizer
-# (Note: When doing regression, sometimes the output would always be the
-# same value regardless of input; decreasing the learning rate fixed this.)
-optimizer = tf.keras.optimizers.Adam(lr=0.00001)
 
 # Train the model using GradientTape; this is called on each batch
-def train_step(model, seqs, outputs):
+def train_step(model, seqs, outputs, optimizer):
     if model.regression:
         loss_fn = mse_per_sample
     else:
@@ -641,6 +652,14 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         dict with validation metrics at the end (keys are 'loss'
         and ('auc-roc' or 'r-spearman'))
     """
+    # Define an optimizer
+    if model.regression:
+        # When doing regression, sometimes the output would always be the
+        # same value regardless of input; decreasing the learning rate fixed this
+        optimizer = tf.keras.optimizers.Adam(lr=0.00001)
+    else:
+        optimizer = tf.keras.optimizers.Adam()
+
     # model may be new, but calling train_step on a new model will yield
     # an error; tf.function was designed such that a new one is needed
     # whenever there is a new model
@@ -658,7 +677,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     for epoch in range(max_num_epochs):
         # Train on each batch
         for seqs, outputs in train_ds:
-            y_true, y_pred = tf_train_step(model, seqs, outputs)
+            y_true, y_pred = tf_train_step(model, seqs, outputs, optimizer)
             if model.regression:
                 train_pearson_corr_metric(y_true, y_pred)
                 train_spearman_corr_metric(y_true, y_pred)
@@ -668,7 +687,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         # at once (not batched), but batching may help with memory usage by
         # reducing how much data is run through the network at once
         for seqs, outputs in validate_ds:
-            y_true, y_pred =tf_validate_step(model, seqs, outputs)
+            y_true, y_pred = tf_validate_step(model, seqs, outputs)
             if model.regression:
                 validate_pearson_corr_metric(y_true, y_pred)
                 validate_spearman_corr_metric(y_true, y_pred)
@@ -824,7 +843,10 @@ def main():
     # Determine, based on the dataset, whether to do regression or
     # classification
     if args.dataset == 'cas13':
-        regression = True
+        if args.cas13_classify:
+            regression = False
+        else:
+            regression = True
     elif args.dataset == 'cas9' or args.dataset == 'simulated-cas13':
         regression = False
 
