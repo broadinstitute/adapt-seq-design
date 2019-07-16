@@ -562,6 +562,8 @@ class Cas13ActivityParser:
         self.classify_activity = False
         self.regress_only_on_active = False
 
+        self.make_feats_for_baseline = False
+
         self.was_read = False
 
     def set_activity_mode(self, classify_activity, regress_only_on_active):
@@ -579,6 +581,11 @@ class Cas13ActivityParser:
         self.classify_activity = classify_activity
         self.regress_only_on_active = regress_only_on_active
 
+    def set_make_feats_for_baseline(self):
+        """Generate input features specifically for the baseline model.
+        """
+        self.make_feats_for_baseline = True
+
     def _gen_input_and_output(self, row):
         """Generate input features and output for each row.
 
@@ -595,7 +602,11 @@ class Cas13ActivityParser:
         is the same for 'G' in the target and 'A' in the guide) which might
         be important here.
 
-        This assigns the output to be the value of 'out_logk_median'.
+        This assigns the output to be the value of 'out_logk_median' (or
+        1/0 if doing classification).
+
+        Note that when self.make_feats_for_baseline is set, the input feature
+        vector is simplified but contains the same information.
 
         Args:
             row: dict representing row of data (key'd by column
@@ -622,10 +633,15 @@ class Cas13ActivityParser:
         for pos in range(start, len(context_before)):
             # Make a one-hot encoding for this position of the target sequence
             v = onehot(context_before[pos])
-            # For the 4 bits of guide sequence, use [0,0,0,0] (there is
-            # no guide at this position)
-            v += [0, 0, 0, 0]
-            input_feats_context_before += [v]
+            if self.make_feats_for_baseline:
+                # For the baseline, only use a one-hot encoding of the
+                # target (and in a 1D array)
+                input_feats_context_before += v
+            else:
+                # For the 4 bits of guide sequence, use [0,0,0,0] (there is
+                # no guide at this position)
+                v += [0, 0, 0, 0]
+                input_feats_context_before += [v]
 
         # Create the input features for target and guide sequence
         input_feats_guide = []
@@ -637,9 +653,21 @@ class Cas13ActivityParser:
             # and the guide
             v_target = onehot(target[pos])
             v_guide = onehot(guide[pos])
-            # Combine them into an 8-bit vector
-            v = v_target + v_guide
-            input_feats_guide += [v]
+            if self.make_feats_for_baseline:
+                # For the baseline, use a one-hot encoding of the target
+                # (in a 1D array) and then use a one-hot encoding that gives
+                # whether there is a mismatch and, if so, what the guide
+                # base it
+                if target[pos] == guide[pos]:
+                    # No mismatch; use 0,0,0,0 for the guide
+                    input_feats_guide += v_target + [0, 0, 0, 0]
+                else:
+                    # Mismatch; have the guide indicate which base there is
+                    input_feats_guide += v_target + v_guide
+            else:
+                # Combine them into an 8-bit vector
+                v = v_target + v_guide
+                input_feats_guide += [v]
 
         # Create the input features for target sequence context on
         # the end after the guide
@@ -649,10 +677,15 @@ class Cas13ActivityParser:
         for pos in range(self.context_nt):
             # Make a one-hot encoding for this position of the target sequence
             v = onehot(context_after[pos])
-            # For the 4 bits of guide sequence, use [0,0,0,0] (there is
-            # no guide at this position)
-            v += [0, 0, 0, 0]
-            input_feats_context_after += [v]
+            if self.make_feats_for_baseline:
+                # For the baseline, only use a one-hot encoding of the
+                # target (and in a 1D array)
+                input_feats_context_after += v
+            else:
+                # For the 4 bits of guide sequence, use [0,0,0,0] (there is
+                # no guide at this position)
+                v += [0, 0, 0, 0]
+                input_feats_context_after += [v]
 
         # Combine the input features
         input_feats = input_feats_context_before + input_feats_guide + input_feats_context_after
