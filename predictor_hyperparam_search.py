@@ -502,5 +502,8 @@ if __name__ == "__main__":
             help=("Random seed"))
     args = parser.parse_args()
 
+    # Print the arguments provided
+    print(args)
+
     main(args)
 
