@@ -120,6 +120,8 @@ else:
         frac_c = float(num_c) / len(y_test)
         frac_c_msg = 'Fraction of test data in class {}: {}'
         print(frac_c_msg.format(c, frac_c))
+    if args.dataset == 'cas13' and args.cas13_classify:
+        print('Note that inactive=1 and active=0')
 
 
 # Construct a model for logistic regression; this can simply be a dense
@@ -169,7 +171,8 @@ model.fit(x_train, y_train, epochs=100, class_weight=class_weight,
 print('TEST:')
 model.evaluate(x_test, y_test)
 
-test_predictions = model.predict_on_batch(x_test)
-r_pearson = predictor.pearson_corr(y_test, test_predictions)
-r_spearman = predictor.spearman_corr(y_test, test_predictions)
-print('Pearson corr: {}, Spearman corr: {}'.format(r_pearson, r_spearman))
+if regression:
+    test_predictions = model.predict_on_batch(x_test)
+    r_pearson = predictor.pearson_corr(y_test, test_predictions)
+    r_spearman = predictor.spearman_corr(y_test, test_predictions)
+    print('Pearson corr: {}, Spearman corr: {}'.format(r_pearson, r_spearman))
