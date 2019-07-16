@@ -694,8 +694,10 @@ class Cas13ActivityParser:
         # Determine an output for this row
         activity = float(row['out_logk_median'])
         if self.classify_activity:
-            # Make the output by a 1/0 label
-            if activity >= self.ACTIVITY_THRESHOLD:
+            # Make the output be a 1/0 label
+            # Since most labels will be active, let's make active be 0 and
+            # inactive be 1 (i.e., predict the inactive ones)
+            if activity < self.ACTIVITY_THRESHOLD:
                 activity = 1
             else:
                 activity = 0

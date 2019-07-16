@@ -199,6 +199,8 @@ def read_data(args):
             frac_c = float(num_c) / len(y_test)
             frac_c_msg = 'Fraction of test data in class {}: {}'
             print(frac_c_msg.format(c, frac_c))
+        if args.dataset == 'cas13' and args.cas13_classify:
+            print('Note that inactive=1 and active=0')
 
     test_pos = [data_parser.pos_for_input(xi) for xi in x_test]
 
@@ -515,6 +517,7 @@ class Correlation:
             self.corr_fn = pearson_corr
         if corrtype == 'spearman_corr':
             self.corr_fn = spearman_corr
+        self.__name__ = name
         self.y_true = []
         self.y_pred = []
     def __call__(self, y_true, y_pred):
