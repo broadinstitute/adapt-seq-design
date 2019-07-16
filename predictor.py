@@ -9,6 +9,7 @@ import parse_data
 
 import numpy as np
 import scipy
+import sklearn
 import tensorflow as tf
 
 
@@ -188,6 +189,16 @@ def read_data(args):
             frac_c = float(num_c) / len(y_train)
             frac_c_msg = 'Fraction of train data in class {}: {}'
             print(frac_c_msg.format(c, frac_c))
+        for c in classes:
+            num_c = sum(1 for y in y_validate if tuple(y) == c)
+            frac_c = float(num_c) / len(y_validate)
+            frac_c_msg = 'Fraction of validate data in class {}: {}'
+            print(frac_c_msg.format(c, frac_c))
+        for c in classes:
+            num_c = sum(1 for y in y_test if tuple(y) == c)
+            frac_c = float(num_c) / len(y_test)
+            frac_c_msg = 'Fraction of test data in class {}: {}'
+            print(frac_c_msg.format(c, frac_c))
 
     test_pos = [data_parser.pos_for_input(xi) for xi in x_test]
 
@@ -197,7 +208,7 @@ def read_data(args):
             test_pos)
 
 
-def make_dataset_and_batch(x, y, batch_size=16):
+def make_dataset_and_batch(x, y, batch_size=32):
     """Make tensorflow dataset and batch.
 
     Args:
@@ -485,7 +496,6 @@ mse_per_sample = tf.keras.losses.MeanSquaredError()
 # When outputting loss, take the mean across the samples from each batch
 train_loss_metric = tf.keras.metrics.Mean(name='train_loss')
 validate_loss_metric = tf.keras.metrics.Mean(name='validate_loss')
-test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
 
 # Define metrics for regression
 # tf.keras.metrics does not have Pearson correlation or Spearman's correlation,
@@ -552,7 +562,7 @@ test_auc_pr_metric = tf.keras.metrics.AUC(
 
 
 # Train the model using GradientTape; this is called on each batch
-def train_step(model, seqs, outputs, optimizer):
+def train_step(model, seqs, outputs, optimizer, sample_weight=None):
     if model.regression:
         loss_fn = mse_per_sample
     else:
@@ -564,7 +574,8 @@ def train_step(model, seqs, outputs, optimizer):
         # it along would be to use `tf.keras.backend.set_learning_phase(1)`
         # to set the training phase
         predictions = model(seqs, training=True)
-        prediction_loss = loss_fn(outputs, predictions)
+        prediction_loss = loss_fn(outputs, predictions,
+                sample_weight=sample_weight)
         # Add the regularization losses
         regularization_loss = tf.add_n(model.losses)
         loss = prediction_loss + regularization_loss
@@ -586,14 +597,15 @@ def train_step(model, seqs, outputs, optimizer):
 
 # Define functions for computing validation and test metrics; these are
 # called on each batch
-def validate_step(model, seqs, outputs):
+def validate_step(model, seqs, outputs, sample_weight=None):
     # Compute predictions and loss
     predictions = model(seqs, training=False)
     if model.regression:
         loss_fn = mse_per_sample
     else:
         loss_fn = bce_per_sample
-    prediction_loss = loss_fn(outputs, predictions)
+    prediction_loss = loss_fn(outputs, predictions,
+                sample_weight=sample_weight)
     regularization_loss = tf.add_n(model.losses)
     loss = prediction_loss + regularization_loss
     # Record metrics
@@ -608,17 +620,9 @@ def validate_step(model, seqs, outputs):
     return outputs, predictions
 
 def test_step(model, seqs, outputs):
-    # Compute predictions and loss
+    # Compute predictions
     predictions = model(seqs, training=False)
-    if model.regression:
-        loss_fn = mse_per_sample
-    else:
-        loss_fn = bce_per_sample
-    prediction_loss = loss_fn(outputs, predictions)
-    regularization_loss = tf.add_n(model.losses)
-    loss = prediction_loss + regularization_loss
     # Record metrics
-    test_loss_metric(loss)
     if model.regression:
         test_mae_metric(outputs, predictions)
         test_mape_metric(outputs, predictions)
@@ -634,7 +638,7 @@ def test_step(model, seqs, outputs):
 # cannot use this callback out-of-the-box
 # Set the number of epochs that must pass with no improvement in the
 # validation loss, after which we will stop training
-STOPPING_PATIENCE = 5
+STOPPING_PATIENCE = 2
 
 def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         max_num_epochs):
@@ -671,13 +675,29 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     train_ds = make_dataset_and_batch(x_train, y_train)
     validate_ds = make_dataset_and_batch(x_validate, y_validate)
 
+    # For classification, determine class weights
+    if not model.regression:
+        y_train_labels = [y_train[i][0] for i in range(len(y_train))]
+        class_weights = sklearn.utils.class_weight.compute_class_weight(
+                'balanced', sorted(np.unique(y_train_labels)), y_train_labels)
+        class_weights = list(class_weights)
+        print('Using class weights: {}'.format(class_weights))
+    def determine_sample_weights(outputs):
+        if not model.regression:
+            labels = [int(o.numpy()[0]) for o in outputs]
+            return [class_weights[label] for label in labels]
+        else:
+            return None
+
     best_val_loss = None
     num_epochs_past_best_loss = 0
 
     for epoch in range(max_num_epochs):
         # Train on each batch
         for seqs, outputs in train_ds:
-            y_true, y_pred = tf_train_step(model, seqs, outputs, optimizer)
+            sample_weight = determine_sample_weights(outputs)
+            y_true, y_pred = tf_train_step(model, seqs, outputs, optimizer,
+                    sample_weight=sample_weight)
             if model.regression:
                 train_pearson_corr_metric(y_true, y_pred)
                 train_spearman_corr_metric(y_true, y_pred)
@@ -687,7 +707,9 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         # at once (not batched), but batching may help with memory usage by
         # reducing how much data is run through the network at once
         for seqs, outputs in validate_ds:
-            y_true, y_pred = tf_validate_step(model, seqs, outputs)
+            sample_weight = determine_sample_weights(outputs)
+            y_true, y_pred = tf_validate_step(model, seqs, outputs,
+                    sample_weight=sample_weight)
             if model.regression:
                 validate_pearson_corr_metric(y_true, y_pred)
                 validate_spearman_corr_metric(y_true, y_pred)
@@ -793,7 +815,6 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
 
     print('TEST DONE')
     print('  Test metrics:')
-    print('    Loss: {}'.format(test_loss_metric.result()))
     if model.regression:
         print('    MAE: {}'.format(test_mae_metric.result()))
         print('    MAPE: {}'.format(test_mape_metric.result()))
@@ -803,7 +824,6 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         print('    Accuracy: {}'.format(test_accuracy_metric.result()))
         print('    AUC-ROC: {}'.format(test_auc_roc_metric.result()))
         print('    AUC-PR: {}'.format(test_auc_pr_metric.result()))
-    test_loss_metric.reset_states()
     test_mae_metric.reset_states()
     test_mape_metric.reset_states()
     test_pearson_corr_metric.reset_states()
