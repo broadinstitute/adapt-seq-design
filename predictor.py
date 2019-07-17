@@ -157,10 +157,13 @@ def read_data(args):
             regression = False
         else:
             regression = True
+    test_frac = 0.3
+    train_frac = (1.0 - test_frac) * (2.0/3.0)
+    validation_frac = (1.0 - test_frac) * (1.0/3.0)
     data_parser = parser_class(
             subset=subset,
             context_nt=args.context_nt,
-            split=(0.6, 0.1, 0.3),
+            split=(train_frac, validation_frac, test_frac),
             shuffle_seed=args.seed,
             stratify_by_pos=True)
     if args.dataset == 'cas13':
