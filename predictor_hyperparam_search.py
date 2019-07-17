@@ -111,7 +111,7 @@ def hyperparam_grid():
         yield params
 
 
-def hyperparam_random_dist(num_samples=250):
+def hyperparam_random_dist(num_samples=100):
     """Construct distribution of hyperparameters.
 
     Args:
