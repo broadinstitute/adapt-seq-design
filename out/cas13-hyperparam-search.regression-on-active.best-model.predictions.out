@@ -1,0 +1,735 @@
+2019-07-17 19:08:45.295386: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcuda.so.1
+2019-07-17 19:08:45.327107: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.328045: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1640] Found device 0 with properties: 
+name: Tesla V100-SXM2-16GB major: 7 minor: 0 memoryClockRate(GHz): 1.53
+pciBusID: 0000:00:1e.0
+2019-07-17 19:08:45.328290: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcudart.so.10.0
+2019-07-17 19:08:45.329598: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcublas.so.10.0
+2019-07-17 19:08:45.330815: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcufft.so.10.0
+2019-07-17 19:08:45.331113: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcurand.so.10.0
+2019-07-17 19:08:45.332732: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcusolver.so.10.0
+2019-07-17 19:08:45.334004: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcusparse.so.10.0
+2019-07-17 19:08:45.337614: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcudnn.so.7
+2019-07-17 19:08:45.337725: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.338682: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.339571: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1763] Adding visible gpu devices: 0
+2019-07-17 19:08:45.339899: I tensorflow/core/platform/cpu_feature_guard.cc:142] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+2019-07-17 19:08:45.365126: I tensorflow/core/platform/profile_utils/cpu_utils.cc:94] CPU Frequency: 2300070000 Hz
+2019-07-17 19:08:45.365823: I tensorflow/compiler/xla/service/service.cc:168] XLA service 0x562bc9ebb4b0 executing computations on platform Host. Devices:
+2019-07-17 19:08:45.365846: I tensorflow/compiler/xla/service/service.cc:175]   StreamExecutor device (0): <undefined>, <undefined>
+2019-07-17 19:08:45.459640: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.460650: I tensorflow/compiler/xla/service/service.cc:168] XLA service 0x562bcbefb4a0 executing computations on platform CUDA. Devices:
+2019-07-17 19:08:45.460674: I tensorflow/compiler/xla/service/service.cc:175]   StreamExecutor device (0): Tesla V100-SXM2-16GB, Compute Capability 7.0
+2019-07-17 19:08:45.460856: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.461790: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1640] Found device 0 with properties: 
+name: Tesla V100-SXM2-16GB major: 7 minor: 0 memoryClockRate(GHz): 1.53
+pciBusID: 0000:00:1e.0
+2019-07-17 19:08:45.461833: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcudart.so.10.0
+2019-07-17 19:08:45.461850: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcublas.so.10.0
+2019-07-17 19:08:45.461864: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcufft.so.10.0
+2019-07-17 19:08:45.461889: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcurand.so.10.0
+2019-07-17 19:08:45.461904: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcusolver.so.10.0
+2019-07-17 19:08:45.461918: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcusparse.so.10.0
+2019-07-17 19:08:45.461933: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcudnn.so.7
+2019-07-17 19:08:45.461989: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.462904: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.463776: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1763] Adding visible gpu devices: 0
+2019-07-17 19:08:45.463812: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcudart.so.10.0
+2019-07-17 19:08:45.465278: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1181] Device interconnect StreamExecutor with strength 1 edge matrix:
+2019-07-17 19:08:45.465296: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1187]      0 
+2019-07-17 19:08:45.465303: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1200] 0:   N 
+2019-07-17 19:08:45.465411: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.466320: I tensorflow/stream_executor/cuda/cuda_gpu_executor.cc:1006] successful NUMA node read from SysFS had negative value (-1), but there must be at least one NUMA node, so returning NUMA node zero
+2019-07-17 19:08:45.467182: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1326] Created TensorFlow device (/job:localhost/replica:0/task:0/device:GPU:0 with 15024 MB memory) -> physical GPU (device: 0, name: Tesla V100-SXM2-16GB, pci bus id: 0000:00:1e.0, compute capability: 7.0)
+2019-07-17 19:08:52.031234: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcublas.so.10.0
+2019-07-17 19:08:52.321626: I tensorflow/stream_executor/platform/default/dso_loader.cc:42] Successfully opened dynamic library libcudnn.so.7
+Namespace(cas13_classify=False, cas13_regress_only_on_active=True, cas13_subset=None, cas9_subset=None, context_nt=5, conv_filter_width=[1, 2, 3], conv_num_filters=94, dataset='cas13', dropout_rate=0.28657706, fully_connected_dim=[47], l2_factor=1.16040499218e-05, locally_connected_dim=3, locally_connected_width=[1], max_num_epochs=1000, plot_predictions='out/cas13-hyperparam-search.regression-on-active.best-model.predictions.pdf', plot_roc_curve=None, pool_strategy='avg', pool_window_width=4, seed=37)
+DATA SIZES - Train: 1914, Validate: 1005, Test: 1083
+Mean train output: -1.0072884559631348
+Model: "cas_cnn_with_parallel_filters"
+_________________________________________________________________
+Layer (type)                 Output Shape              Param #   
+=================================================================
+group_w1_conv (Conv1D)       multiple                  846       
+_________________________________________________________________
+group_w2_conv (Conv1D)       multiple                  1598      
+_________________________________________________________________
+group_w3_conv (Conv1D)       multiple                  2350      
+_________________________________________________________________
+group_w1_batchnorm (BatchNor multiple                  376       
+_________________________________________________________________
+group_w2_batchnorm (BatchNor multiple                  376       
+_________________________________________________________________
+group_w3_batchnorm (BatchNor multiple                  376       
+_________________________________________________________________
+group_w1_avgpool (AveragePoo multiple                  0         
+_________________________________________________________________
+group_w2_avgpool (AveragePoo multiple                  0         
+_________________________________________________________________
+group_w3_avgpool (AveragePoo multiple                  0         
+_________________________________________________________________
+group_w1_lc_w1 (LocallyConne multiple                  5130      
+_________________________________________________________________
+group_w2_lc_w1 (LocallyConne multiple                  4845      
+_________________________________________________________________
+group_w3_lc_w1 (LocallyConne multiple                  4845      
+_________________________________________________________________
+merge_groups (Concatenate)   multiple                  0         
+_________________________________________________________________
+flatten (Flatten)            multiple                  0         
+_________________________________________________________________
+dropout_1 (Dropout)          multiple                  0         
+_________________________________________________________________
+fc_1 (Dense)                 multiple                  7379      
+_________________________________________________________________
+fc_final (Dense)             multiple                  48        
+=================================================================
+Total params: 28,169
+Trainable params: 27,605
+Non-trainable params: 564
+_________________________________________________________________
+None
+EPOCH 1
+  Train metrics:
+    Loss: 0.9035865664482117
+    MAE: 0.8881025314331055
+    MAPE: 86.72351837158203
+    r-Pearson: -0.07862520217895508
+    r-Spearman: -0.07322593910428794
+  Validate metrics:
+    Loss: 1.2735354900360107
+    MAE: 1.0989623069763184
+    MAPE: 98.40787506103516
+    r-Pearson: -0.02793782390654087
+    r-Spearman: -0.04172194271373215
+EPOCH 2
+  Train metrics:
+    Loss: 0.7406588792800903
+    MAE: 0.7894540429115295
+    MAPE: 76.0712890625
+    r-Pearson: -0.10341652482748032
+    r-Spearman: -0.08478195669269749
+  Validate metrics:
+    Loss: 1.2109686136245728
+    MAE: 1.070217490196228
+    MAPE: 95.72090911865234
+    r-Pearson: 0.027443598955869675
+    r-Spearman: 0.0343219307205104
+EPOCH 3
+  Train metrics:
+    Loss: 0.5848890542984009
+    MAE: 0.6873751878738403
+    MAPE: 65.62583923339844
+    r-Pearson: -0.04151904582977295
+    r-Spearman: -0.017922329879172624
+  Validate metrics:
+    Loss: 1.1286200284957886
+    MAE: 1.030719518661499
+    MAPE: 91.98307037353516
+    r-Pearson: 0.016769761219620705
+    r-Spearman: 0.0376168508871786
+EPOCH 4
+  Train metrics:
+    Loss: 0.4615837633609772
+    MAE: 0.59161376953125
+    MAPE: 55.6328125
+    r-Pearson: -0.07070326805114746
+    r-Spearman: -0.04569640916832712
+  Validate metrics:
+    Loss: 1.0228745937347412
+    MAE: 0.9773573875427246
+    MAPE: 86.91986083984375
+    r-Pearson: -0.0044001922942698
+    r-Spearman: 0.012717264441614458
+EPOCH 5
+  Train metrics:
+    Loss: 0.3555162847042084
+    MAE: 0.4994150698184967
+    MAPE: 46.15797424316406
+    r-Pearson: -0.03342423588037491
+    r-Spearman: -0.03456361788804593
+  Validate metrics:
+    Loss: 0.893884003162384
+    MAE: 0.9078159332275391
+    MAPE: 80.33910369873047
+    r-Pearson: -0.011811558157205582
+    r-Spearman: 0.0010680586289375058
+EPOCH 6
+  Train metrics:
+    Loss: 0.2784033715724945
+    MAE: 0.4307883083820343
+    MAPE: 40.05831527709961
+    r-Pearson: 0.03035970963537693
+    r-Spearman: 0.04265324128203346
+  Validate metrics:
+    Loss: 0.7499682307243347
+    MAE: 0.8229749202728271
+    MAPE: 72.32491302490234
+    r-Pearson: -0.010532853193581104
+    r-Spearman: 0.00041545957426203817
+EPOCH 7
+  Train metrics:
+    Loss: 0.21844582259655
+    MAE: 0.3659588694572449
+    MAPE: 33.7706298828125
+    r-Pearson: 0.0465010441839695
+    r-Spearman: 0.046112690550705014
+  Validate metrics:
+    Loss: 0.6062554121017456
+    MAE: 0.7279356718063354
+    MAPE: 63.365047454833984
+    r-Pearson: -0.004800023511052132
+    r-Spearman: 0.0037111776015357526
+EPOCH 8
+  Train metrics:
+    Loss: 0.1803436279296875
+    MAE: 0.32466578483581543
+    MAPE: 30.54923439025879
+    r-Pearson: 0.06661705672740936
+    r-Spearman: 0.07017153406114918
+  Validate metrics:
+    Loss: 0.479270875453949
+    MAE: 0.6316810846328735
+    MAPE: 54.326141357421875
+    r-Pearson: 0.002662590704858303
+    r-Spearman: 0.008722416738517825
+EPOCH 9
+  Train metrics:
+    Loss: 0.15019375085830688
+    MAE: 0.29406243562698364
+    MAPE: 28.03560447692871
+    r-Pearson: 0.11590152233839035
+    r-Spearman: 0.10757113668149978
+  Validate metrics:
+    Loss: 0.3797684907913208
+    MAE: 0.545691192150116
+    MAPE: 46.350440979003906
+    r-Pearson: 0.010041560977697372
+    r-Spearman: 0.013017479158087899
+EPOCH 10
+  Train metrics:
+    Loss: 0.13500264286994934
+    MAE: 0.27916160225868225
+    MAPE: 27.301862716674805
+    r-Pearson: 0.1483744978904724
+    r-Spearman: 0.1494969072596684
+  Validate metrics:
+    Loss: 0.3079058825969696
+    MAE: 0.4789240062236786
+    MAPE: 40.35440444946289
+    r-Pearson: 0.01612679287791252
+    r-Spearman: 0.015971570688939105
+EPOCH 11
+  Train metrics:
+    Loss: 0.1210094690322876
+    MAE: 0.26235559582710266
+    MAPE: 25.995418548583984
+    r-Pearson: 0.19760487973690033
+    r-Spearman: 0.1942982775698481
+  Validate metrics:
+    Loss: 0.26054731011390686
+    MAE: 0.432451456785202
+    MAPE: 36.31425476074219
+    r-Pearson: 0.022788802161812782
+    r-Spearman: 0.020995849275902288
+EPOCH 12
+  Train metrics:
+    Loss: 0.11139305680990219
+    MAE: 0.2528280019760132
+    MAPE: 25.314327239990234
+    r-Pearson: 0.21564903855323792
+    r-Spearman: 0.23118027956329681
+  Validate metrics:
+    Loss: 0.2298927903175354
+    MAE: 0.4017748534679413
+    MAPE: 33.75534439086914
+    r-Pearson: 0.027728529646992683
+    r-Spearman: 0.027034007243266062
+EPOCH 13
+  Train metrics:
+    Loss: 0.10551890730857849
+    MAE: 0.24829527735710144
+    MAPE: 25.311016082763672
+    r-Pearson: 0.2651260793209076
+    r-Spearman: 0.25435111824379636
+  Validate metrics:
+    Loss: 0.21106034517288208
+    MAE: 0.3823072016239166
+    MAPE: 32.171321868896484
+    r-Pearson: 0.032962217926979065
+    r-Spearman: 0.035128721566757566
+EPOCH 14
+  Train metrics:
+    Loss: 0.09848718345165253
+    MAE: 0.24159564077854156
+    MAPE: 24.923322677612305
+    r-Pearson: 0.30669015645980835
+    r-Spearman: 0.29431583969203134
+  Validate metrics:
+    Loss: 0.19812901318073273
+    MAE: 0.3685866892337799
+    MAPE: 31.08346939086914
+    r-Pearson: 0.03879162669181824
+    r-Spearman: 0.04477920312942933
+EPOCH 15
+  Train metrics:
+    Loss: 0.09573470056056976
+    MAE: 0.23594477772712708
+    MAPE: 24.171815872192383
+    r-Pearson: 0.3380185663700104
+    r-Spearman: 0.3328237158911654
+  Validate metrics:
+    Loss: 0.18873323500156403
+    MAE: 0.3584415316581726
+    MAPE: 30.28635025024414
+    r-Pearson: 0.044304318726062775
+    r-Spearman: 0.053687618223593345
+EPOCH 16
+  Train metrics:
+    Loss: 0.09298667311668396
+    MAE: 0.23313820362091064
+    MAPE: 24.153425216674805
+    r-Pearson: 0.3523995280265808
+    r-Spearman: 0.3349523150966893
+  Validate metrics:
+    Loss: 0.18242396414279938
+    MAE: 0.3515280783176422
+    MAPE: 29.750059127807617
+    r-Pearson: 0.05002842843532562
+    r-Spearman: 0.06290204071826593
+EPOCH 17
+  Train metrics:
+    Loss: 0.08962894976139069
+    MAE: 0.23083391785621643
+    MAPE: 23.885364532470703
+    r-Pearson: 0.38870179653167725
+    r-Spearman: 0.3724204410985389
+  Validate metrics:
+    Loss: 0.17731691896915436
+    MAE: 0.3457784354686737
+    MAPE: 29.297515869140625
+    r-Pearson: 0.054785724729299545
+    r-Spearman: 0.07104018251921237
+EPOCH 18
+  Train metrics:
+    Loss: 0.08573679625988007
+    MAE: 0.2231515496969223
+    MAPE: 23.202322006225586
+    r-Pearson: 0.4090304970741272
+    r-Spearman: 0.3916790008767626
+  Validate metrics:
+    Loss: 0.1721542477607727
+    MAE: 0.33984094858169556
+    MAPE: 28.8331356048584
+    r-Pearson: 0.05947480723261833
+    r-Spearman: 0.07804609102737503
+EPOCH 19
+  Train metrics:
+    Loss: 0.07999961078166962
+    MAE: 0.21698658168315887
+    MAPE: 22.73643684387207
+    r-Pearson: 0.4574880003929138
+    r-Spearman: 0.4332047451008377
+  Validate metrics:
+    Loss: 0.17009574174880981
+    MAE: 0.33732888102531433
+    MAPE: 28.63252067565918
+    r-Pearson: 0.06480512022972107
+    r-Spearman: 0.08560213901361638
+EPOCH 20
+  Train metrics:
+    Loss: 0.08145765215158463
+    MAE: 0.220309779047966
+    MAPE: 22.790849685668945
+    r-Pearson: 0.4543665945529938
+    r-Spearman: 0.43249812543267535
+  Validate metrics:
+    Loss: 0.166697695851326
+    MAE: 0.33325836062431335
+    MAPE: 28.305727005004883
+    r-Pearson: 0.07036593556404114
+    r-Spearman: 0.09319371152133844
+EPOCH 21
+  Train metrics:
+    Loss: 0.07948974519968033
+    MAE: 0.21900594234466553
+    MAPE: 22.934412002563477
+    r-Pearson: 0.4714721441268921
+    r-Spearman: 0.4374242889391005
+  Validate metrics:
+    Loss: 0.16560114920139313
+    MAE: 0.33188188076019287
+    MAPE: 28.193500518798828
+    r-Pearson: 0.07600414007902145
+    r-Spearman: 0.10124924255486152
+EPOCH 22
+  Train metrics:
+    Loss: 0.07491470873355865
+    MAE: 0.2098434418439865
+    MAPE: 21.810630798339844
+    r-Pearson: 0.5019058585166931
+    r-Spearman: 0.4677982331864159
+  Validate metrics:
+    Loss: 0.16372641921043396
+    MAE: 0.32955488562583923
+    MAPE: 28.002328872680664
+    r-Pearson: 0.08165916800498962
+    r-Spearman: 0.10869249870767608
+EPOCH 23
+  Train metrics:
+    Loss: 0.07482624799013138
+    MAE: 0.20907139778137207
+    MAPE: 21.675540924072266
+    r-Pearson: 0.5076587796211243
+    r-Spearman: 0.46606352833179077
+  Validate metrics:
+    Loss: 0.1608605682849884
+    MAE: 0.3260781764984131
+    MAPE: 27.7263240814209
+    r-Pearson: 0.08615277707576752
+    r-Spearman: 0.11403006692650629
+EPOCH 24
+  Train metrics:
+    Loss: 0.07411327958106995
+    MAE: 0.20691943168640137
+    MAPE: 21.594863891601562
+    r-Pearson: 0.5126367211341858
+    r-Spearman: 0.48566027693664143
+  Validate metrics:
+    Loss: 0.15869024395942688
+    MAE: 0.3233257532119751
+    MAPE: 27.507482528686523
+    r-Pearson: 0.09007435292005539
+    r-Spearman: 0.1190887233199473
+EPOCH 25
+  Train metrics:
+    Loss: 0.0710841491818428
+    MAE: 0.20480138063430786
+    MAPE: 21.143844604492188
+    r-Pearson: 0.5396055579185486
+    r-Spearman: 0.5115129930203625
+  Validate metrics:
+    Loss: 0.15613023936748505
+    MAE: 0.32023653388023376
+    MAPE: 27.26973533630371
+    r-Pearson: 0.09331981837749481
+    r-Spearman: 0.12229509215143024
+EPOCH 26
+  Train metrics:
+    Loss: 0.07078161835670471
+    MAE: 0.203293576836586
+    MAPE: 21.22077178955078
+    r-Pearson: 0.5466365814208984
+    r-Spearman: 0.5214512827428037
+  Validate metrics:
+    Loss: 0.1546712964773178
+    MAE: 0.3185376524925232
+    MAPE: 27.128185272216797
+    r-Pearson: 0.0980132520198822
+    r-Spearman: 0.12778946478055003
+EPOCH 27
+  Train metrics:
+    Loss: 0.06980787217617035
+    MAE: 0.20430999994277954
+    MAPE: 21.282251358032227
+    r-Pearson: 0.5501994490623474
+    r-Spearman: 0.5146939925740611
+  Validate metrics:
+    Loss: 0.15378670394420624
+    MAE: 0.3173893392086029
+    MAPE: 27.027502059936523
+    r-Pearson: 0.10230836272239685
+    r-Spearman: 0.13253394490681253
+EPOCH 28
+  Train metrics:
+    Loss: 0.07055796682834625
+    MAE: 0.20257572829723358
+    MAPE: 20.984256744384766
+    r-Pearson: 0.5511600971221924
+    r-Spearman: 0.5260673342640555
+  Validate metrics:
+    Loss: 0.15244288742542267
+    MAE: 0.31574100255966187
+    MAPE: 26.884281158447266
+    r-Pearson: 0.10710624605417252
+    r-Spearman: 0.13844667936311397
+EPOCH 29
+  Train metrics:
+    Loss: 0.06566126644611359
+    MAE: 0.1986074447631836
+    MAPE: 20.728416442871094
+    r-Pearson: 0.5830973386764526
+    r-Spearman: 0.5498863348150501
+  Validate metrics:
+    Loss: 0.150546595454216
+    MAE: 0.31345781683921814
+    MAPE: 26.703916549682617
+    r-Pearson: 0.11162401735782623
+    r-Spearman: 0.14263353680926874
+EPOCH 30
+  Train metrics:
+    Loss: 0.06610938906669617
+    MAE: 0.1981624811887741
+    MAPE: 20.663963317871094
+    r-Pearson: 0.5836207866668701
+    r-Spearman: 0.5430525894875738
+  Validate metrics:
+    Loss: 0.1503383368253708
+    MAE: 0.31315895915031433
+    MAPE: 26.66532325744629
+    r-Pearson: 0.11651775240898132
+    r-Spearman: 0.14806482829142642
+EPOCH 31
+  Train metrics:
+    Loss: 0.06341416388750076
+    MAE: 0.19339922070503235
+    MAPE: 20.055706024169922
+    r-Pearson: 0.6034414768218994
+    r-Spearman: 0.5702181440455213
+  Validate metrics:
+    Loss: 0.14847193658351898
+    MAE: 0.31096845865249634
+    MAPE: 26.489477157592773
+    r-Pearson: 0.11980211734771729
+    r-Spearman: 0.15247830972320026
+EPOCH 32
+  Train metrics:
+    Loss: 0.06412540376186371
+    MAE: 0.19491057097911835
+    MAPE: 20.31346321105957
+    r-Pearson: 0.5994067788124084
+    r-Spearman: 0.5622392475492983
+  Validate metrics:
+    Loss: 0.14607703685760498
+    MAE: 0.3080736994743347
+    MAPE: 26.259035110473633
+    r-Pearson: 0.12414027005434036
+    r-Spearman: 0.1578101443670161
+EPOCH 33
+  Train metrics:
+    Loss: 0.06311649829149246
+    MAE: 0.19097864627838135
+    MAPE: 20.0170841217041
+    r-Pearson: 0.6103171706199646
+    r-Spearman: 0.5727065171030071
+  Validate metrics:
+    Loss: 0.14451231062412262
+    MAE: 0.3061743974685669
+    MAPE: 26.105987548828125
+    r-Pearson: 0.12887535989284515
+    r-Spearman: 0.16293501468551982
+EPOCH 34
+  Train metrics:
+    Loss: 0.06413240730762482
+    MAE: 0.19376617670059204
+    MAPE: 20.230918884277344
+    r-Pearson: 0.6031627058982849
+    r-Spearman: 0.5648622080651237
+  Validate metrics:
+    Loss: 0.1431323140859604
+    MAE: 0.3044632375240326
+    MAPE: 25.963184356689453
+    r-Pearson: 0.13213399052619934
+    r-Spearman: 0.1668879186274805
+EPOCH 35
+  Train metrics:
+    Loss: 0.06401001662015915
+    MAE: 0.19208073616027832
+    MAPE: 20.083101272583008
+    r-Pearson: 0.6053324937820435
+    r-Spearman: 0.5627967943348846
+  Validate metrics:
+    Loss: 0.14198970794677734
+    MAE: 0.30309370160102844
+    MAPE: 25.850666046142578
+    r-Pearson: 0.13653303682804108
+    r-Spearman: 0.17207355301933228
+EPOCH 36
+  Train metrics:
+    Loss: 0.06312452256679535
+    MAE: 0.19124780595302582
+    MAPE: 19.814098358154297
+    r-Pearson: 0.6097193360328674
+    r-Spearman: 0.5796976179583669
+  Validate metrics:
+    Loss: 0.1432289034128189
+    MAE: 0.30455783009529114
+    MAPE: 25.946380615234375
+    r-Pearson: 0.13929139077663422
+    r-Spearman: 0.17555554721464978
+EPOCH 37
+  Train metrics:
+    Loss: 0.060127727687358856
+    MAE: 0.1868525594472885
+    MAPE: 19.35200309753418
+    r-Pearson: 0.6306722164154053
+    r-Spearman: 0.6020823687276291
+  Validate metrics:
+    Loss: 0.14085553586483002
+    MAE: 0.30168962478637695
+    MAPE: 25.71954345703125
+    r-Pearson: 0.14388185739517212
+    r-Spearman: 0.18083449110668368
+EPOCH 38
+  Train metrics:
+    Loss: 0.05962033197283745
+    MAE: 0.18647834658622742
+    MAPE: 19.35445785522461
+    r-Pearson: 0.6423970460891724
+    r-Spearman: 0.6086776795909472
+  Validate metrics:
+    Loss: 0.14043636620044708
+    MAE: 0.30118677020072937
+    MAPE: 25.671358108520508
+    r-Pearson: 0.14597167074680328
+    r-Spearman: 0.18247088888119392
+EPOCH 39
+  Train metrics:
+    Loss: 0.05602993443608284
+    MAE: 0.18228572607040405
+    MAPE: 18.97215461730957
+    r-Pearson: 0.657562255859375
+    r-Spearman: 0.620917565284452
+  Validate metrics:
+    Loss: 0.14038269221782684
+    MAE: 0.30116966366767883
+    MAPE: 25.66812515258789
+    r-Pearson: 0.1481630504131317
+    r-Spearman: 0.1846539859887742
+EPOCH 40
+  Train metrics:
+    Loss: 0.058876700699329376
+    MAE: 0.18439167737960815
+    MAPE: 19.370521545410156
+    r-Pearson: 0.6485320329666138
+    r-Spearman: 0.6100146958856076
+  Validate metrics:
+    Loss: 0.13931474089622498
+    MAE: 0.299856573343277
+    MAPE: 25.54997444152832
+    r-Pearson: 0.1535186916589737
+    r-Spearman: 0.19014605336608406
+EPOCH 41
+  Train metrics:
+    Loss: 0.057691171765327454
+    MAE: 0.18130260705947876
+    MAPE: 18.815404891967773
+    r-Pearson: 0.6558251976966858
+    r-Spearman: 0.6178075854325664
+  Validate metrics:
+    Loss: 0.13715222477912903
+    MAE: 0.29712530970573425
+    MAPE: 25.322309494018555
+    r-Pearson: 0.15616333484649658
+    r-Spearman: 0.19245824457501853
+EPOCH 42
+  Train metrics:
+    Loss: 0.059742994606494904
+    MAE: 0.18671898543834686
+    MAPE: 19.472206115722656
+    r-Pearson: 0.6378466486930847
+    r-Spearman: 0.6033939961673097
+  Validate metrics:
+    Loss: 0.13558760285377502
+    MAE: 0.29524219036102295
+    MAPE: 25.164121627807617
+    r-Pearson: 0.15974944829940796
+    r-Spearman: 0.19695220884946815
+EPOCH 43
+  Train metrics:
+    Loss: 0.05754665285348892
+    MAE: 0.18317696452140808
+    MAPE: 19.249427795410156
+    r-Pearson: 0.6486862897872925
+    r-Spearman: 0.6085983126782619
+  Validate metrics:
+    Loss: 0.13540445268154144
+    MAE: 0.29508304595947266
+    MAPE: 25.147367477416992
+    r-Pearson: 0.1645912230014801
+    r-Spearman: 0.2020308677355366
+EPOCH 44
+  Train metrics:
+    Loss: 0.0575290247797966
+    MAE: 0.18210536241531372
+    MAPE: 18.942665100097656
+    r-Pearson: 0.6517075300216675
+    r-Spearman: 0.6246741197774041
+  Validate metrics:
+    Loss: 0.1359306275844574
+    MAE: 0.2956254184246063
+    MAPE: 25.18394660949707
+    r-Pearson: 0.1647273153066635
+    r-Spearman: 0.20179263533462757
+EPOCH 45
+  Train metrics:
+    Loss: 0.060507163405418396
+    MAE: 0.1889515519142151
+    MAPE: 19.61664581298828
+    r-Pearson: 0.6347779035568237
+    r-Spearman: 0.5895233433300416
+  Validate metrics:
+    Loss: 0.13388203084468842
+    MAE: 0.29295483231544495
+    MAPE: 24.96213722229004
+    r-Pearson: 0.16953922808170319
+    r-Spearman: 0.20595237357434856
+EPOCH 46
+  Train metrics:
+    Loss: 0.056829117238521576
+    MAE: 0.18312066793441772
+    MAPE: 19.220748901367188
+    r-Pearson: 0.6526746153831482
+    r-Spearman: 0.6067408684976212
+  Validate metrics:
+    Loss: 0.13347557187080383
+    MAE: 0.2923746705055237
+    MAPE: 24.90943145751953
+    r-Pearson: 0.17397403717041016
+    r-Spearman: 0.21079340176644867
+EPOCH 47
+  Train metrics:
+    Loss: 0.05343841761350632
+    MAE: 0.17787665128707886
+    MAPE: 18.570234298706055
+    r-Pearson: 0.6787976622581482
+    r-Spearman: 0.6245148240191091
+  Validate metrics:
+    Loss: 0.13092967867851257
+    MAE: 0.2893284857273102
+    MAPE: 24.687400817871094
+    r-Pearson: 0.17615044116973877
+    r-Spearman: 0.21246254593846362
+EPOCH 48
+  Train metrics:
+    Loss: 0.05613696202635765
+    MAE: 0.18220992386341095
+    MAPE: 19.012067794799805
+    r-Pearson: 0.6640281677246094
+    r-Spearman: 0.6315669551619001
+  Validate metrics:
+    Loss: 0.13211143016815186
+    MAE: 0.2908500134944916
+    MAPE: 24.790618896484375
+    r-Pearson: 0.17736685276031494
+    r-Spearman: 0.2145559155525202
+EPOCH 49
+  Train metrics:
+    Loss: 0.058700140565633774
+    MAE: 0.18440498411655426
+    MAPE: 19.23611068725586
+    r-Pearson: 0.6496214270591736
+    r-Spearman: 0.6178954152969117
+  Validate metrics:
+    Loss: 0.1328539252281189
+    MAE: 0.2917945683002472
+    MAPE: 24.85690689086914
+    r-Pearson: 0.17860931158065796
+    r-Spearman: 0.21641435045263802
+  Stopping at EPOCH 49
+TEST DONE
+  Test metrics:
+    MAE: 0.2928096055984497
+    MAPE: 24.0206356048584
+    r-Pearson: 0.4059474468231201
+    r-Spearman: 0.3681040725837871
