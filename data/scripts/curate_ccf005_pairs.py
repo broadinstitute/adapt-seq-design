@@ -60,6 +60,28 @@ def filter_controls(rows):
     return rows_filtered
 
 
+def filter_inactive_guides(rows):
+    """Filter two inactive guides.
+
+    For some reason, two guides were completely inactive -- probably a
+    technical issue. Filter these out.
+
+    Returns:
+        rows with two inactive guides filtered
+    """
+    inactive_guides = ['block18_guide0', 'block7_guide13']
+
+    rows_filtered = []
+    for row in rows:
+        if row ['crRNA'] in inactive_guides:
+            # Verify this is inactive
+            assert float(row['median']) < -3.0
+        else:
+            # Keep it
+            rows_filtered += [row]
+    return rows_filtered
+
+
 def hamming_dist(a, b):
     """Compute Hamming distance between two strings.
     """
@@ -160,6 +182,7 @@ def write_output(rows):
 def main():
     rows = read_input()
     rows = filter_controls(rows)
+    rows = filter_inactive_guides(rows)
 
     new_rows = []
     for row in rows:
