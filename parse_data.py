@@ -531,10 +531,10 @@ class Cas13ActivityParser:
             subset: either 'exp' (use only experimental data points, which
                 generally have a mismatch between guide/target), 'pos' (use
                 only data points corresponding to a positive guide/target
-                match with no mismatches (i.e., the wildtype target)), or
+                match with no mismatches (i.e., the wildtype target)),
                 'neg' (use only data points corresponding to negative guide/
-                target (i.e., high divergence between the two)); if 'None',
-                use all data points
+                target (i.e., high divergence between the two)), or
+                'exp-and-pos;; if 'None', use all data points
             context_nt: nt of target sequence context to include alongside
                 each guide
             split: (train, validation, test) split; must sum to 1.0
@@ -544,7 +544,7 @@ class Cas13ActivityParser:
             stratify_by_pos: if set, consider the position along the target
                 and split based on this
         """
-        assert subset in (None, 'exp', 'pos', 'neg')
+        assert subset in (None, 'exp', 'pos', 'neg', 'exp-and-pos')
         self.subset = subset
 
         self.context_nt = context_nt
@@ -560,25 +560,31 @@ class Cas13ActivityParser:
         random.seed(shuffle_seed)
 
         self.classify_activity = False
+        self.regress_on_all = False
         self.regress_only_on_active = False
 
         self.make_feats_for_baseline = False
 
         self.was_read = False
 
-    def set_activity_mode(self, classify_activity, regress_only_on_active):
+    def set_activity_mode(self, classify_activity, regress_on_all,
+            regress_only_on_active):
         """Set mode for which points to read regarding their activity.
 
         Args:
             classify_activity: if True, have the output variable be a label
                 (False/True) regarding activity of a guide/target pair
-            only_regress_on_active: if True, only output guide/target pairs
+            regress_on_all: if True, output all guide/target pairs
+            regress_only_on_active: if True, only output guide/target pairs
                 corresponding to high activity
         """
-        if classify_activity and regress_only_on_active:
-            raise Exception(("Only one of 'classify_activity' and "
-                "'regress_only_on_active' can be set"))
+        num_set = (int(classify_activity) + int(regress_on_all) +
+                int(regress_only_on_active))
+        if num_set != 1:
+            raise Exception(("Exactly one of 'classify_activity' and "
+                "'regress_on_all' and 'regress_only_on_active' can be set"))
         self.classify_activity = classify_activity
+        self.regress_on_all = regress_on_all
         self.regress_only_on_active = regress_only_on_active
 
     def set_make_feats_for_baseline(self):
@@ -729,6 +735,10 @@ class Cas13ActivityParser:
         if self.subset == 'neg':
             # Only keep rows where type is 'neg'
             rows = [row for row in rows if row[header_idx['type']] == 'neg']
+        if self.subset == 'exp-and-pos':
+            # Only keep rows where type is 'exp' or 'pos'
+            rows = [row for row in rows if row[header_idx['type']] == 'exp' or
+                    row[header_idx['type']] == 'pos']
 
         # Shuffle the rows before splitting
         if self.stratify_randomly:

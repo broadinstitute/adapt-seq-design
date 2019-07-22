@@ -35,13 +35,17 @@ def parse_args():
                 "parse_data module for descriptions of the subsets. To use all "
                 "data, do not set."))
     parser.add_argument('--cas13-subset',
-            choices=['exp', 'pos', 'neg'],
+            choices=['exp', 'pos', 'neg', 'exp-and-pos'],
             help=("Use a subset of the Cas13 data. See parse_data module "
                   "for descriptions of the subsets. To use all data, do not "
                   "set."))
     parser.add_argument('--cas13-classify',
             action='store_true',
             help=("If set, only classify Cas13 activity into inactive/active"))
+    parser.add_argument('--cas13-regress-on-all',
+            action='store_true',
+            help=("If set, perform regression for Cas13 data on all data "
+                  "(this can be reduced using --cas13-subset)"))
     parser.add_argument('--cas13-regress-only-on-active',
             action='store_true',
             help=("If set, perform regression for Cas13 data only on the "
@@ -168,9 +172,10 @@ def read_data(args):
             stratify_by_pos=True)
     if args.dataset == 'cas13':
         classify_activity = args.cas13_classify
+        regress_on_all = args.cas13_regress_on_all
         regress_only_on_active = args.cas13_regress_only_on_active
         data_parser.set_activity_mode(
-                classify_activity, regress_only_on_active)
+                classify_activity, regress_on_all, regress_only_on_active)
     data_parser.read()
 
     x_train, y_train = data_parser.train_set()
