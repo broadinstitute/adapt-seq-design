@@ -127,12 +127,13 @@ def parse_args():
 
 
 def set_seed(seed):
-    """Set tensorflow seed.
+    """Set tensorflow and numpy seed.
 
     Args:
         seed: random seed
     """
     tf.random.set_seed(seed)
+    np.random.seed(seed)
 
 
 def read_data(args):
