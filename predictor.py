@@ -1,6 +1,5 @@
-"""Simple convnet (CNN) for a guide sequence.
-
-This is implemented for classifying Cas9 activity.
+"""CNN for predicting activity of a guide sequence: classification and
+regression.
 """
 
 import argparse
