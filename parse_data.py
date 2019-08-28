@@ -663,7 +663,7 @@ class Cas13ActivityParser:
                 # For the baseline, use a one-hot encoding of the target
                 # (in a 1D array) and then use a one-hot encoding that gives
                 # whether there is a mismatch and, if so, what the guide
-                # base it
+                # base is
                 if target[pos] == guide[pos]:
                     # No mismatch; use 0,0,0,0 for the guide
                     input_feats_guide += v_target + [0, 0, 0, 0]
@@ -695,6 +695,22 @@ class Cas13ActivityParser:
 
         # Combine the input features
         input_feats = input_feats_context_before + input_feats_guide + input_feats_context_after
+        if self.make_feats_for_baseline:
+            # Have the feature vector for the baseline include additional
+            # features: position-independent nucleotide frequency, dinucleotide
+            # frequency, and GC content (all in the guide)
+            bases = ('A', 'C', 'G', 'T')
+            for b in bases:
+                # Add a feature giving nucleotide frequency (count) of b in
+                # the guide
+                input_feats += [guide.count(b)]
+            for b1 in bases:
+                for b2 in bases:
+                    # Add a feature giving dinucleotide frequency (count) of
+                    # b1+b2 in the guide
+                    input_feats += [guide.count(b1 + b2)]
+            # Add a feature giving GC count in the guide
+            input_feats += [guide.count('G') + guide.count('C')]
         input_feats = np.array(input_feats)
 
         # Determine an output for this row
@@ -939,7 +955,8 @@ class Cas13ActivityParser:
 
 
 _split_parser = None
-def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False):
+def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
+        yield_indices=False):
     """Split the data using stratified folds, for k-fold cross validation.
 
     Args:
@@ -950,13 +967,19 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False):
             on the distribution of output variables (here, classes) to ensure they
             are roughly the same across the different folds
         stratify_by_pos: if True, determine the different folds based on
-            the protein position of each data point (ensuring that the
-            validate set is a contiguous region of the protein); this is
+            the position of each data point (ensuring that the
+            validate set is a contiguous region of the target molecule; this is
             similar to leave-one-gene-out cross-validation
+        yield_indices: if True, return indices rather than data points (see
+            'Iterates:' below for detail)
 
     Iterates:
-        (x_train_i, y_train_i, x_validate_i, y_validate_i) where each is
-        for a fold of the data
+        if yield_indices is False:
+            (x_train_i, y_train_i, x_validate_i, y_validate_i) where each is
+            for a fold of the data; these are actual data points from x, y
+        if yield_indices is True:
+            (train_i, validate_i) where each is for a fold of the data;
+            these are indices referring to data in x, y
     """
     assert len(x) == len(y)
 
@@ -1010,6 +1033,9 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False):
                 yield train_index, test_index
 
     for train_index, test_index in split_iter():
-        x_train_i, y_train_i = x[train_index], y[train_index]
-        x_validate_i, y_validate_i = x[test_index], y[test_index]
-        yield (x_train_i, y_train_i, x_validate_i, y_validate_i)
+        if yield_indices:
+            yield (train_index, test_index)
+        else:
+            x_train_i, y_train_i = x[train_index], y[train_index]
+            x_validate_i, y_validate_i = x[test_index], y[test_index]
+            yield (x_train_i, y_train_i, x_validate_i, y_validate_i)

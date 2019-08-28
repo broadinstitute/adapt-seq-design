@@ -135,16 +135,21 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-def read_data(args):
+def read_data(args, make_feats_for_baseline=False):
     """Read input/output data.
 
     Args:
         args: argument namespace
+        make_feats_for_baseline: if True, make feature vector for baseline
+            models (only applies to Cas13)
 
     Returns:
         train, validate, test data where each is a tuple (x, y) and
         positions of each element in the test data
     """
+    if make_feats_for_baseline and args.dataset != 'cas13':
+        raise Exception("make_feats_for_baseline only works with Cas13 data")
+
     # Read data
     if args.dataset == 'cas9':
         parser_class = parse_data.Doench2016Cas9ActivityParser
@@ -176,7 +181,11 @@ def read_data(args):
         regress_only_on_active = args.cas13_regress_only_on_active
         data_parser.set_activity_mode(
                 classify_activity, regress_on_all, regress_only_on_active)
+        if make_feats_for_baseline:
+            data_parser.set_make_feats_for_baseline()
     data_parser.read()
+
+    parse_data._split_parser = data_parser
 
     x_train, y_train = data_parser.train_set()
     x_validate, y_validate = data_parser.validate_set()
