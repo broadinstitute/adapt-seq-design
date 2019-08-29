@@ -509,7 +509,7 @@ if __name__ == "__main__":
                   "model and hyperparameter search"))
     parser.add_argument('--hyperparam-search-cross-val-num-splits',
             type=int,
-            default=3,
+            default=5,
             help=("Number of data splits to use (i.e., k in k-fold) for "
                   "hyperparameter search"))
     parser.add_argument('--nested-cross-val-outer-num-splits',
