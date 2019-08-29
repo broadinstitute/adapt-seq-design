@@ -860,6 +860,10 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
             predictions vs. true values
         x_test_pos: if set, position of each element in x_test (used for
             plotting with plot_predictions)
+
+    Returns:
+        dict with test metrics at the end (keys are 'loss'
+        and ('auc-roc' or 'r-spearman'))
     """
     tf_test_step = tf.function(test_step)
 
@@ -889,6 +893,13 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         print('    Accuracy: {}'.format(test_accuracy_metric.result()))
         print('    AUC-ROC: {}'.format(test_auc_roc_metric.result()))
         print('    AUC-PR: {}'.format(test_auc_pr_metric.result()))
+
+    test_loss = test_mse_metric.result()
+    if model.regression:
+        test_spearman_corr = test_spearman_corr_metric.result()
+    else:
+        test_auc_roc = test_auc_roc_metric.result()
+
     test_mse_metric.reset_states()
     test_mae_metric.reset_states()
     test_mape_metric.reset_states()
@@ -919,6 +930,12 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         plt.title('True vs. predicted values')
         plt.show()
         plt.savefig(plot_predictions)
+
+    if model.regression:
+        test_metrics = {'loss': test_loss, 'r-spearman': test_spearman_corr}
+    else:
+        test_metrics = {'loss': test_loss, 'auc-roc': test_auc_roc}
+    return test_metrics
 
 
 def main():

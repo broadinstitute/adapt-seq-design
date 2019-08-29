@@ -245,7 +245,7 @@ class Doench2016Cas9ActivityParser:
             self._test_set = test_set_nonoverlapping
 
             # The data points should still be shuffled; currently they
-            # are sorted within each data set by protein position
+            # are sorted within each data set by position
             random.shuffle(self._train_set)
             random.shuffle(self._validate_set)
             random.shuffle(self._test_set)

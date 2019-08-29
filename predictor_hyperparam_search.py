@@ -71,12 +71,36 @@ def cross_validate(params, x, y, num_splits, regression):
     for x_train, y_train, x_validate, y_validate in split_iter:
         print('STARTING FOLD {} of {}'.format(i+1, num_splits))
 
-        # Start a new model for this fold
-        model = predictor.construct_model(params, x_train.shape, regression)
+        # Use x_validate, y_validate for validation of the model on
+        # this fold
 
-        # Train and validate this fold
-        results = predictor.train_and_validate(model, x_train, y_train,
-                x_validate, y_validate, params['max_num_epochs'])
+        # Split the training data (x_train, y_train) *again* to get a
+        # separate validation set (x_validate_for_es, y_validate_for_es) to
+        # pass to predictor.train_and_validate(), which it will use for early
+        # stopping
+        # This way, we do not use the same validation set both for early
+        # stopping and for measuring the performance of the model (otherwise
+        # our 'training' of the model, which includes deciding when to
+        # stop, would have seen and factored in the data used for evaluating
+        # it on the fold)
+        # Only use one of the splits, with 3/4 being used to train the model
+        # and 1/4 for early stopping
+        train_split_iter = parse_data.split(x_train, y_train, num_splits=4,
+                stratify_by_pos=True)
+        x_train_for_train, y_train_for_train, x_validate_for_es, y_validate_for_es = next(train_split_iter)
+
+        # Start a new model for this fold
+        model = predictor.construct_model(params, x_train_for_train.shape,
+                regression)
+
+        # Train this fold
+        predictor.train_and_validate(model, x_train_for_train,
+                y_train_for_train, x_validate_for_es, y_validate_for_es,
+                params['max_num_epochs'])
+
+        # Run predictor.test() on the validation data for this fold, to
+        # get its validation results
+        results = predictor.test(model, x_validate, y_validate)
         val_loss = determine_val_loss(results)
         val_losses += [val_loss]
 
@@ -117,7 +141,7 @@ def hyperparam_grid():
         yield params
 
 
-def hyperparam_random_dist(num_samples=100):
+def hyperparam_random_dist(num_samples=1000):
     """Construct distribution of hyperparameters.
 
     Args:
@@ -386,11 +410,8 @@ def main(args):
         # above search uses early stopping, and the number of epochs that
         # goes for may be less than the number needed on a larger training
         # input size).
-        # So we will split x,y into train/validate sets according to the same
-        # size used for the search (i.e., according to the number of splits),
-        # so we train on the same size used for the hyperparameter search and
-        # the validation data can also be used for early stopping during
-        # training. Here, do the split on shuffled data.
+        # So we will split x,y into train/validate sets and the validation data
+        # can also be used for early stopping during training.
         print('Testing model with optimal parameters')
         model = predictor.construct_model(params, x.shape, regression)
         split_iter = parse_data.split(x, y,
