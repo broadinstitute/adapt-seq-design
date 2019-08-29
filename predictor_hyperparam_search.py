@@ -17,29 +17,35 @@ import numpy as np
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-def determine_val_loss(results):
+def determine_val_loss(results, use_eval_metric=False):
     """Determine loss on validation data.
 
     The value is computed by predictor during validation; this selects it from
     different possibilities.
 
-    This currently uses 1-AUC, where AUC is from the ROC curve, as the loss.
-    If doing regression, this uses 1-RS where RS is the Spearman rank
-    correlation coefficient.
-
     Args:
         results: dict returned by predictor.train_and_validate()
+        use_eval_metric: if True, this uses: for classification, 1-AUC, where
+            AUC is from the ROC curve; for regression, 1-RS, where RS is the
+            Spearman rank correlation coefficient. If False, this uses
+            the value of the loss function used during training
 
     Returns:
         loss value
     """
-    assert not ('auc-roc' in results and 'r-spearman' in results)
-    if 'auc-roc' in results:
-        val_auc_roc = results['auc-roc']
-        return 1.0 - val_auc_roc
-    elif 'r-spearman' in results:
-        val_r_spearman = results['r-spearman']
-        return 1.0 - val_r_spearman
+    if use_eval_metric:
+        assert not ('auc-roc' in results and 'r-spearman' in results)
+        if 'auc-roc' in results:
+            # 1-AUC
+            val_auc_roc = results['auc-roc']
+            return 1.0 - val_auc_roc
+        elif 'r-spearman' in results:
+            # 1-RS
+            val_r_spearman = results['r-spearman']
+            return 1.0 - val_r_spearman
+    else:
+        # loss used for training
+        return results['loss']
 
 
 def cross_validate(params, x, y, num_splits, regression):
