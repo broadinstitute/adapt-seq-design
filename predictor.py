@@ -9,6 +9,7 @@ import parse_data
 import numpy as np
 import scipy
 import sklearn
+import sklearn.metrics
 import tensorflow as tf
 
 
@@ -530,19 +531,25 @@ validate_loss_metric = tf.keras.metrics.Mean(name='validate_loss')
 # so we have to define these; note that it becomes much easier to use these
 # outside of the tf.function functions rather than inside of them (like the
 # other metrics are used)
+# This also defines a metric for R^2 (below, R2Score)
+# Note that R2Score does not necessarily equal r^2 here, where r is
+# pearson_corr. The value R2Score is computed by definition of R^2 (1 minus
+# (residual sum of squares)/(total sum of squares)) from the true vs. predicted
+# values. This is why R2Score can be negative: it can do an even worse job with
+# prediction than just predicting the mean. r is computed by simple least
+# squares regression between y_true and y_pred, and finding the Pearson's r of
+# this curve (since this is simple linear regression, r^2 should be
+# nonnegative). The value R2 measures the goodness-of-fit of the specific
+# linear correlation y_pred = y_true, whereas r measures the correlation from
+# the regression (y_pred = m*y_true + b).
 def pearson_corr(y_true, y_pred):
     r, _ = scipy.stats.pearsonr(y_true, y_pred)
     return r
 def spearman_corr(y_true, y_pred):
     rho, _ = scipy.stats.spearmanr(y_true, y_pred)
     return rho
-class Correlation:
-    def __init__(self, corrtype, name='correlation'):
-        assert corrtype in ('pearson_corr', 'spearman_corr')
-        if corrtype == 'pearson_corr':
-            self.corr_fn = pearson_corr
-        if corrtype == 'spearman_corr':
-            self.corr_fn = spearman_corr
+class CustomMetric:
+    def __init__(self, name):
         self.__name__ = name
         self.y_true = []
         self.y_pred = []
@@ -553,20 +560,39 @@ class Correlation:
         self.y_true += y_true
         self.y_pred += y_pred
     def result(self):
-        return self.corr_fn(self.y_true, self.y_pred)
+        raise NotImplementedError("result() must be implemented in a subclass")
     def reset_states(self):
         self.y_true = []
         self.y_pred = []
+class Correlation(CustomMetric):
+    def __init__(self, corrtype, name='correlation'):
+        assert corrtype in ('pearson_corr', 'spearman_corr')
+        if corrtype == 'pearson_corr':
+            self.corr_fn = pearson_corr
+        if corrtype == 'spearman_corr':
+            self.corr_fn = spearman_corr
+        super().__init__(name)
+    def result(self):
+        return self.corr_fn(self.y_true, self.y_pred)
+class R2Score(CustomMetric):
+    def __init__(self, name='r2_score'):
+        super().__init__(name)
+    def result(self):
+        return sklearn.metrics.r2_score(self.y_true, self.y_pred)
 train_mae_metric = tf.keras.metrics.MeanAbsoluteError(name='train_mae')
 train_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='train_mape')
+train_r2_score_metric = R2Score(name='train_r2_score')
 train_pearson_corr_metric = Correlation('pearson_corr', name='train_pearson_corr')
 train_spearman_corr_metric = Correlation('spearman_corr', name='train_spearman_corr')
 validate_mae_metric = tf.keras.metrics.MeanAbsoluteError(name='validate_mae')
 validate_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='validate_mape')
+validate_r2_score_metric = R2Score(name='validate_r2_score')
 validate_pearson_corr_metric = Correlation('pearson_corr', name='validate_pearson_corr')
 validate_spearman_corr_metric = Correlation('spearman_corr', name='validate_spearman_corr')
+test_mse_metric = tf.keras.metrics.MeanSquaredError(name='test_mse')
 test_mae_metric = tf.keras.metrics.MeanAbsoluteError(name='test_mae')
 test_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='test_mape')
+test_r2_score_metric = R2Score(name='test_r2_score')
 test_pearson_corr_metric = Correlation('pearson_corr', name='test_pearson_corr')
 test_spearman_corr_metric = Correlation('spearman_corr', name='test_spearman_corr')
 
@@ -653,6 +679,7 @@ def test_step(model, seqs, outputs):
     predictions = model(seqs, training=False)
     # Record metrics
     if model.regression:
+        test_mse_metric(outputs, predictions)
         test_mae_metric(outputs, predictions)
         test_mape_metric(outputs, predictions)
     else:
@@ -728,6 +755,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
             y_true, y_pred = tf_train_step(model, seqs, outputs, optimizer,
                     sample_weight=sample_weight)
             if model.regression:
+                train_r2_score_metric(y_true, y_pred)
                 train_pearson_corr_metric(y_true, y_pred)
                 train_spearman_corr_metric(y_true, y_pred)
 
@@ -740,6 +768,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
             y_true, y_pred = tf_validate_step(model, seqs, outputs,
                     sample_weight=sample_weight)
             if model.regression:
+                validate_r2_score_metric(y_true, y_pred)
                 validate_pearson_corr_metric(y_true, y_pred)
                 validate_spearman_corr_metric(y_true, y_pred)
 
@@ -750,6 +779,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         if model.regression:
             print('    MAE: {}'.format(train_mae_metric.result()))
             print('    MAPE: {}'.format(train_mape_metric.result()))
+            print('    R^2 score: {}'.format(train_r2_score_metric.result()))
             print('    r-Pearson: {}'.format(train_pearson_corr_metric.result()))
             print('    r-Spearman: {}'.format(train_spearman_corr_metric.result()))
         else:
@@ -761,6 +791,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         if model.regression:
             print('    MAE: {}'.format(validate_mae_metric.result()))
             print('    MAPE: {}'.format(validate_mape_metric.result()))
+            print('    R^2 score: {}'.format(validate_r2_score_metric.result()))
             print('    r-Pearson: {}'.format(validate_pearson_corr_metric.result()))
             print('    r-Spearman: {}'.format(validate_spearman_corr_metric.result()))
         else:
@@ -778,6 +809,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         train_loss_metric.reset_states()
         train_mae_metric.reset_states()
         train_mape_metric.reset_states()
+        train_r2_score_metric.reset_states()
         train_pearson_corr_metric.reset_states()
         train_spearman_corr_metric.reset_states()
         train_accuracy_metric.reset_states()
@@ -785,6 +817,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         train_auc_pr_metric.reset_states()
         validate_mae_metric.reset_states()
         validate_mape_metric.reset_states()
+        validate_r2_score_metric.reset_states()
         validate_pearson_corr_metric.reset_states()
         validate_spearman_corr_metric.reset_states()
         validate_loss_metric.reset_states()
@@ -837,6 +870,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     for seqs, outputs in test_ds:
         y_true, y_pred = tf_test_step(model, seqs, outputs)
         if model.regression:
+            test_r2_score_metric(y_true, y_pred)
             test_pearson_corr_metric(y_true, y_pred)
             test_spearman_corr_metric(y_true, y_pred)
         all_outputs += list(tf.reshape(y_true, [-1]).numpy())
@@ -845,16 +879,20 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     print('TEST DONE')
     print('  Test metrics:')
     if model.regression:
+        print('    MSE: {}'.format(test_mse_metric.result()))
         print('    MAE: {}'.format(test_mae_metric.result()))
         print('    MAPE: {}'.format(test_mape_metric.result()))
+        print('    R^2 score: {}'.format(test_r2_score_metric.result()))
         print('    r-Pearson: {}'.format(test_pearson_corr_metric.result()))
         print('    r-Spearman: {}'.format(test_spearman_corr_metric.result()))
     else:
         print('    Accuracy: {}'.format(test_accuracy_metric.result()))
         print('    AUC-ROC: {}'.format(test_auc_roc_metric.result()))
         print('    AUC-PR: {}'.format(test_auc_pr_metric.result()))
+    test_mse_metric.reset_states()
     test_mae_metric.reset_states()
     test_mape_metric.reset_states()
+    test_r2_score_metric.reset_states()
     test_pearson_corr_metric.reset_states()
     test_spearman_corr_metric.reset_states()
     test_accuracy_metric.reset_states()
