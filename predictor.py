@@ -135,11 +135,17 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-def read_data(args, make_feats_for_baseline=False):
+def read_data(args, split_frac=None, make_feats_for_baseline=False):
     """Read input/output data.
 
     Args:
         args: argument namespace
+        split_frac: if set, (train, validate, test) fractions (must sum
+            to 1); if None, use 0.3 for the test set, 0.7*(2/3) for the
+            train set, and 0.7*(1/3) for the validate set
+        use_validation: if True, have the validation set be 1/3 of what would
+            be the training set (and the training set be the other 2/3); if
+            False, do not have a validation set
         make_feats_for_baseline: if True, make feature vector for baseline
             models (only applies to Cas13)
 
@@ -166,9 +172,12 @@ def read_data(args, make_feats_for_baseline=False):
             regression = False
         else:
             regression = True
-    test_frac = 0.3
-    train_frac = (1.0 - test_frac) * (2.0/3.0)
-    validation_frac = (1.0 - test_frac) * (1.0/3.0)
+    if split_frac is None:
+        test_frac = 0.3
+        train_frac = (1.0 - test_frac) * (2.0/3.0)
+        validation_frac = (1.0 - test_frac) * (1.0/3.0)
+    else:
+        train_frac, validation_frac, test_frac = split_frac
     data_parser = parser_class(
             subset=subset,
             context_nt=args.context_nt,
