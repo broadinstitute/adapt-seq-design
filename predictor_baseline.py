@@ -268,12 +268,6 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
     # TODO maybe set 'scoring=' for GridSearchCV; the default will use r^2
     #   but it seems the above functions are based on LinearModelCV, which uses
     #   MSE
-    # TODO more generally, make sure CV scoring is consistent with what's
-    #   done in predictor_hyperparam_search; perhaps change
-    #   predictor_hyperparam_search to use the usual predictor loss function
-    #   (binary cross entropy for classification and MSE for regression) rather
-    #   than AUC/r-spearman; or change these to optimize rho, e.g., by
-    #   using GridSearchCV with a custom scoring function
     params = {
             'learning_rate': np.logspace(-2, 0, num=5, base=10.0),
             'n_estimators': [2**k for k in range(0, 9)],
