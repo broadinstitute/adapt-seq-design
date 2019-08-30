@@ -277,9 +277,9 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
     params = {
             'learning_rate': np.logspace(-2, 0, num=5, base=10.0),
             'n_estimators': [2**k for k in range(0, 9)],
-            'min_samples_split': [2**k for k in range(1, 5)],
-            'min_samples_leaf': [2**k for k in range(0, 5)],
-            'max_depth': [2**k for k in range(1, 5)],
+            'min_samples_split': [2**k for k in range(1, 4)],
+            'min_samples_leaf': [2**k for k in range(0, 3)],
+            'max_depth': [2**k for k in range(1, 4)],
             'max_features': [None, 0.1, 'sqrt', 'log2']
     }
     reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls')
