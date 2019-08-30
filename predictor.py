@@ -216,11 +216,14 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
             frac_c = float(num_c) / len(y_train)
             frac_c_msg = 'Fraction of train data in class {}: {}'
             print(frac_c_msg.format(c, frac_c))
-        for c in classes:
-            num_c = sum(1 for y in y_validate if tuple(y) == c)
-            frac_c = float(num_c) / len(y_validate)
-            frac_c_msg = 'Fraction of validate data in class {}: {}'
-            print(frac_c_msg.format(c, frac_c))
+        if len(x_validate) == 0:
+            print('No validation data')
+        else:
+            for c in classes:
+                num_c = sum(1 for y in y_validate if tuple(y) == c)
+                frac_c = float(num_c) / len(y_validate)
+                frac_c_msg = 'Fraction of validate data in class {}: {}'
+                print(frac_c_msg.format(c, frac_c))
         for c in classes:
             num_c = sum(1 for y in y_test if tuple(y) == c)
             frac_c = float(num_c) / len(y_test)
@@ -525,6 +528,7 @@ mse_per_sample = tf.keras.losses.MeanSquaredError()
 # When outputting loss, take the mean across the samples from each batch
 train_loss_metric = tf.keras.metrics.Mean(name='train_loss')
 validate_loss_metric = tf.keras.metrics.Mean(name='validate_loss')
+test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
 
 # Define metrics for regression
 # tf.keras.metrics does not have Pearson correlation or Spearman's correlation,
@@ -589,7 +593,6 @@ validate_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='valida
 validate_r2_score_metric = R2Score(name='validate_r2_score')
 validate_pearson_corr_metric = Correlation('pearson_corr', name='validate_pearson_corr')
 validate_spearman_corr_metric = Correlation('spearman_corr', name='validate_spearman_corr')
-test_mse_metric = tf.keras.metrics.MeanSquaredError(name='test_mse')
 test_mae_metric = tf.keras.metrics.MeanAbsoluteError(name='test_mae')
 test_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='test_mape')
 test_r2_score_metric = R2Score(name='test_r2_score')
@@ -674,12 +677,22 @@ def validate_step(model, seqs, outputs, sample_weight=None):
         validate_auc_pr_metric(outputs, predictions)
     return outputs, predictions
 
-def test_step(model, seqs, outputs):
+def test_step(model, seqs, outputs, sample_weight=None):
     # Compute predictions
     predictions = model(seqs, training=False)
-    # Record metrics
+
     if model.regression:
-        test_mse_metric(outputs, predictions)
+        loss_fn = mse_per_sample
+    else:
+        loss_fn = bce_per_sample
+    prediction_loss = loss_fn(outputs, predictions,
+                sample_weight=sample_weight)
+    regularization_loss = tf.add_n(model.losses)
+    loss = prediction_loss + regularization_loss
+
+    # Record metrics
+    test_loss_metric(loss)
+    if model.regression:
         test_mae_metric(outputs, predictions)
         test_mape_metric(outputs, predictions)
     else:
@@ -737,6 +750,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         class_weights = sklearn.utils.class_weight.compute_class_weight(
                 'balanced', sorted(np.unique(y_train_labels)), y_train_labels)
         class_weights = list(class_weights)
+        model.class_weights = class_weights
         print('Using class weights: {}'.format(class_weights))
     def determine_sample_weights(outputs):
         if not model.regression:
@@ -869,10 +883,19 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
 
     test_ds = make_dataset_and_batch(x_test, y_test)
 
+    def determine_sample_weights(outputs):
+        if not model.regression:
+            labels = [int(o.numpy()[0]) for o in outputs]
+            return [model.class_weights[label] for label in labels]
+        else:
+            return None
+
     all_outputs = []
     all_predictions = []
     for seqs, outputs in test_ds:
-        y_true, y_pred = tf_test_step(model, seqs, outputs)
+        sample_weight = determine_sample_weights(outputs)
+        y_true, y_pred = tf_test_step(model, seqs, outputs,
+                sample_weight=sample_weight)
         if model.regression:
             test_r2_score_metric(y_true, y_pred)
             test_pearson_corr_metric(y_true, y_pred)
@@ -882,8 +905,8 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
 
     print('TEST DONE')
     print('  Test metrics:')
+    print('    Loss: {}'.format(test_loss_metric.result()))
     if model.regression:
-        print('    MSE: {}'.format(test_mse_metric.result()))
         print('    MAE: {}'.format(test_mae_metric.result()))
         print('    MAPE: {}'.format(test_mape_metric.result()))
         print('    R^2 score: {}'.format(test_r2_score_metric.result()))
@@ -894,13 +917,13 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         print('    AUC-ROC: {}'.format(test_auc_roc_metric.result()))
         print('    AUC-PR: {}'.format(test_auc_pr_metric.result()))
 
-    test_loss = test_mse_metric.result()
+    test_loss = test_loss_metric.result()
     if model.regression:
         test_spearman_corr = test_spearman_corr_metric.result()
     else:
         test_auc_roc = test_auc_roc_metric.result()
 
-    test_mse_metric.reset_states()
+    test_loss_metric.reset_states()
     test_mae_metric.reset_states()
     test_mape_metric.reset_states()
     test_r2_score_metric.reset_states()
