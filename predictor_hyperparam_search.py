@@ -6,6 +6,8 @@ random search is similar to its RandomizedSearchCV.
 
 import argparse
 import itertools
+import os
+import pickle
 import random
 
 import parse_data
@@ -438,6 +440,31 @@ def main(args):
         predictor.train_and_validate(model, x_train, y_train,
                 x_validate, y_validate, params['max_num_epochs'])
 
+        # Save the model weights and best parameters to args.save_best_model_path
+        if args.save_best_model_path:
+            if not os.path.exists(args.save_best_model_path):
+                os.makedirs(args.save_best_model_path)
+
+            # Note that we can only save the model weights, not the model itself
+            # (incl. architecture), because they are subclassed models and
+            # therefore are described by code (Keras only allows saving
+            # the full model if they are Sequential or Functional models)
+            # See https://www.tensorflow.org/beta/guide/keras/saving_and_serializing
+            # for details on saving subclassed models
+            model.save_weights(
+                    os.path.join(args.save_best_model_path,
+                        'best_model.weights'),
+                    save_format='tf')
+            print('Saved best model weights to {}'.format(args.save_best_model_path))
+
+            params['regression'] = regression
+            save_best_model_path_params = os.path.join(args.save_best_model_path,
+                    'best_model.params.pkl')
+            with open(save_best_model_path_params, 'wb') as f:
+                pickle.dump(params, f)
+            print('Saved best model parameters to {}'.format(
+                args.save_best_model_path))
+
         # Test the model
         print('***')
         # test() prints results
@@ -549,6 +576,10 @@ if __name__ == "__main__":
                   "hyperparameters; with nested cross-validation, each "
                   "choice of hyperparameters is written for *each* outer "
                   "fold"))
+    parser.add_argument('--save-best-model-path',
+            help=("If set, path to directory in which to save best parameters "
+                  "and the model weights; only applies to hyperparameter "
+                  "search"))
     parser.add_argument('--seed',
             type=int,
             default=1,

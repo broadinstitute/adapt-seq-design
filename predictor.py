@@ -3,6 +3,8 @@ regression.
 """
 
 import argparse
+import os
+import pickle
 
 import parse_data
 
@@ -24,6 +26,11 @@ def parse_args():
     """
     # Parse arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument('--load-best-model-path',
+            help=("Path from which to load parameters and model weights "
+                  "for best model found by hyperparameter search; if set, "
+                  "any other arguments provided about the model "
+                  "architecture or hyperparameters will be overridden"))
     parser.add_argument('--dataset',
             choices=['cas9', 'simulated-cas13', 'cas13'],
             required=True,
@@ -252,6 +259,77 @@ def make_dataset_and_batch(x, y, batch_size=32):
         batched tf.data.Dataset object
     """
     return tf.data.Dataset.from_tensor_slices((x, y)).batch(batch_size)
+
+
+def load_best_model(load_path, params, x_train, y_train, x_validate, y_validate):
+    """Construct model and load weights according to hyperparameter search.
+
+    Args:
+        load_path: path containing model weights
+        params: dict of parameters
+        x_train, y_train, x_validate, y_validate: train and validate data
+            (only needed to initialize variables)
+
+    Returns:..
+        CasCNNWithParallelFilters object
+    """
+    # First construct the model
+    model = construct_model(params, x_train.shape,
+            regression=params['regression'])
+
+    # See https://www.tensorflow.org/beta/guide/keras/saving_and_serializing
+    # for details on loading a serialized subclassed model
+    # To initialize variables used by the optimizers and any stateful metric
+    # variables, we need to train it on some data before calling `load_weights`;
+    # note that it appears this is necessary (otherwise, there are no variables
+    # in the model, and nothing gets loaded)
+    # Only train the models on one data point, and for 1 epoch
+    print('#'*20)
+    print('Initializing variables; ignore metrics..')
+    train_and_validate(model, x_train[:1], y_train[:1], x_validate[:1],
+            y_validate[:1], 1)
+    print('#'*20)
+
+    def copy_weights(model):
+        # Copy weights, so we can verify that they changed after loading
+        return [tf.Variable(w) for w in model.weights]
+
+    def weights_are_eq(weights1, weights2):
+        # Determine whether weights1 == weights2
+        for w1, w2 in zip(weights1, weights2):
+            # 'w1' and 'w2' are each collections of weights (e.g., the kernel
+            # for some layer); they are tf.Variable objects (effectively,
+            # tensors)
+            # Make a tensor containing element-wise boolean comparisons (it
+            # is a 1D tensor with True/False)
+            elwise_eq = tf.equal(w1, w2)
+            # Check if all elements in 'elwise_eq' are True (this will make a
+            # Tensor with one element, True or False)
+            all_are_eq_tensor = tf.reduce_all(elwise_eq)
+            # Convert the tensor 'all_are_eq_tensor' to a boolean
+            all_are_eq = all_are_eq_tensor.numpy()
+            if not all_are_eq:
+                return False
+        return True
+
+    def load_weights(model, fn):
+        # Load weights
+        # There are some concerns about whether weights are actually being
+        # loaded (e.g., https://github.com/tensorflow/tensorflow/issues/27937),
+        # so check that they have changed after calling `load_weights`
+        w_before = copy_weights(model)
+        w_before2 = copy_weights(model)
+        model.load_weights(os.path.join(load_path, fn))
+        w_after = copy_weights(model)
+        w_after2 = copy_weights(model)
+
+        assert (weights_are_eq(w_before, w_before2) is True)
+        assert (weights_are_eq(w_before, w_after) is False)
+        assert (weights_are_eq(w_after, w_after2) is True)
+
+    load_weights(model, 'best_model.weights')
+
+    return model
 
 
 #####################################################################
@@ -964,6 +1042,20 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
 def main():
     # Read arguments and data
     args = parse_args()
+
+    if args.load_best_model_path:
+        # Read saved parameters and load them into the args namespace
+        print('Loading parameters for best model..')
+        load_path_params = os.path.join(args.load_best_model_path,
+                'best_model.params.pkl')
+        with open(load_path_params, 'rb') as f:
+            saved_params = pickle.load(f)
+        params = vars(args)
+        for k, v in saved_params.items():
+            print("Setting argument '{}'={}".format(k, v))
+            params[k] = v
+
+    # Set seed and read data
     set_seed(args.seed)
     (x_train, y_train), (x_validate, y_validate), (x_test, y_test), x_test_pos = read_data(args)
 
@@ -984,13 +1076,20 @@ def main():
         raise Exception(("Can only use --plot-predictions when doing "
             "regression"))
 
-    # Construct model
-    params = vars(args)
-    model = construct_model(params, x_train.shape, regression)
+    if args.load_best_model_path:
+        # Load the best model
+        print('Loading best model weights..')
+        model = load_best_model(args.load_best_model_path, params,
+                x_train, y_train, x_validate, y_validate)
+        print('Done loading best model.')
+    else:
+        # Construct model
+        params = vars(args)
+        model = construct_model(params, x_train.shape, regression)
 
-    # Train the model, with validation
-    train_and_validate(model, x_train, y_train, x_validate, y_validate,
-            args.max_num_epochs)
+        # Train the model, with validation
+        train_and_validate(model, x_train, y_train, x_validate, y_validate,
+                args.max_num_epochs)
 
     # Test the model
     test(model, x_test, y_test, plot_roc_curve=args.plot_roc_curve,
