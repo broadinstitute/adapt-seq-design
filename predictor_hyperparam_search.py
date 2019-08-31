@@ -141,16 +141,21 @@ def hyperparam_grid():
         yield params
 
 
-def hyperparam_random_dist(num_samples=1000):
+def hyperparam_random_dist(num_samples):
     """Construct distribution of hyperparameters.
 
     Args:
         num_samples: number of random points to yield from the space
+            (if None, use default)
 
     Iterates:
         params where each is a dict of possible parameter values (i.e.,
         a point selected randomly from the space)
     """
+    if num_samples is None:
+        # Set default number of samples
+        num_samples = 1000
+
     # Define distributions
     def constant(x):
         def d():
@@ -208,7 +213,7 @@ def hyperparam_random_dist(num_samples=1000):
 
 
 def search_for_hyperparams(x, y, search_type, regression,
-        num_splits=5, loss_out=None):
+        num_splits=5, loss_out=None, num_random_samples=None):
     """Search for optimal hyperparameters.
 
     This uses hyperparam_grid() to find the grid of hyperparameters over
@@ -226,15 +231,20 @@ def search_for_hyperparams(x, y, search_type, regression,
         num_splits: number of splits of the data to make (i.e., k in k-fold)
         loss_out: if set, an opened file object to write to write the mean
             validation loss for each choice of hyperparameters
+        num_random_samples: number of random samples to use, if search_type
+            is 'random' (if None, use default)
 
     Returns:
         tuple (params, loss) where params is the optimal choice of
         hyperparameters and loss is the mean validation loss at that choice
     """
+    if num_random_samples is not None and search_type != 'random':
+        raise Exception("Cannot set num_random_samples without random search")
+
     if search_type == 'grid':
         params_iter = hyperparam_grid()
     elif search_type == 'random':
-        params_iter = hyperparam_random_dist()
+        params_iter = hyperparam_random_dist(num_random_samples)
     else:
         raise Exception("Unknown search type '%s'" % search_type)
 
@@ -255,7 +265,8 @@ def search_for_hyperparams(x, y, search_type, regression,
 
 
 def nested_cross_validate(x, y, search_type, regression,
-        num_outer_splits=5, num_inner_splits=5, loss_out=None):
+        num_outer_splits=5, num_inner_splits=5, loss_out=None,
+        num_random_samples=None):
     """Perform nested cross-validation to validate model and search.
 
     This is useful to verify the overall model and model fitting approach
@@ -279,6 +290,8 @@ def nested_cross_validate(x, y, search_type, regression,
         loss_out: if set, an opened file object to write to write the mean
             validation loss for each choice of hyperparameters (once per
             each outer fold)
+        num_random_samples: number of random samples to use, if search_type
+            is 'random' (if None, use default)
 
     Returns:
         list x of tuples (params, loss) where params is an optimal choice
@@ -297,7 +310,8 @@ def nested_cross_validate(x, y, search_type, regression,
 
         # Start a new model for this fold
         best_params, _ = search_for_hyperparams(x_train, y_train,
-                search_type, num_splits=num_inner_splits, loss_out=loss_out)
+                search_type, num_splits=num_inner_splits, loss_out=loss_out,
+                num_random_samples=num_random_samples)
 
         # Compute a loss for this choice of parameters as follows:
         #   (1) train the model on all the training data (in the inner
@@ -389,7 +403,8 @@ def main(args):
                 args.search_type,
                 regression,
                 num_splits=args.hyperparam_search_cross_val_num_splits,
-                loss_out=params_mean_val_loss_out_tsv_f)
+                loss_out=params_mean_val_loss_out_tsv_f,
+                num_random_samples=args.num_random_samples)
 
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
@@ -444,7 +459,8 @@ def main(args):
                 regression,
                 num_outer_splits=args.nested_cross_val_outer_num_splits,
                 num_inner_splits=args.hyperparam_search_cross_val_num_splits,
-                loss_out=params_mean_val_loss_out_tsv_f)
+                loss_out=params_mean_val_loss_out_tsv_f,
+                num_random_samples=args.num_random_samples)
 
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
@@ -522,6 +538,11 @@ if __name__ == "__main__":
             choices=['grid', 'random'],
             default='random',
             help=("Type of hyperparameter search ('grid' or 'random')"))
+    parser.add_argument('--num-random-samples',
+            type=int,
+            default=1000,
+            help=("Number of random samples to use for random search; "
+                  "only applicable when SEARCH_TYPE is 'random'"))
     parser.add_argument('--params-mean-val-loss-out-tsv',
             help=("If set, path to out TSV at which to write the mean "
                   "validation loss (across folds) for each choice of "
