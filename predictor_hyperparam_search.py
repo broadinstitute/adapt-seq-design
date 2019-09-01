@@ -440,10 +440,10 @@ def main(args):
         predictor.train_and_validate(model, x_train, y_train,
                 x_validate, y_validate, params['max_num_epochs'])
 
-        # Save the model weights and best parameters to args.save_best_model_path
-        if args.save_best_model_path:
-            if not os.path.exists(args.save_best_model_path):
-                os.makedirs(args.save_best_model_path)
+        # Save the model weights and best parameters to args.save_best_model
+        if args.save_best_model:
+            if not os.path.exists(args.save_best_model):
+                os.makedirs(args.save_best_model)
 
             # Note that we can only save the model weights, not the model itself
             # (incl. architecture), because they are subclassed models and
@@ -452,18 +452,18 @@ def main(args):
             # See https://www.tensorflow.org/beta/guide/keras/saving_and_serializing
             # for details on saving subclassed models
             model.save_weights(
-                    os.path.join(args.save_best_model_path,
+                    os.path.join(args.save_best_model,
                         'best_model.weights'),
                     save_format='tf')
-            print('Saved best model weights to {}'.format(args.save_best_model_path))
+            print('Saved best model weights to {}'.format(args.save_best_model))
 
             params['regression'] = regression
-            save_best_model_path_params = os.path.join(args.save_best_model_path,
+            save_best_model_params = os.path.join(args.save_best_model,
                     'best_model.params.pkl')
-            with open(save_best_model_path_params, 'wb') as f:
+            with open(save_best_model_params, 'wb') as f:
                 pickle.dump(params, f)
             print('Saved best model parameters to {}'.format(
-                args.save_best_model_path))
+                args.save_best_model))
 
         # Test the model
         print('***')
@@ -576,7 +576,7 @@ if __name__ == "__main__":
                   "hyperparameters; with nested cross-validation, each "
                   "choice of hyperparameters is written for *each* outer "
                   "fold"))
-    parser.add_argument('--save-best-model-path',
+    parser.add_argument('--save-best-model',
             help=("If set, path to directory in which to save best parameters "
                   "and the model weights; only applies to hyperparameter "
                   "search"))

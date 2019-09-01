@@ -26,7 +26,7 @@ def parse_args():
     """
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--load-best-model-path',
+    parser.add_argument('--load-best-model',
             help=("Path from which to load parameters and model weights "
                   "for best model found by hyperparameter search; if set, "
                   "any other arguments provided about the model "
@@ -1084,10 +1084,10 @@ def main():
     # Read arguments and data
     args = parse_args()
 
-    if args.load_best_model_path:
+    if args.load_best_model:
         # Read saved parameters and load them into the args namespace
         print('Loading parameters for best model..')
-        load_path_params = os.path.join(args.load_best_model_path,
+        load_path_params = os.path.join(args.load_best_model,
                 'best_model.params.pkl')
         with open(load_path_params, 'rb') as f:
             saved_params = pickle.load(f)
@@ -1117,10 +1117,10 @@ def main():
         raise Exception(("Can only use --plot-predictions when doing "
             "regression"))
 
-    if args.load_best_model_path:
+    if args.load_best_model:
         # Load the best model
         print('Loading best model weights..')
-        model = load_best_model(args.load_best_model_path, params,
+        model = load_best_model(args.load_best_model, params,
                 x_train, y_train, x_validate, y_validate)
         print('Done loading best model.')
     else:
