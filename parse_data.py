@@ -1039,3 +1039,73 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
             x_train_i, y_train_i = x[train_index], y[train_index]
             x_validate_i, y_validate_i = x[test_index], y[test_index]
             yield (x_train_i, y_train_i, x_validate_i, y_validate_i)
+
+
+_seq_features_context_nt = None
+def seq_features_from_encoding(x):
+    """Determine sequence features by parsing the input vector for a data point.
+
+    In some ways this reverses the parsing does above. This converts a one-hot
+    encoding of both target and guide back into nucleotide sequence space.
+
+    This must know the amount of context included in the target, so
+    _seq_features_context_nt must be set.
+
+    Args:
+        x: input sequence as Lx8 vector where L is the target length; x[i][0:4]
+            gives a one-hot encoding of the target at position i and
+            x[i][4:8] gives a one-hot encoding ofthe guide at position i
+
+    Returns:
+        dict where keys are features (e.g., 'target', 'guide', and 'PFS')
+    """
+    assert _seq_features_context_nt is not None
+    context_nt = _seq_features_context_nt
+
+    x = np.array(x)
+
+    target_len = len(x)
+    assert x.shape == (target_len, 8)
+
+    onehot_idx = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
+    def nt(xi):
+        # Convert one-hot encoded xi to a nucleotide
+        assert len(xi) == 4
+        if sum(xi) == 0:
+            # All values are 0, use '-'
+            return '-'
+        else:
+            assert np.isclose(sum(xi), 1.0) # either one-hot encoded or softmax
+            return onehot_idx[np.argmax(xi)]
+
+    # Read the target
+    target = ''.join(nt(x[i][0:4]) for i in range(target_len))
+
+    # Everything in the target should be a nucleotide
+    assert '-' not in target
+
+    # Read the guide
+    guide_with_context = ''.join(nt(x[i][4:8]) for i in range(target_len))
+
+    # Verify the context of the guide is all '-' (all 0s), and extract just
+    # the guide
+    guide_start = context_nt
+    guide_end = target_len - context_nt
+    assert guide_with_context[:guide_start] == '-'*context_nt
+    assert guide_with_context[guide_end:] == '-'*context_nt
+    guide = guide_with_context[guide_start:guide_end]
+    assert '-' not in guide
+    target_without_context = target[guide_start:guide_end]
+
+    # Compute the Hamming distance
+    hd = sum(1 for i in range(len(guide)) if guide[i] != target_without_context[i])
+
+    # Determine the Cas13a PFS (immediately adjacent to guide,
+    # 3' end in target space)
+    cas13a_pfs = target[guide_end]
+
+    return {'target': target,
+            'target_without_context': target_without_context,
+            'guide': guide,
+            'hamming_dist': hd,
+            'cas13a_pfs': cas13a_pfs}

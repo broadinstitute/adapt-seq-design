@@ -30,7 +30,8 @@ def parse_args():
             help=("Path from which to load parameters and model weights "
                   "for best model found by hyperparameter search; if set, "
                   "any other arguments provided about the model "
-                  "architecture or hyperparameters will be overridden"))
+                  "architecture or hyperparameters will be overridden and "
+                  "this will skip training and only test the model"))
     parser.add_argument('--dataset',
             choices=['cas9', 'simulated-cas13', 'cas13'],
             required=True,
@@ -125,6 +126,10 @@ def parse_args():
     parser.add_argument('--plot-predictions',
             help=("If set, path to PDF at which to save plot of predictions "
                   "vs. true values"))
+    parser.add_argument('--write-test-tsv',
+            help=("If set, path to TSV at which to write test results, "
+                  "including sequences in the test set and predictions "
+                  "(one row per test data point)"))
     args = parser.parse_args()
 
     # Print the arguments provided
@@ -203,6 +208,7 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
     data_parser.read()
 
     parse_data._split_parser = data_parser
+    parse_data._seq_features_context_nt = data_parser.context_nt
 
     x_train, y_train = data_parser.train_set()
     x_validate, y_validate = data_parser.validate_set()
@@ -938,7 +944,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
 
 
 def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
-            x_test_pos=None):
+            x_test_pos=None, write_test_tsv=None):
     """Test a model.
 
     This prints metrics.
@@ -952,6 +958,8 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
             predictions vs. true values
         x_test_pos: if set, position of each element in x_test (used for
             plotting with plot_predictions)
+        write_test_tsv: if set, path to TSV at which to write data on predictions
+            as well as the testing sequences (one row per data point)
 
     Returns:
         dict with test metrics at the end (keys are 'loss'
@@ -968,7 +976,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         else:
             return None
 
-    all_outputs = []
+    all_true = []
     all_predictions = []
     for seqs, outputs in test_ds:
         sample_weight = determine_sample_weights(outputs)
@@ -978,8 +986,13 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
             test_r2_score_metric(y_true, y_pred)
             test_pearson_corr_metric(y_true, y_pred)
             test_spearman_corr_metric(y_true, y_pred)
-        all_outputs += list(tf.reshape(y_true, [-1]).numpy())
+        all_true += list(tf.reshape(y_true, [-1]).numpy())
         all_predictions += list(tf.reshape(y_pred, [-1]).numpy())
+
+    # Check the ordering: y_test should be the same as all_true
+    # (y_test is a 2d array: [[value], [value], ..., [value]] so it must
+    # be flattened prior to comparison)
+    assert np.allclose(y_test.flatten(), all_true)
 
     print('TEST DONE')
     print('  Test metrics:')
@@ -1011,10 +1024,38 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     test_auc_roc_metric.reset_states()
     test_auc_pr_metric.reset_states()
 
+    if write_test_tsv:
+        # Determine features for all input sequences
+        seq_feats = []
+        for i in range(len(x_test)):
+            seq_feats += [parse_data.seq_features_from_encoding(x_test[i])]
+
+        cols = ['target', 'target_without_context', 'guide',
+                'hamming_dist', 'cas13a_pfs', 'true_activity',
+                'predicted_activity']
+        with open(write_test_tsv, 'w') as fw:
+            def write_row(row):
+                fw.write('\t'.join(str(x) for x in row) + '\n')
+
+            # Write header
+            write_row(cols)
+
+            # Write row for each data point
+            for i in range(len(x_test)):
+                def val(k):
+                    if k == 'true_activity':
+                        return all_true[i]
+                    elif k == 'predicted_activity':
+                        return all_predictions[i]
+                    else:
+                        return seq_feats[i][k]
+                write_row([val(k) for k in cols])
+
+
     if plot_roc_curve:
         from sklearn.metrics import roc_curve
         import matplotlib.pyplot as plt
-        fpr, tpr, thresholds = roc_curve(all_outputs, all_predictions)
+        fpr, tpr, thresholds = roc_curve(all_true, all_predictions)
         plt.figure(1)
         plt.plot(fpr, tpr)
         plt.xlabel('False positive rate')
@@ -1025,7 +1066,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     if plot_predictions:
         import matplotlib.pyplot as plt
         plt.figure(1)
-        plt.scatter(all_outputs, all_predictions, c=x_test_pos)
+        plt.scatter(all_true, all_predictions, c=x_test_pos)
         plt.xlabel('True value')
         plt.ylabel('Predicted value')
         plt.title('True vs. predicted values')
@@ -1094,7 +1135,7 @@ def main():
     # Test the model
     test(model, x_test, y_test, plot_roc_curve=args.plot_roc_curve,
             plot_predictions=args.plot_predictions,
-            x_test_pos=x_test_pos)
+            x_test_pos=x_test_pos, write_test_tsv=args.write_test_tsv)
 
 
 if __name__ == "__main__":
