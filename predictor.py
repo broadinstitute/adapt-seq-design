@@ -3,6 +3,7 @@ regression.
 """
 
 import argparse
+import gzip
 import os
 import pickle
 
@@ -127,7 +128,7 @@ def parse_args():
             help=("If set, path to PDF at which to save plot of predictions "
                   "vs. true values"))
     parser.add_argument('--write-test-tsv',
-            help=("If set, path to TSV at which to write test results, "
+            help=("If set, path to .tsv.gz at which to write test results, "
                   "including sequences in the test set and predictions "
                   "(one row per test data point)"))
     args = parser.parse_args()
@@ -1033,7 +1034,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         cols = ['target', 'target_without_context', 'guide',
                 'hamming_dist', 'cas13a_pfs', 'true_activity',
                 'predicted_activity']
-        with open(write_test_tsv, 'w') as fw:
+        with gzip.open(write_test_tsv, 'wt') as fw:
             def write_row(row):
                 fw.write('\t'.join(str(x) for x in row) + '\n')
 
