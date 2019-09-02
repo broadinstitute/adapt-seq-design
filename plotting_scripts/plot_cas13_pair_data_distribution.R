@@ -9,9 +9,9 @@
 require(ggplot2)
 require(reshape2)
 
-IN.TABLE <- "data/CCF005_pairs_annotated.curated.tsv"
-OUT.DIST.PDF <- "out/cas13-pair-activity-dist.pdf"
-OUT.DIST.BLOCKS.PDF <- "out/cas13-pair-activity-dist.blocks.pdf"
+IN.TABLE <- "../data/CCF005_pairs_annotated.curated.tsv"
+OUT.DIST.PDF <- "../out/cas13-pair-activity-dist.pdf"
+OUT.DIST.BLOCKS.PDF <- "../out/cas13-pair-activity-dist.blocks.pdf"
 
 # Read table and replace '_' in column names with '.'
 all.data <- read.table(IN.TABLE, header=TRUE, sep="\t")

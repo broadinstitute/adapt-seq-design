@@ -9,9 +9,9 @@
 require(ggplot2)
 require(reshape2)
 
-IN.TABLE <- "data/doench2016-nbt.supp-table-18.curated.with-context.tsv"
-OUT.DIST.PDF <- "out/activity-dist.pdf"
-OUT.ALONG.PROTEIN.PDF <- "out/activity-along-protein.pdf"
+IN.TABLE <- "../data/doench2016-nbt.supp-table-18.curated.with-context.tsv"
+OUT.DIST.PDF <- "../out/activity-dist.pdf"
+OUT.ALONG.PROTEIN.PDF <- "../out/activity-along-protein.pdf"
 
 # Read table and replace '_' in column names with '.'
 all.data <- read.table(IN.TABLE, header=TRUE, sep="\t")

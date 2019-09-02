@@ -13,8 +13,8 @@ require(stringr)
 args <- commandArgs(trailingOnly=TRUE)
 cas <- args[1]  # 'cas9' or 'cas13'
 
-IN.RESULTS <- paste0("out/", cas, "-hyperparam-search.all.tsv")
-OUT.PDF <- paste0("out/", cas, "-hyperparam-search.all.distributions.pdf")
+IN.RESULTS <- paste0("../out/", cas, "-hyperparam-search.all.tsv")
+OUT.PDF <- paste0("../out/", cas, "-hyperparam-search.all.distributions.pdf")
 
 # Read hyperparameter results
 hyperparams <- read.table(IN.RESULTS, header=FALSE, sep="\t")
