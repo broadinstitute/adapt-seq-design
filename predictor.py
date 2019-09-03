@@ -1032,7 +1032,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
             seq_feats += [parse_data.seq_features_from_encoding(x_test[i])]
 
         cols = ['target', 'target_without_context', 'guide',
-                'hamming_dist', 'cas13a_pfs', 'true_activity',
+                'hamming_dist', 'cas13a_pfs', 'crrna_pos', 'true_activity',
                 'predicted_activity']
         with gzip.open(write_test_tsv, 'wt') as fw:
             def write_row(row):
@@ -1048,6 +1048,13 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
                         return all_true[i]
                     elif k == 'predicted_activity':
                         return all_predictions[i]
+                    elif k == 'crrna_pos':
+                        if x_test_pos is None:
+                            # Use -1 if position is unknown
+                            return -1
+                        else:
+                            # x_test_pos[i] gives position of x_test[i]
+                            return x_test_pos[i]
                     else:
                         return seq_feats[i][k]
                 write_row([val(k) for k in cols])
