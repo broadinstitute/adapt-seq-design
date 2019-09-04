@@ -94,6 +94,8 @@ def classify(x_train, y_train, x_validate, y_validate, x_test, y_test):
         y_{train,validate,test}: output labels for train/validate/test
     """
     # TODO implement other models, e.g., SVM
+    # TODO as done in regress() below, optimize hyperparameters for a
+    # custom scoring function (e.g., AUC)
 
     # Determine class weights
     y_train_labels = list(y_train)
@@ -176,12 +178,22 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
         x_{train,validate,test}: input data for train/validate/test
         y_{train,validate,test}: output labels for train/validate/test
     """
-    # With models, perform built-in cross-validation to determine
-    # hyperparameters
+    # With models, perform cross-validation to determine hyperparameters
+    # Most of the built-in cross-validators find the best choice based on
+    # R^2; some of them do not support a custom scoring function via a
+    # `scoring=...` argument. So instead wrap the regression with a
+    # GridSearchCV object, which does support a custom scoring metric. Use
+    # spearman rank correlation coefficient for this.
 
     def cv(num_splits=5):
         return parse_data.split(x_train, y_train, num_splits,
                 stratify_by_pos=True, yield_indices=True)
+
+    def rho_f(y, y_pred):
+        rho, _ = scipy.stats.spearmanr(y, y_pred)
+        return rho
+    rho_scorer = sklearn.metrics.make_scorer(rho_f,
+            greater_is_better=True)
 
     def fit_and_test_model(reg, model_desc, hyperparams):
         """Fit and test model.
@@ -237,37 +249,46 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
     fit_and_test_model(reg, 'Linear regression', [])
 
     # L1 linear regression
-    alphas = np.logspace(-5, 5, num=100, base=10.0)
-    reg = sklearn.linear_model.LassoCV(alphas=alphas, cv=cv(),
-            max_iter=10000, copy_X=True)
-    fit_and_test_model(reg, 'L1 linear regression', hyperparams=['alpha_'])
+    params = {
+            'alpha': np.logspace(-5, 5, num=100, base=10.0)
+    }
+    reg = sklearn.linear_model.Lasso(max_iter=10000, copy_X=True)
+    reg_cv = sklearn.model_selection.GridSearchCV(reg,
+            param_grid=params, cv=cv(), refit=True, scoring=rho_scorer,
+            verbose=1)
+    fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
 
     # L2 linear regression
-    alphas = np.logspace(-5, 5, num=100, base=10.0)
-    reg = sklearn.linear_model.RidgeCV(alphas=alphas, cv=cv(),
-            scoring='neg_mean_squared_error')
-    fit_and_test_model(reg, 'L2 linear regression', hyperparams=['alpha_'])
+    params = {
+            'alpha': np.logspace(-5, 5, num=100, base=10.0)
+    }
+    reg = sklearn.linear_model.Ridge(max_iter=10000, copy_X=True)
+    reg_cv = sklearn.model_selection.GridSearchCV(reg,
+            param_grid=params, cv=cv(), refit=True, scoring=rho_scorer,
+            verbose=1)
+    fit_and_test_model(reg_cv, 'L2 linear regression', hyperparams=reg_cv)
 
     # Elastic net (L1+L2 linear regression)
     # Recommendation for l1_ratio is to place more values close to 1 (lasso)
     # and fewer closer to 0 (ridge)
-    # Note that this optimizes MSE; e.g., L1 (lasso) may do better than L2
-    # (ridge) according to rho, but if ridge has lower MSE than lasso, then
-    # this will select a small l1_ratio (closer to ridge); moreover, the
-    # results printed by fit_and_test_model() are on the test data, but
-    # hyperparameters are chosen on splits of the train data (this might
-    # explain some confusion in why a certain l1_ratio is chosen)
-    l1_ratios = 1.0 - np.logspace(-5, 0, num=10, base=2.0)[::-1] + 2.0**(-5)
-    alphas = np.logspace(-5, 5, num=100, base=10.0)
-    reg = sklearn.linear_model.ElasticNetCV(l1_ratio=l1_ratios, alphas=alphas,
-            cv=cv(), max_iter=1000, copy_X=True)
-    fit_and_test_model(reg, 'L1+L2 linear regression',
-            hyperparams=['l1_ratio_', 'alpha_'])
+    # A note to explain some potential confusion in the choice of
+    #  l1_ratio: Ridge might be better than Lasso according to rho, but
+    #  l1_ratio could still be chosen to be high (close to Lasso)
+    #  especially if Lasso/Ridge are close; in part, this could be because
+    #  fit_and_test_model() prints values on a hold-out set, but chooses
+    #  hyperparameters on splits of the train set
+    params = {
+            'l1_ratio': 1.0 - np.logspace(-5, 0, num=10, base=2.0)[::-1] + 2.0**(-5),
+            'alpha': np.logspace(-5, 5, num=100, base=10.0)
+    }
+    reg = sklearn.linear_model.ElasticNet(max_iter=1000, copy_X=True)
+    reg_cv = sklearn.model_selection.GridSearchCV(reg,
+            param_grid=params, cv=cv(), refit=True, scoring=rho_scorer,
+            verbose=1)
+    fit_and_test_model(reg_cv, 'L1+L2 linear regression',
+            hyperparams=reg_cv)
 
     # Gradient-boosted regression trees
-    # TODO maybe set 'scoring=' for GridSearchCV; the default will use r^2
-    #   but it seems the above functions are based on LinearModelCV, which uses
-    #   MSE
     params = {
             'learning_rate': np.logspace(-2, 0, num=5, base=10.0),
             'n_estimators': [2**k for k in range(0, 9)],
@@ -278,7 +299,8 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
     }
     reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls')
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, verbose=2)
+            param_grid=params, cv=cv(), refit=True, scoring=rho_scorer,
+            verbose=2)
     fit_and_test_model(reg_cv, 'Gradient Boosting regression',
             hyperparams=reg_cv)
 
