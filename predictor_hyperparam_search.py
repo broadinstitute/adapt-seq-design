@@ -72,6 +72,8 @@ def cross_validate(params, x, y, num_splits, regression):
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in split_iter:
         print('STARTING FOLD {} of {}'.format(i+1, num_splits))
+        print('  Training on n={}, validating on n={}'.format(len(x_train),
+            len(x_validate)))
 
         # Use x_validate, y_validate for validation of the model on
         # this fold
@@ -195,14 +197,14 @@ def hyperparam_random_dist(num_samples):
              'conv_filter_width': uniform_discrete([
                  [1], [2], [3], [4],
                  [1, 2], [1, 2, 3], [1, 2, 4], [1, 2, 3, 4]]),
-             'pool_window_width': uniform_int(1, 5),
-             'fully_connected_dim': uniform_nested_dist(1, 3,
+             'pool_window_width': uniform_int(1, 6),
+             'fully_connected_dim': uniform_nested_dist(1, 4,
                  uniform_int(10, 50)),
              'pool_strategy': uniform_discrete(['max', 'avg', 'max-and-avg']),
              'locally_connected_width': uniform_discrete([None,
-                 [1], [2], [1, 2]]),
-             'locally_connected_dim': uniform_int(1, 5),
-             'dropout_rate': uniform_continuous(0, 0.75),
+                 [1], [2], [3], [1, 2], [1, 2, 3]]),
+             'locally_connected_dim': uniform_int(1, 6),
+             'dropout_rate': uniform_continuous(0, 0.5),
              'l2_factor': lognormal(-12.0, 5.0),
              'max_num_epochs': constant(1000)
     }
