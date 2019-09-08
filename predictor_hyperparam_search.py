@@ -5,6 +5,7 @@ random search is similar to its RandomizedSearchCV.
 """
 
 import argparse
+from collections import defaultdict
 import itertools
 import os
 import pickle
@@ -14,40 +15,65 @@ import parse_data
 import predictor
 
 import numpy as np
+import scipy.stats
 
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-def determine_val_loss(results, use_eval_metric=False):
-    """Determine loss on validation data.
 
-    The value is computed by predictor during validation; this selects it from
-    different possibilities.
+_regression_losses = ['mse', '1_minus_rho']
+_default_regression_loss = '1_minus_rho'
+_classification_losses = ['bce', '1_minus_auc-roc']
+_default_classification_loss = '1_minus_auc-roc'
+def determine_val_loss(results):
+    """Determine loss values on validation data.
+
+    Note that using the direct loss (i.e., what is optimized during training)
+    means also including regularization component of the loss; we probably
+    do not want to include this as it could lead us to choose models that
+    underfit (e.g., small weights) or overfit (e.g., too small of a
+    l2-factor hyperparameter). This metric is in results['loss'], and
+    this function leaves it out. For a very similar metric (i.e., just the
+    error part of the loss term), we can use binary cross-entropy
+    (results['bce']) for classification or mean squared error (results['mse'])
+    for regression. Similarly, the model itself can directly affect the
+    loss value in results['loss'], which we do not want (e.g., higher
+    dimensions of fully connected layers lead to more weights, which can
+    increase the regularization term of the loss; similarly, *not* having
+    a locally connected layer may lead to more weights (as the dimension of
+    the fully connected layers that follow would increase), which would
+    increase the loss).
 
     Args:
         results: dict returned by predictor.train_and_validate()
-        use_eval_metric: if True, this uses: for classification, 1-AUC, where
-            AUC is from the ROC curve; for regression, 1-RS, where RS is the
-            Spearman rank correlation coefficient. If False, this uses
-            the value of the loss function used during training
 
     Returns:
-        loss value
+        (default loss value to use for ranking, dict of loss values for
+        different metrics)
     """
-    if use_eval_metric:
-        assert not ('auc-roc' in results and 'r-spearman' in results)
-        if 'auc-roc' in results:
-            # 1-AUC
-            val_auc_roc = results['auc-roc']
-            return 1.0 - val_auc_roc
-        elif 'r-spearman' in results:
-            # 1-RS
-            val_r_spearman = results['r-spearman']
-            return 1.0 - val_r_spearman
+    if 'bce' in results:
+        # Classification results
+        assert 'auc-roc' in results
+        assert 'mse' not in results
+        assert 'r-spearman' not in results
+
+        losses = {'bce': results['bce'],
+                '1_minus_auc-roc': 1.0 - results['auc-roc']}
+        default_loss = losses[_default_classification_loss]
+    elif 'mse' in results:
+        # Regression results
+        assert 'r-spearman' in results
+        assert 'bce' not in results
+        assert 'auc-roc' not in results
+
+        losses = {'mse': results['mse'],
+                '1_minus_rho': 1.0 - results['r-spearman']}
+        default_loss = losses[_default_regression_loss]
     else:
-        # loss used for training
-        return results['loss']
+        raise Exception("Unknown whether classification or regression")
+
+    return default_loss, losses
 
 
 def cross_validate(params, x, y, num_splits, regression):
@@ -64,9 +90,11 @@ def cross_validate(params, x, y, num_splits, regression):
         regression: if True, perform regression; if False, classification
 
     Returns:
-        list of validation losses, one for each fold
+        tuple ([default validation loss for each fold], dict {metric: [list of
+        validation losses for metric, for each fold]})
     """
-    val_losses = []
+    val_losses_default = []
+    val_losses_different_metrics = defaultdict(list)
     i = 0
     split_iter = parse_data.split(x, y, num_splits=num_splits,
             stratify_by_pos=True)
@@ -105,13 +133,14 @@ def cross_validate(params, x, y, num_splits, regression):
         # Run predictor.test() on the validation data for this fold, to
         # get its validation results
         results = predictor.test(model, x_validate, y_validate)
-        val_loss = determine_val_loss(results)
-        val_losses += [val_loss]
+        a, b = determine_val_loss(results)
+        val_losses_default += [a]
+        for k in b.keys():
+            val_losses_different_metrics[k].append(b[k])
 
-        print(('FINISHED FOLD {} of {}; current mean validation loss is '
-            '{}').format(i+1, num_splits, np.mean(val_losses)))
+        print(('FINISHED FOLD {} of {}').format(i+1, num_splits))
         i += 1
-    return val_losses
+    return val_losses_default, val_losses_different_metrics
 
 
 def hyperparam_grid():
@@ -193,12 +222,12 @@ def hyperparam_random_dist(num_samples):
 
     # Map each parameter to a distribution of values
     space = {
-             'conv_num_filters': uniform_int(5, 100),
+             'conv_num_filters': uniform_int(5, 25),
              'conv_filter_width': uniform_discrete([
                  [1], [2], [3], [4],
                  [1, 2], [1, 2, 3], [1, 2, 4], [1, 2, 3, 4]]),
              'pool_window_width': uniform_int(1, 6),
-             'fully_connected_dim': uniform_nested_dist(1, 4,
+             'fully_connected_dim': uniform_nested_dist(1, 3,
                  uniform_int(10, 50)),
              'pool_strategy': uniform_discrete(['max', 'avg', 'max-and-avg']),
              'locally_connected_width': uniform_discrete([None,
@@ -225,7 +254,8 @@ def search_for_hyperparams(x, y, search_type, regression,
 
     On each point p in the grid, this runs k-fold cross-validation, computes
     the mean validation loss over the folds for p, and then returns the
-    p with the smallest loss.
+    p with the smallest loss. As a single loss value, this uses the default
+    loss defined above determine_val_loss().
 
     Args:
         x: input data
@@ -233,8 +263,8 @@ def search_for_hyperparams(x, y, search_type, regression,
         search_type: 'grid' or 'random' search
         regression: if True, perform regression; if False, classification
         num_splits: number of splits of the data to make (i.e., k in k-fold)
-        loss_out: if set, an opened file object to write to write the mean
-            validation loss for each choice of hyperparameters
+        loss_out: if set, an opened file object to write to write the
+            validation loss values for each choice of hyperparameters
         num_random_samples: number of random samples to use, if search_type
             is 'random' (if None, use default)
 
@@ -256,15 +286,26 @@ def search_for_hyperparams(x, y, search_type, regression,
     best_loss = None
     for params in params_iter:
         # Compute a mean validation loss at this choice of params
-        val_losses = cross_validate(params, x, y, num_splits, regression)
-        mean_loss = np.mean(val_losses)
+        val_losses_default, val_losses_different_metrics = cross_validate(
+                params, x, y, num_splits, regression)
+
+        mean_loss = np.mean(val_losses_default)
+        sem_loss = scipy.stats.sem(val_losses_default)
+
         if best_params is None or mean_loss < best_loss:
             # This is the current best choice of params
             best_params = params
             best_loss = mean_loss
 
         if loss_out is not None:
-            loss_out.write(str(params) + '\t' + str(mean_loss) + '\n')
+            row = [params]
+            metrics_ordered = _regression_losses if regression else _classification_losses
+            for metric in metrics_ordered:
+                losses = val_losses_different_metrics[metric]
+                row += [np.mean(losses)]
+                row += [scipy.stats.sem(losses)]
+                row += [','.join(str(l) for l in losses)]
+            loss_out.write('\t'.join(str(x) for x in row) + '\n')
     return (best_params, best_loss)
 
 
@@ -329,7 +370,7 @@ def nested_cross_validate(x, y, search_type, regression,
                 regression)
         results = predictor.train_and_validate(best_model, x_train, y_train,
                 x_validate, y_validate, best_params['max_num_epochs'])
-        val_loss = determine_val_loss(results)
+        val_loss, val_loss_different_metrics = determine_val_loss(results)
         optimal_choices += [(best_params, val_loss)]
         print(('FINISHED OUTER FOLD {} of {}; validation loss on this outer '
             'fold is {}').format(i+1, num_outer_splits, val_loss))
@@ -400,6 +441,15 @@ def main(args):
             # Use buffering=1 for line buffering (write each line immediately)
             params_mean_val_loss_out_tsv_f = open(
                     args.params_mean_val_loss_out_tsv, 'w', buffering=1)
+
+            # Write header
+            header = ['params']
+            metrics = _regression_losses if regression else _classification_losses
+            for metric in metrics:
+                header += [metric + '_mean']
+                header += [metric + '_sem']
+                header += [metric + '_values']
+            params_mean_val_loss_out_tsv_f.write('\t'.join(header) + '\n')
         else:
             params_mean_val_loss_out_tsv_f = None
 
@@ -480,6 +530,15 @@ def main(args):
             # Use buffering=1 for line buffering (write each line immediately)
             params_mean_val_loss_out_tsv_f = open(
                     args.params_mean_val_loss_out_tsv, 'w', buffering=1)
+
+            # Write header
+            header = ['params']
+            metrics = _regression_losses if regression else _classification_losses
+            for metric in metrics:
+                header += [metric + '_mean']
+                header += [metric + '_sem']
+                header += [metric + '_values']
+            params_mean_val_loss_out_tsv_f.write('\t'.join(header) + '\n')
         else:
             params_mean_val_loss_out_tsv_f = None
 
@@ -574,7 +633,7 @@ if __name__ == "__main__":
                   "only applicable when SEARCH_TYPE is 'random'"))
     parser.add_argument('--params-mean-val-loss-out-tsv',
             help=("If set, path to out TSV at which to write the mean "
-                  "validation loss (across folds) for each choice of "
+                  "validation losses (across folds) for each choice of "
                   "hyperparameters; with nested cross-validation, each "
                   "choice of hyperparameters is written for *each* outer "
                   "fold"))
