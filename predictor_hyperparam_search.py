@@ -246,7 +246,8 @@ def hyperparam_random_dist(num_samples):
 
 
 def search_for_hyperparams(x, y, search_type, regression,
-        num_splits=5, loss_out=None, num_random_samples=None):
+        num_splits=5, loss_out=None, num_random_samples=None,
+        max_sem=None):
     """Search for optimal hyperparameters.
 
     This uses hyperparam_grid() to find the grid of hyperparameters over
@@ -267,10 +268,14 @@ def search_for_hyperparams(x, y, search_type, regression,
             validation loss values for each choice of hyperparameters
         num_random_samples: number of random samples to use, if search_type
             is 'random' (if None, use default)
+        max_sem: maximum standard error of the mean (SEM) on the loss to allow
+            the hyperparameters with that loss to be chosen as the 'best'
+            choice of hyperparameters (if None, no limit)
 
     Returns:
-        tuple (params, loss) where params is the optimal choice of
+        tuple (params, loss, sem) where params is the optimal choice of
         hyperparameters and loss is the mean validation loss at that choice
+        and sem of the standard error of the loss
     """
     if num_random_samples is not None and search_type != 'random':
         raise Exception("Cannot set num_random_samples without random search")
@@ -284,6 +289,7 @@ def search_for_hyperparams(x, y, search_type, regression,
 
     best_params = None
     best_loss = None
+    best_loss_sem = None
     for params in params_iter:
         # Compute a mean validation loss at this choice of params
         val_losses_default, val_losses_different_metrics = cross_validate(
@@ -292,10 +298,29 @@ def search_for_hyperparams(x, y, search_type, regression,
         mean_loss = np.mean(val_losses_default)
         sem_loss = scipy.stats.sem(val_losses_default)
 
-        if best_params is None or mean_loss < best_loss:
+        # Decide whether to update the current best choice of hyperparameters
+        if mean_loss is np.nan:
+            # mean_loss can be nan, e.g., for Spearman's rho if all predicted
+            # values are the same
+            # Do not update it in this case
+            update_choice = False
+        else:
+            if max_sem is not None and sem_loss > max_sem:
+                # The SEM of the mean loss is too high; do not allow this
+                # choice to be the best choice
+                update_choice = False
+            else:
+                if best_params is None:
+                    update_choice = True
+                else:
+                    # Update the best choice iff mean_loss < best_loss
+                    update_choice = (mean_loss < best_loss)
+
+        if update_choice:
             # This is the current best choice of params
             best_params = params
             best_loss = mean_loss
+            best_loss_sem = sem_loss
 
         if loss_out is not None:
             row = [params]
@@ -306,12 +331,20 @@ def search_for_hyperparams(x, y, search_type, regression,
                 row += [scipy.stats.sem(losses)]
                 row += [','.join(str(l) for l in losses)]
             loss_out.write('\t'.join(str(x) for x in row) + '\n')
-    return (best_params, best_loss)
+
+    if best_params is None:
+        raise Exception(("Could not find best choice of hyperparameters "
+            "because either (1) all losses were nan; or (2) all standard "
+            "errors of the mean loss for each choice were too high (i.e., "
+            "no model is robust enough)"))
+
+    return (best_params, best_loss, best_loss_sem)
 
 
 def nested_cross_validate(x, y, search_type, regression,
         num_outer_splits=5, num_inner_splits=5, loss_out=None,
-        num_random_samples=None):
+        num_random_samples=None,
+        max_sem=None):
     """Perform nested cross-validation to validate model and search.
 
     This is useful to verify the overall model and model fitting approach
@@ -337,6 +370,9 @@ def nested_cross_validate(x, y, search_type, regression,
             each outer fold)
         num_random_samples: number of random samples to use, if search_type
             is 'random' (if None, use default)
+        max_sem: maximum standard error of the mean (SEM) on the loss to allow
+            the hyperparameters with that loss to be chosen as the 'best'
+            choice of hyperparameters (if None, no limit)
 
     Returns:
         list x of tuples (params, loss) where params is an optimal choice
@@ -354,9 +390,10 @@ def nested_cross_validate(x, y, search_type, regression,
         # Search for hyperparameters on this outer fold of the data
 
         # Start a new model for this fold
-        best_params, _ = search_for_hyperparams(x_train, y_train,
+        best_params, _, _ = search_for_hyperparams(x_train, y_train,
                 search_type, num_splits=num_inner_splits, loss_out=loss_out,
-                num_random_samples=num_random_samples)
+                num_random_samples=num_random_samples,
+                max_sem=max_sem)
 
         # Compute a loss for this choice of parameters as follows:
         #   (1) train the model on all the training data (in the inner
@@ -453,12 +490,13 @@ def main(args):
         else:
             params_mean_val_loss_out_tsv_f = None
 
-        params, loss = search_for_hyperparams(x, y,
+        params, loss, loss_sem = search_for_hyperparams(x, y,
                 args.search_type,
                 regression,
                 num_splits=args.hyperparam_search_cross_val_num_splits,
                 loss_out=params_mean_val_loss_out_tsv_f,
-                num_random_samples=args.num_random_samples)
+                num_random_samples=args.num_random_samples,
+                max_sem=args.max_sem)
 
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
@@ -467,6 +505,7 @@ def main(args):
         print('Hyperparameter search results:')
         print('  Best parameters: {}'.format(params))
         print('  Mean validation loss of these parameters: {}'.format(loss))
+        print('  Std. err. of validation loss of these parameters: {}'.format(loss_sem))
         print('***')
 
         # Test a model with these parameters
@@ -548,7 +587,8 @@ def main(args):
                 num_outer_splits=args.nested_cross_val_outer_num_splits,
                 num_inner_splits=args.hyperparam_search_cross_val_num_splits,
                 loss_out=params_mean_val_loss_out_tsv_f,
-                num_random_samples=args.num_random_samples)
+                num_random_samples=args.num_random_samples,
+                max_sem=args.max_sem)
 
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
@@ -631,6 +671,13 @@ if __name__ == "__main__":
             default=1000,
             help=("Number of random samples to use for random search; "
                   "only applicable when SEARCH_TYPE is 'random'"))
+    parser.add_argument('--max-sem',
+            type=float,
+            help=("If set, a maximum standard error of the mean loss (across "
+                  "folds) to permit a choice of hyperparameters to be chosen "
+                  "as the best choice. 0.05 is reasonable for most "
+                  "applications. If not set (default), there is no "
+                  "restriction on this"))
     parser.add_argument('--params-mean-val-loss-out-tsv',
             help=("If set, path to out TSV at which to write the mean "
                   "validation losses (across folds) for each choice of "
