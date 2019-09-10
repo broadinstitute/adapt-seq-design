@@ -405,9 +405,9 @@ def nested_cross_validate(x, y, search_type, regression,
         #       as a test set for best_params
         best_model = predictor.construct_model(best_params, x_train.shape,
                 regression)
-        results = predictor.train_and_validate(best_model, x_train, y_train,
+        _, val_results = predictor.train_and_validate(best_model, x_train, y_train,
                 x_validate, y_validate, best_params['max_num_epochs'])
-        val_loss, val_loss_different_metrics = determine_val_loss(results)
+        val_loss, val_loss_different_metrics = determine_val_loss(val_results)
         optimal_choices += [(best_params, val_loss)]
         print(('FINISHED OUTER FOLD {} of {}; validation loss on this outer '
             'fold is {}').format(i+1, num_outer_splits, val_loss))

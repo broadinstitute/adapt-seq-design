@@ -820,8 +820,9 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         max_num_epochs: maximum number of epochs to train for
 
     Returns:
-        dict with validation metrics at the end (keys are 'loss'
-        and ('auc-roc' or 'r-spearman'))
+        tuple (dict with training metrics at the end, dict with validation
+        metrics at the end); keys in the dicts are 'loss' and
+        ('bce' or 'mse') and ('auc-roc' or 'r-spearman')
     """
     # Define an optimizer
     if model.regression:
@@ -915,11 +916,16 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
             print('    AUC-ROC: {}'.format(validate_auc_roc_metric.result()))
             print('    AUC-PR: {}'.format(validate_auc_pr_metric.result()))
 
+        train_loss = train_loss_metric.result()
         val_loss = validate_loss_metric.result()
         if model.regression:
+            train_mse = train_mse_metric.result()
+            train_spearman_corr = train_spearman_corr_metric.result()
             val_mse = validate_mse_metric.result()
             val_spearman_corr = validate_spearman_corr_metric.result()
         else:
+            train_bce = train_bce_metric.result()
+            train_auc_roc = train_auc_roc_metric.result()
             val_bce = validate_bce_metric.result()
             val_auc_roc = validate_auc_roc_metric.result()
 
@@ -935,13 +941,13 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         train_accuracy_metric.reset_states()
         train_auc_roc_metric.reset_states()
         train_auc_pr_metric.reset_states()
+        validate_loss_metric.reset_states()
         validate_mse_metric.reset_states()
         validate_mae_metric.reset_states()
         validate_mape_metric.reset_states()
         validate_r2_score_metric.reset_states()
         validate_pearson_corr_metric.reset_states()
         validate_spearman_corr_metric.reset_states()
-        validate_loss_metric.reset_states()
         validate_bce_metric.reset_states()
         validate_accuracy_metric.reset_states()
         validate_auc_roc_metric.reset_states()
@@ -961,12 +967,16 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
             break
 
     if model.regression:
-        val_metrics = {'loss': val_loss, 'mse': val_mse.numpy(),
+        train_metrics = {'loss': train_loss.numpy(), 'mse': train_mse.numpy(),
+                'r-spearman': train_spearman_corr}
+        val_metrics = {'loss': val_loss.numpy(), 'mse': val_mse.numpy(),
                 'r-spearman': val_spearman_corr}
     else:
-        val_metrics = {'loss': val_loss, 'bce': val_bce.numpy(),
+        train_metrics = {'loss': train_loss.numpy(), 'bce': train_bce.numpy(),
+                'auc-roc': train_auc_roc}
+        val_metrics = {'loss': val_loss.numpy(), 'bce': val_bce.numpy(),
                 'auc-roc': val_auc_roc}
-    return val_metrics
+    return train_metrics, val_metrics
 
 
 def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
@@ -1113,10 +1123,10 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         plt.savefig(plot_predictions)
 
     if model.regression:
-        test_metrics = {'loss': test_loss, 'mse': test_mse.numpy(),
+        test_metrics = {'loss': test_loss.numpy(), 'mse': test_mse.numpy(),
                 'r-spearman': test_spearman_corr}
     else:
-        test_metrics = {'loss': test_loss, 'bce': test_bce.numpy(),
+        test_metrics = {'loss': test_loss.numpy(), 'bce': test_bce.numpy(),
                 'auc-roc': test_auc_roc}
     return test_metrics
 
