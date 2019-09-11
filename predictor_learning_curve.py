@@ -11,6 +11,8 @@ import random
 import parse_data
 import predictor
 
+import numpy as np
+
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -170,6 +172,14 @@ def compute_learning_curve(params, x, y, num_splits=5,
         for size_i in range(num_sizes):
             print('Training on sampling {} of {} of the training set'.format(
                 size_i+1, num_sizes))
+
+            if params['regression']:
+                # Print what the MSE would be if only predicting the mean of
+                # the training data
+                print('  MSE on train data if predicting mean of train data:',
+                        np.mean(np.square(np.mean(y_train) - y_train.ravel())))
+                print('  MSE on validation data if predicting mean of train data:',
+                        np.mean(np.square(np.mean(y_train) - y_validate.ravel())))
 
             # Sample from all data points, train, and then run
             # predictor.test() on the validation data for this fold to
