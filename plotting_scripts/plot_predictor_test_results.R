@@ -84,7 +84,9 @@ p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + xlab("Activity") + ylab("Density")
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
-               legend.position=c(0.1,0.9))
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=10),
+               legend.title=element_text(size=10))
 p.output.dist <- p
 #####################################################################
 
@@ -103,12 +105,14 @@ p <- p + scale_color_viridis() # adjust color gradient
 p <- p + xlab("True activity") + ylab("Predicted activity")
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
-               legend.position=c(0.05,0.95))
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=10),
+               legend.title=element_text(size=10))
 p.true.vs.predicted <- p
 #####################################################################
 
 #####################################################################
-# Plot true activity value for different predicted quantiles
+# Plot true activity value for different predicted quantile groupings
 # y-axis shows the quantile (grouped) for the predicted activity and
 # x-axis shows the distribution of true activity values in that
 # quantile
@@ -116,20 +120,44 @@ p.true.vs.predicted <- p
 
 # Create a separate data frame with a quantile factor that also
 # includes 'all' for all data points
-test.results.with.quantile <- data.frame(test.results)
-test.results.with.quantile$predicted.quantile <- ntile(test.results.with.quantile$predicted.activity, 4)
+test.results.with.quantile.group <- data.frame(test.results)
+test.results.with.quantile.group$predicted.quantile <- ntile(test.results.with.quantile.group$predicted.activity, 4)
 test.results.all <- data.frame(test.results)
 test.results.all$predicted.quantile <- rep("all", n=nrow(test.results.all))
-test.results.with.quantile <- rbind(test.results.with.quantile,
-                                    test.results.all)
-test.results.with.quantile$predicted.quantile <- factor(test.results.with.quantile$predicted.quantile,
-                                                        levels=c("all", "1", "2", "3", "4"))
+test.results.with.quantile.group <- rbind(test.results.with.quantile.group,
+                                          test.results.all)
+test.results.with.quantile.group$predicted.quantile <- factor(test.results.with.quantile.group$predicted.quantile,
+                                                              levels=c("all", "1", "2", "3", "4"))
 
-p <- ggplot(test.results.with.quantile, aes(x=true.activity, y=predicted.quantile))
+p <- ggplot(test.results.with.quantile.group, aes(x=true.activity, y=predicted.quantile))
 p <- p + xlab("Activity") + ylab("Quartile")
 p <- p + geom_density_ridges()
 p <- p + theme_bw(base_size=18)    # bw & larger font sizes
-p.by.predicted.quantile <- p
+p.by.predicted.quantile.group <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity quantile vs. predicted activity quantile
+# x-axis shows the quantile for the true activity and
+# y-axis shows the quantile for the predicted
+
+# Create a separate data frame with a quantile factor that also
+# includes 'all' for all data points
+test.results.with.quantile <- data.frame(test.results)
+test.results.with.quantile$predicted.quantile <- ecdf(test.results.with.quantile$predicted.activity)(test.results.with.quantile$predicted.activity)
+test.results.with.quantile$true.quantile <- ecdf(test.results.with.quantile$true.activity)(test.results.with.quantile$true.activity)
+
+p <- ggplot(test.results.with.quantile, aes(x=true.quantile, y=predicted.quantile))
+p <- p + geom_point(aes(color=crrna.pos))
+p <- p + geom_smooth(method=lm)
+p <- p + scale_color_viridis() # adjust color gradient
+p <- p + xlab("True activity quantile") + ylab("Predicted activity quantile")
+p <- p + theme_bw(base_size=18)    # bw & larger font sizes
+p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=10),
+               legend.title=element_text(size=10))
+p.true.vs.predicted.quantiles <- p
 #####################################################################
 
 #####################################################################
@@ -198,7 +226,9 @@ p <- p + scale_color_viridis() # adjust color gradient
 p <- p + xlab("True activity") + ylab("Predicted activity")
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
-               legend.position=c(0.05,0.95))
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=10),
+               legend.title=element_text(size=10))
 # Include text with the rho value
 p <- p + annotate(geom='text', x=Inf, y=Inf, hjust=1, vjust=1, size=5,
                   label=as.character(as.expression(substitute(
@@ -211,7 +241,8 @@ p.true.vs.predicted.summarized <- p
 # Produce PDF
 g <- arrangeGrob(p.output.dist,
                  p.true.vs.predicted,
-                 p.by.predicted.quantile,
+                 p.by.predicted.quantile.group,
+                 p.true.vs.predicted.quantiles,
                  p.true.vs.predicted.faceted.by.crrna,
                  p.rho.across.crrnas,
                  p.true.vs.predicted.summarized,
