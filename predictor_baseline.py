@@ -56,6 +56,11 @@ def parse_args():
             default=20,
             help=("nt of target sequence context to include alongside each "
                   "guide"))
+    parser.add_argument('--regression-scoring-method',
+            choices=['mse', 'rho'],
+            default='mse',
+            help=("Method to use for scoring regression results; 'mse' for "
+                  "mean squared error, 'rho' for Spearman rank correlation"))
     parser.add_argument('--test-split-frac',
             type=float,
             default=0.3,
@@ -171,12 +176,15 @@ def classify(x_train, y_train, x_validate, y_validate, x_test, y_test):
         print('#'*20)
 
 
-def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
+def regress(x_train, y_train, x_validate, y_validate, x_test, y_test,
+        scoring_method='mse'):
     """Perform regression.
 
     Args:
         x_{train,validate,test}: input data for train/validate/test
         y_{train,validate,test}: output labels for train/validate/test
+        scoring_method: method to use for scoring test results; 'mse' (mean
+            squared error) or 'rho' (Spearman's rank correlation)
     """
     # With models, perform cross-validation to determine hyperparameters
     # Most of the built-in cross-validators find the best choice based on
@@ -194,6 +202,15 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
         return rho
     rho_scorer = sklearn.metrics.make_scorer(rho_f,
             greater_is_better=True)
+    mse_scorer = sklearn.metrics.make_scorer(
+            sklearn.metrics.mean_squared_error,
+            greater_is_better=False)
+    if scoring_method == 'mse':
+        scorer = mse_scorer
+    elif scoring_method == 'rho':
+        scorer = rho_scorer
+    else:
+        raise ValueError("Unknown scoring method %s" % scoring_method)
 
     def fit_and_test_model(reg, model_desc, hyperparams):
         """Fit and test model.
@@ -254,7 +271,7 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
     }
     reg = sklearn.linear_model.Lasso(max_iter=10000, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, scoring=rho_scorer,
+            param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=1)
     fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
 
@@ -264,7 +281,7 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
     }
     reg = sklearn.linear_model.Ridge(max_iter=10000, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, scoring=rho_scorer,
+            param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=1)
     fit_and_test_model(reg_cv, 'L2 linear regression', hyperparams=reg_cv)
 
@@ -283,7 +300,7 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
     }
     reg = sklearn.linear_model.ElasticNet(max_iter=1000, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, scoring=rho_scorer,
+            param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=1)
     fit_and_test_model(reg_cv, 'L1+L2 linear regression',
             hyperparams=reg_cv)
@@ -299,7 +316,7 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test):
     }
     reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls')
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, scoring=rho_scorer,
+            param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=2)
     fit_and_test_model(reg_cv, 'Gradient Boosting regression',
             hyperparams=reg_cv)
@@ -329,7 +346,7 @@ def main():
 
     if regression:
         regress(x_train, y_train, x_validate, y_validate,
-                x_test, y_test)
+                x_test, y_test, scoring_method=args.regression_scoring_method)
     else:
         classify(x_train, y_train, x_validate, y_validate,
                 x_test, y_test)
