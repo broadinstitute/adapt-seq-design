@@ -980,7 +980,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
 
 
 def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
-            x_test_pos=None, write_test_tsv=None):
+            x_test_pos=None, write_test_tsv=None, y_train=None):
     """Test a model.
 
     This prints metrics.
@@ -996,6 +996,8 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
             plotting with plot_predictions)
         write_test_tsv: if set, path to TSV at which to write data on predictions
             as well as the testing sequences (one row per data point)
+        y_train: (optional) if set, print metrics if the predictor simply
+            predicts the mean of the training data
 
     Returns:
         dict with test metrics at the end (keys are 'loss'
@@ -1065,6 +1067,12 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     test_accuracy_metric.reset_states()
     test_auc_roc_metric.reset_states()
     test_auc_pr_metric.reset_states()
+
+    if model.regression and y_train is not None:
+        # Print what the MSE would be if only predicting the mean of
+        # the training data
+        print('  MSE on test data if predicting mean of train data:',
+                np.mean(np.square(np.mean(y_train) - np.array(all_true))))
 
     if write_test_tsv:
         # Determine features for all input sequences
@@ -1186,7 +1194,8 @@ def main():
     # Test the model
     test(model, x_test, y_test, plot_roc_curve=args.plot_roc_curve,
             plot_predictions=args.plot_predictions,
-            x_test_pos=x_test_pos, write_test_tsv=args.write_test_tsv)
+            x_test_pos=x_test_pos, write_test_tsv=args.write_test_tsv,
+            y_train=y_train)
 
 
 if __name__ == "__main__":
