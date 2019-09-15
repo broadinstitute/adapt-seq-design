@@ -51,6 +51,8 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
           sd   = sd     (xx[[col]], na.rm=na.rm),
           median = median(xx[[col]], na.rm=na.rm),
           pctile.05 = quantile(xx[[col]], 0.05, na.rm=na.rm)[[1]],
+          pctile.20 = quantile(xx[[col]], 0.20, na.rm=na.rm)[[1]],
+          pctile.80 = quantile(xx[[col]], 0.80, na.rm=na.rm)[[1]],
           pctile.95 = quantile(xx[[col]], 0.95, na.rm=na.rm)[[1]]
         )
       },
@@ -156,10 +158,10 @@ p + ggsave(OUT.DIST.TRAIN.AND.TEST.PDF, width=8, height=8, useDingbats=FALSE)
 # activity between and within (across targets) guides
 # This is meant to show how the variation compares across guides vs. across
 # targets for the same guide
-# Each row corresponds to a guide (crRNA): we show a dot for its mean
+# Each row corresponds to a guide (crRNA): we show a dot for its median
 # activity across the targets, and also error bars across the targets (showing
-# standard deviation); the rows are sorted such that the smallest mean is on
-# the bottom and the largest mean is on the top
+# 20/80% quantiles); the rows are sorted such that the smallest median is on
+# the bottom and the largest median is on the top
 
 # Summarize activity across targets for each guide (crRNA); use the
 # guide position (guide.pos.nt) as an identifier to group by
@@ -170,15 +172,15 @@ guide.target.expandpos.summarized <- summarySE(guide.target.expandpos,
 # Add a column, order, giving the order of the guides (rows) sorted by mean
 # out.logk.median value (in the column by that name)
 guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.summarized,
-                                                       order=rank(out.logk.median, ties.method="first"))
+                                                       order=rank(median, ties.method="first"))
 
-# Add upper/lower bounds according to standard deviation
+# Add upper/lower bounds according to quantiles
 guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.summarized.ordered,
-                                                       lower=out.logk.median-sd,
-                                                       upper=out.logk.median+sd)
+                                                       lower=pctile.20,
+                                                       upper=pctile.80)
 
 # Produce an ordered dot plot
-p <- ggplot(guide.target.expandpos.summarized.ordered, aes(x=out.logk.median, y=order))
+p <- ggplot(guide.target.expandpos.summarized.ordered, aes(x=median, y=order))
 p <- p + geom_errorbarh(aes(xmin=lower, xmax=upper), height=0, size=0.5, color="black", alpha=0.5)
 p <- p + geom_point(size=1)
 p <- p + xlab("Activity (variation is across targets)") + ylab("crRNA")
