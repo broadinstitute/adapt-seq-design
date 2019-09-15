@@ -10,6 +10,7 @@ require(ggplot2)
 require(reshape2)
 require(viridis)
 require(ggridges)
+require(stringr)
 
 IN.TABLE <- "data/CCF005_pairs_annotated.curated.tsv"
 OUT.DIST.PDF <- "out/cas13-pair-activity-dist.pdf"
@@ -17,6 +18,7 @@ OUT.DIST.BLOCKS.FACETS.PDF <- "out/cas13-pair-activity-dist.blocks.facets.pdf"
 OUT.DIST.BLOCKS.RIDGES.PDF <- "out/cas13-pair-activity-dist.blocks.ridges.pdf"
 OUT.DIST.TRAIN.AND.TEST.PDF <- "out/cas13-pair-activity-dist.train-and-test.pdf"
 OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF <- "out/cas13-pair-activity-dist.between-and-within-guides.pdf"
+OUT.DIST.GC.CONTENT.PDF <- "out/cas13-pair-activity-dist.gc-content.pdf"
 
 
 ## A helper function from:
@@ -187,6 +189,37 @@ p <- p + xlab("Activity (variation is across targets)") + ylab("crRNA")
 p <- p + theme(axis.text.y=element_blank(), # y-axis text/ticks are meaningless
                axis.ticks.y=element_blank())
 p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF, width=8, height=8, useDingbats=FALSE)
+##############################################################################
+
+##############################################################################
+# Plot GC content of each guide vs. its median activity (across targets)
+
+# Summarize activity across targets for each guide (crRNA); use the
+# guide sequence to group by (and guide.pos.nt, to keep that variable too)
+guide.target.expandpos.summarized <- summarySE(guide.target.expandpos,
+                                               measurevar="out.logk.median",
+                                               groupvars=c("guide.seq", "guide.pos.nt"))
+
+# Compute GC content of each guide
+guide.target.expandpos.summarized <- transform(guide.target.expandpos.summarized,
+    gc.content=(str_count(guide.seq, "G") + str_count(guide.seq, "C")) / nchar(as.character(guide.seq)))
+
+# Compute Spearman's rho for the mean values
+spearman.rho <- cor(guide.target.expandpos.summarized$gc.content,
+           guide.target.expandpos.summarized$median,
+           method="spearman")
+
+# Produce a scatter plot
+p <- ggplot(guide.target.expandpos.summarized, aes(x=gc.content, y=median))
+p <- p + geom_point(aes(color=guide.pos.nt))
+p <- p + scale_color_viridis() # adjust color gradient
+p <- p + xlab("GC content") + ylab("Median activity")
+# Include text with the rho value
+p <- p + annotate(geom='text', x=Inf, y=Inf, hjust=1, vjust=1, size=5,
+                  label=as.character(as.expression(substitute(
+                      rho~"="~spearman.rho, list(spearman.rho=format(spearman.rho, digits=3))))),
+                  parse=TRUE)
+p + ggsave(OUT.DIST.GC.CONTENT.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
 # Remove the empty Rplots.pdf created above
