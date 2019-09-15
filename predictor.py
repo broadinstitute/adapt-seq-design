@@ -103,6 +103,13 @@ def parse_args():
             default=1,
             help=("Dimension of each locally connected layer (i.e., of its "
                   "output space)"))
+    parser.add_argument('--skip-batch-norm',
+            action='store_true',
+            help=("If set, skip batch normalization layer"))
+    parser.add_argument('--activation-fn',
+            choices=['relu', 'elu'],
+            default='relu',
+            help=("Activation function to use on hidden layers"))
     parser.add_argument('--dropout-rate',
             type=float,
             default=0.25,
@@ -113,6 +120,14 @@ def parse_args():
             help=("L2 regularization factor. This is applied to weights "
                   "(kernal_regularizer). Note that this does not regularize "
                   "bias of activity."))
+    parser.add_argument('--batch-size',
+            type=int,
+            default=32,
+            help=("Batch size"))
+    parser.add_argument('--learning-rate',
+            type=float,
+            default=0.00001,
+            help=("Learning rate for Adam optimizer"))
     parser.add_argument('--max-num-epochs',
             type=int,
             default=1000,
@@ -352,6 +367,8 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         super(CasCNNWithParallelFilters, self).__init__()
 
         self.regression = regression
+        self.batch_size = params['batch_size']
+        self.learning_rate = params['learning_rate']
 
         # Construct groups, where each consists of a convolutional
         # layer with a particular width, a batch normalization layer, and
@@ -373,7 +390,7 @@ class CasCNNWithParallelFilters(tf.keras.Model):
                     filter_width,
                     strides=1,  # stride by 1
                     padding='valid',
-                    activation='relu',
+                    activation=params['activation_fn'],
                     name='group_w' + str(filter_width) + '_conv')
             # Note that the total number of filters in this layer will be
             # len(conv_filter_width)*conv_layer_num_filters since there are
@@ -382,12 +399,17 @@ class CasCNNWithParallelFilters(tf.keras.Model):
             # Add a batch normalization layer
             # It should not matter whether this comes before or after the
             # pool layer, as long as it is after the conv layer
-            # This is applied after the relu activation of the conv layer; the
+            # This is applied after the activation of the conv layer; the
             # original batch norm applies batch normalization before the
             # activation function, but more recent work seems to apply it
             # after activation
-            batchnorm = tf.keras.layers.BatchNormalization(
-                    name='group_w' + str(filter_width) + '_batchnorm')
+            # Only use if the parameter specifying to skip batch norm is
+            # not set
+            if params['skip_batch_norm'] is True:
+                batchnorm = None
+            else:
+                batchnorm = tf.keras.layers.BatchNormalization(
+                        name='group_w' + str(filter_width) + '_batchnorm')
 
             # Add a pooling layer
             # Pool over a window of width pool_window, for
@@ -446,7 +468,7 @@ class CasCNNWithParallelFilters(tf.keras.Model):
                         locally_connected_dim,
                         lc_width,
                         strides=stride,
-                        activation='relu',
+                        activation=params['activation_fn'],
                         name='group_w' + str(filter_width) + '_lc_w' + str(lc_width))
                     lcs_for_conv += [lc]
                 self.lcs += [lcs_for_conv]
@@ -503,7 +525,7 @@ class CasCNNWithParallelFilters(tf.keras.Model):
                     name='dropout_' + str(i+1))
             fc = tf.keras.layers.Dense(
                     fc_hidden_dim,
-                    activation='relu',
+                    activation=params['activation_fn'],
                     name='fc_' + str(i+1))
             self.dropouts += [dropout]
             self.fcs += [fc]
@@ -535,7 +557,8 @@ class CasCNNWithParallelFilters(tf.keras.Model):
             # Run the convolutional layer and batch norm on x, to
             # start this group
             group_x = conv(x)
-            group_x = batchnorm(group_x, training=training)
+            if batchnorm is not None:
+                group_x = batchnorm(group_x, training=training)
 
             # Run the pooling layer on the current group output (group_x)
             if pool_2 is None:
@@ -828,9 +851,9 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     if model.regression:
         # When doing regression, sometimes the output would always be the
         # same value regardless of input; decreasing the learning rate fixed this
-        optimizer = tf.keras.optimizers.Adam(lr=0.00001)
+        optimizer = tf.keras.optimizers.Adam(lr=model.learning_rate)
     else:
-        optimizer = tf.keras.optimizers.Adam()
+        optimizer = tf.keras.optimizers.Adam(lr=model.learning_rate)
 
     # model may be new, but calling train_step on a new model will yield
     # an error; tf.function was designed such that a new one is needed
@@ -840,8 +863,10 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     tf_train_step = tf.function(train_step)
     tf_validate_step = tf.function(validate_step)
 
-    train_ds = make_dataset_and_batch(x_train, y_train)
-    validate_ds = make_dataset_and_batch(x_validate, y_validate)
+    train_ds = make_dataset_and_batch(x_train, y_train,
+            batch_size=model.batch_size)
+    validate_ds = make_dataset_and_batch(x_validate, y_validate,
+            batch_size=model.batch_size)
 
     # For classification, determine class weights
     if not model.regression:
@@ -1005,7 +1030,8 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     """
     tf_test_step = tf.function(test_step)
 
-    test_ds = make_dataset_and_batch(x_test, y_test)
+    test_ds = make_dataset_and_batch(x_test, y_test,
+            batch_size=model.batch_size)
 
     def determine_sample_weights(outputs):
         if not model.regression:

@@ -93,6 +93,8 @@ def cross_validate(params, x, y, num_splits, regression):
         tuple ([default validation loss for each fold], dict {metric: [list of
         validation losses for metric, for each fold]})
     """
+    print('Performing cross-validation with parameters: {}'.format(params))
+
     val_losses_default = []
     val_losses_different_metrics = defaultdict(list)
     i = 0
@@ -161,8 +163,12 @@ def hyperparam_grid():
             'pool_strategy': ['max', 'avg', 'max-and-avg'],
             'locally_connected_width': [None, [1], [2], [1, 2], [1, 2, 3, 4]],
             'locally_connected_dim': [1, 2, 4],
+            'skip_batch_norm': [False, True],
+            'activation_fn': ['relu', 'elu'],
             'dropout_rate': [0, 0.25, 0.50],
             'l2_factor': [0, 0.0001, 0.001, 0.01, 0.1],
+            'batch_size': [8, 16, 32, 64],
+            'learning_rate': [0.01, 0.001, 0.0001, 0.00001],
             'max_num_epochs': [1000]
     }
     keys_ordered = sorted(grid.keys())
@@ -219,22 +225,31 @@ def hyperparam_random_dist(num_samples):
         def d():
             return np.random.lognormal(mean, stdev)
         return d
+    def loguniform(log_low=-5.0, log_high=0.0, base=10.0):
+        # values base^x where x is uniform in [log_low, log_high)
+        def d():
+            return base**np.random.uniform(log_low, log_high)
+        return d
 
     # Map each parameter to a distribution of values
     space = {
-             'conv_num_filters': uniform_int(5, 25),
+             'conv_num_filters': uniform_int(10, 100),
              'conv_filter_width': uniform_discrete([
                  [1], [2], [3], [4],
-                 [1, 2], [1, 2, 3], [1, 2, 4], [1, 2, 3, 4]]),
-             'pool_window_width': uniform_int(1, 6),
+                 [1, 2], [1, 2, 3], [1, 2, 3, 4]]),
+             'pool_window_width': uniform_int(1, 4),
              'fully_connected_dim': uniform_nested_dist(1, 3,
-                 uniform_int(10, 50)),
+                 uniform_int(25, 75)),
              'pool_strategy': uniform_discrete(['max', 'avg', 'max-and-avg']),
              'locally_connected_width': uniform_discrete([None,
-                 [1], [2], [3], [1, 2], [1, 2, 3]]),
-             'locally_connected_dim': uniform_int(1, 6),
+                 [1], [2], [1, 2]]),
+             'locally_connected_dim': uniform_int(1, 5),
+             'skip_batch_norm': uniform_discrete([False, True]),
+             'activation_fn': uniform_discrete(['relu', 'elu']),
              'dropout_rate': uniform_continuous(0, 0.5),
-             'l2_factor': lognormal(-12.0, 5.0),
+             'l2_factor': lognormal(-13.0, 4.0),
+             'batch_size': uniform_int(4, 65),
+             'learning_rate': loguniform(-6.0, -2.0, 10.0),
              'max_num_epochs': constant(1000)
     }
     for i in range(num_samples):
@@ -255,7 +270,7 @@ def search_for_hyperparams(x, y, search_type, regression,
 
     On each point p in the grid, this runs k-fold cross-validation, computes
     the mean validation loss over the folds for p, and then returns the
-    p with the smallest loss. As a single loss value, this uses the default
+    p with the smallest mean loss. As a single loss value, this uses the default
     loss defined above determine_val_loss().
 
     Args:
@@ -675,7 +690,7 @@ if __name__ == "__main__":
             type=float,
             help=("If set, a maximum standard error of the mean loss (across "
                   "folds) to permit a choice of hyperparameters to be chosen "
-                  "as the best choice. 0.05 is reasonable for most "
+                  "as the best choice. 0.10 is reasonable for most "
                   "applications. If not set (default), there is no "
                   "restriction on this"))
     parser.add_argument('--params-mean-val-loss-out-tsv',
