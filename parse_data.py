@@ -1,6 +1,7 @@
 """Classes and methods to parse data for input to ML tools.
 """
 
+from collections import defaultdict
 import random
 
 import numpy as np
@@ -525,7 +526,8 @@ class Cas13ActivityParser:
 
 
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
-            shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
+            shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False,
+            normalize_crrna_activity=False):
         """
         Args:
             subset: either 'exp' (use only experimental data points, which
@@ -565,6 +567,8 @@ class Cas13ActivityParser:
 
         self.make_feats_for_baseline = False
 
+        self.normalize_crrna_activity = False
+
         self.was_read = False
 
     def set_activity_mode(self, classify_activity, regress_on_all,
@@ -591,6 +595,12 @@ class Cas13ActivityParser:
         """Generate input features specifically for the baseline model.
         """
         self.make_feats_for_baseline = True
+
+    def set_normalize_crrna_activity(self):
+        """Normalize activity of each crRNA, across targets, to have mean 0 and
+        stdev 1.
+        """
+        self.normalize_crrna_activity = True
 
     def _gen_input_and_output(self, row):
         """Generate input features and output for each row.
@@ -723,6 +733,12 @@ class Cas13ActivityParser:
                 activity = 1
             else:
                 activity = 0
+        else:
+            if self.normalize_crrna_activity:
+                pos = int(row['guide_pos_nt'])
+                crrna_mean = self.crrna_activity_mean[pos]
+                crrna_stdev = self.crrna_activity_stdev[pos]
+                activity = (activity - crrna_mean) / crrna_stdev
 
         return (input_feats, activity)
 
@@ -768,6 +784,18 @@ class Cas13ActivityParser:
         if self.regress_only_on_active:
             rows = [row for row in rows if
                     float(row[header_idx['out_logk_median']]) >= self.ACTIVITY_THRESHOLD]
+
+        # Calculate the mean and stdev of activity for each crRNA (according
+        # to position)
+        activity_by_pos = defaultdict(list)
+        for row in rows:
+            pos = int(row[header_idx['guide_pos_nt']])
+            activity = float(row[header_idx['out_logk_median']])
+            activity_by_pos[pos].append(activity)
+        self.crrna_activity_mean = {pos: np.mean(activity_by_pos[pos])
+                for pos in activity_by_pos.keys()}
+        self.crrna_activity_stdev = {pos: np.std(activity_by_pos[pos])
+                for pos in activity_by_pos.keys()}
 
         # Generate input and outputs for each row
         inputs_and_outputs = []
@@ -997,7 +1025,7 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
         y = np.array(y_shuffled)
         skf = StratifiedKFold(n_splits=num_splits)
         def split_iter():
-            return sfk.split(x, y)
+            return skf.split(x, y)
     elif stratify_by_pos:
         x_with_pos = [(xi, _split_parser.pos_for_input(xi)) for xi in x]
         all_pos = np.array(sorted(set(pos for xi, pos in x_with_pos)))

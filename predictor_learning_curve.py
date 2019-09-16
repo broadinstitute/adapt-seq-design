@@ -293,6 +293,12 @@ if __name__ == "__main__":
             action='store_true',
             help=("If set, perform regression for Cas13 data only on the "
                   "active class"))
+    parser.add_argument('--cas13-normalize-crrna-activity',
+            action='store_true',
+            help=("If set, normalize the activity of each crRNA (guide) "
+                  "across its targets to have mean 0 and stdev 1; this means "
+                  "prediction is performed based on target differences (e.g., "
+                  "mismatches) rather than inherent sequence of the crRNA"))
     parser.add_argument('--context-nt',
             type=int,
             default=10,

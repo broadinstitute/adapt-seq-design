@@ -571,6 +571,8 @@ def main(args):
         regress_only_on_active = args.cas13_regress_only_on_active
         data_parser.set_activity_mode(
                 classify_activity, regress_on_all, regress_only_on_active)
+        if args.cas13_normalize_crrna_activity:
+            data_parser.set_normalize_crrna_activity()
     data_parser.read()
     parse_data._split_parser = data_parser
 
@@ -584,6 +586,7 @@ def main(args):
     if regression:
         # Print the mean outputs
         print('Mean train output: {}'.format(np.mean(y)))
+        print('Variance of train output: {}'.format(np.var(y)))
     else:
         # Print the fraction of the training data points that are in each class
         classes = set(tuple(yv) for yv in y)
@@ -707,6 +710,12 @@ if __name__ == "__main__":
             action='store_true',
             help=("If set, perform regression for Cas13 data only on the "
                   "active class"))
+    parser.add_argument('--cas13-normalize-crrna-activity',
+            action='store_true',
+            help=("If set, normalize the activity of each crRNA (guide) "
+                  "across its targets to have mean 0 and stdev 1; this means "
+                  "prediction is performed based on target differences (e.g., "
+                  "mismatches) rather than inherent sequence of the crRNA"))
     parser.add_argument('--context-nt',
             type=int,
             default=10,
