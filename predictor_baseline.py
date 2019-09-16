@@ -53,7 +53,7 @@ def parse_args():
                   "active class"))
     parser.add_argument('--context-nt',
             type=int,
-            default=20,
+            default=10,
             help=("nt of target sequence context to include alongside each "
                   "guide"))
     parser.add_argument('--regression-scoring-method',
