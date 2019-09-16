@@ -6,6 +6,7 @@ random search is similar to its RandomizedSearchCV.
 
 import argparse
 from collections import defaultdict
+import hashlib
 import itertools
 import os
 import pickle
@@ -23,7 +24,7 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
 _regression_losses = ['mse', '1_minus_rho']
-_default_regression_loss = '1_minus_rho'
+_default_regression_loss = 'mse'
 _classification_losses = ['bce', '1_minus_auc-roc']
 _default_classification_loss = '1_minus_auc-roc'
 def determine_val_loss(results):
@@ -263,7 +264,7 @@ def hyperparam_random_dist(num_samples):
 
 
 def search_for_hyperparams(x, y, search_type, regression, context_nt,
-        num_splits=5, loss_out=None, num_random_samples=None,
+        num_splits=5, loss_out=None, models_out=None, num_random_samples=None,
         max_sem=None):
     """Search for optimal hyperparameters.
 
@@ -284,6 +285,9 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
         num_splits: number of splits of the data to make (i.e., k in k-fold)
         loss_out: if set, an opened file object to write to write the
             validation loss values for each choice of hyperparameters
+        models_out: if set, a path to a directory in which to save model
+            parameters and trained weights for each choice of hyperparameters
+            (each choice is placed in a separate subfolder in here)
         num_random_samples: number of random samples to use, if search_type
             is 'random' (if None, use default)
         max_sem: maximum standard error of the mean (SEM) on the loss to allow
@@ -343,7 +347,9 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
             best_loss_sem = sem_loss
 
         if loss_out is not None:
-            row = [params]
+            # Write a row listing this model's hyperparameters and validation
+            # results
+            row = [params_hash(params), params]
             metrics_ordered = _regression_losses if regression else _classification_losses
             for metric in metrics_ordered:
                 losses = val_losses_different_metrics[metric]
@@ -351,6 +357,14 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
                 row += [scipy.stats.sem(losses)]
                 row += [','.join(str(l) for l in losses)]
             loss_out.write('\t'.join(str(x) for x in row) + '\n')
+
+        if models_out is not None:
+            # Train a model across all data, and save hyperparameters and
+            # weights
+            model_out_path = os.path.join(models_out,
+                    'model-' + params_hash(params))
+            train_and_save_model(params, x, y, regression, context_nt,
+                    num_splits, model_out_path)
 
     if best_params is None:
         raise Exception(("Could not find best choice of hyperparameters "
@@ -436,6 +450,92 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
     return optimal_choices
 
 
+def params_hash(params, length=8):
+    """Hash parameters.
+
+    This is useful for identifying a model (e.g., naming a directory in which
+    to save it).
+
+    This is the final 'length' hex digits of the hash. Python's hash()
+    function produces a hash with size dependent on the size of the input and
+    is inconsistent (depends on seed); using the SHA-224 hash function should
+    produce more uniform hash values.
+
+    Args:
+        params: dict of hyperparameters for a model
+        length: number of hex digits in hash
+
+    Returns:
+        hash of params
+    """
+    return hashlib.sha224(str(params).encode()).hexdigest()[-length:]
+
+
+def train_and_save_model(params, x, y, regression, context_nt,
+        hyperparam_search_cross_val_num_splits, out_path):
+    """Train and save a model.
+
+    This trains across all train/validate (non-test) data.
+
+    Args:
+        params: dict of hyperparameters for model
+        x: input data
+        y: labels
+        regression: True if performing regression; False if classification
+        context_nt: number of nt on each side of guide to use for context
+        hyperparam_search_cross_val_num_splits: number of splits used
+            for cross-validation during hyperparameter search
+        out_path: directory in which to save model parameters and
+            trained weights
+    """
+    print('Training model across all train+validate data')
+    # We could retrain on all the train data (the hyperparameter search will have
+    # performed cross-validation and thus only trained on a subset of the
+    # data (i.e., k-1 folds)). But we did not perform nested
+    # cross-validation with different sized inputs, so we do not know
+    # how well the hyperparameter search performs on different training
+    # sizes. Similarly we do not know how many epochs to train for (the
+    # above search uses early stopping, and the number of epochs that
+    # goes for may be less than the number needed on a larger training
+    # input size).
+    # So we will split x,y into train/validate sets and the validation data
+    # can also be used for early stopping during training.
+    model = predictor.construct_model(params, x.shape, regression)
+    split_iter = parse_data.split(x, y,
+            hyperparam_search_cross_val_num_splits,
+            stratify_by_pos=True)
+    # Only take the first split of the generator as the train/validation
+    # split
+    x_train, y_train, x_validate, y_validate = next(split_iter)
+    predictor.train_and_validate(model, x_train, y_train,
+            x_validate, y_validate, params['max_num_epochs'])
+
+    # Save the model weights and best parameters to out_path
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
+    # Note that we can only save the model weights, not the model itself
+    # (incl. architecture), because they are subclassed models and
+    # therefore are described by code (Keras only allows saving
+    # the full model if they are Sequential or Functional models)
+    # See https://www.tensorflow.org/beta/guide/keras/saving_and_serializing
+    # for details on saving subclassed models
+    model.save_weights(
+            os.path.join(out_path,
+                'model.weights'),
+            save_format='tf')
+    print('Saved best model weights to {}'.format(out_path))
+
+    params['regression'] = regression
+    params['context_nt'] = context_nt
+    out_path_params = os.path.join(out_path,
+            'model.params.pkl')
+    with open(out_path_params, 'wb') as f:
+        pickle.dump(params, f)
+    print('Saved model parameters to {}'.format(out_path))
+
+
+
 def main(args):
     # Seed the predictor, numpy, and python's random module
     predictor.set_seed(args.seed)
@@ -494,6 +594,8 @@ def main(args):
                 c, frac_c))
 
     if args.command == 'hyperparam-search':
+        print('Note: The test data is not used at all in this command.')
+
         # Search for optimal hyperparameters
         if args.params_mean_val_loss_out_tsv:
             # Use buffering=1 for line buffering (write each line immediately)
@@ -501,7 +603,7 @@ def main(args):
                     args.params_mean_val_loss_out_tsv, 'w', buffering=1)
 
             # Write header
-            header = ['params']
+            header = ['params_id', 'params']
             metrics = _regression_losses if regression else _classification_losses
             for metric in metrics:
                 header += [metric + '_mean']
@@ -517,6 +619,7 @@ def main(args):
                 args.context_nt,
                 num_splits=args.hyperparam_search_cross_val_num_splits,
                 loss_out=params_mean_val_loss_out_tsv_f,
+                models_out=args.save_models,
                 num_random_samples=args.num_random_samples,
                 max_sem=args.max_sem)
 
@@ -525,64 +628,11 @@ def main(args):
 
         print('***')
         print('Hyperparameter search results:')
+        print('  Note: Best is chosen according to criteria above')
+        print('  Best parameters hash: {}'.format(params_hash(params)))
         print('  Best parameters: {}'.format(params))
         print('  Mean validation loss of these parameters: {}'.format(loss))
         print('  Std. err. of validation loss of these parameters: {}'.format(loss_sem))
-        print('***')
-
-        # Test a model with these parameters
-        # We could retrain on all the train data (the above search will have
-        # performed cross-validation and thus only trained on a subset of the
-        # data (i.e., k-1 folds)). But we did not perform nested
-        # cross-validation with different sized inputs, so we do not know
-        # how well the hyperparameter search performs on different training
-        # sizes. Similarly we do not know how many epochs to train for (the
-        # above search uses early stopping, and the number of epochs that
-        # goes for may be less than the number needed on a larger training
-        # input size).
-        # So we will split x,y into train/validate sets and the validation data
-        # can also be used for early stopping during training.
-        print('Testing model with optimal parameters')
-        model = predictor.construct_model(params, x.shape, regression)
-        split_iter = parse_data.split(x, y,
-                args.hyperparam_search_cross_val_num_splits,
-                stratify_by_pos=True)
-        # Only take the first split of the generator as the train/validation
-        # split
-        x_train, y_train, x_validate, y_validate = next(split_iter)
-        predictor.train_and_validate(model, x_train, y_train,
-                x_validate, y_validate, params['max_num_epochs'])
-
-        # Save the model weights and best parameters to args.save_best_model
-        if args.save_best_model:
-            if not os.path.exists(args.save_best_model):
-                os.makedirs(args.save_best_model)
-
-            # Note that we can only save the model weights, not the model itself
-            # (incl. architecture), because they are subclassed models and
-            # therefore are described by code (Keras only allows saving
-            # the full model if they are Sequential or Functional models)
-            # See https://www.tensorflow.org/beta/guide/keras/saving_and_serializing
-            # for details on saving subclassed models
-            model.save_weights(
-                    os.path.join(args.save_best_model,
-                        'best_model.weights'),
-                    save_format='tf')
-            print('Saved best model weights to {}'.format(args.save_best_model))
-
-            params['regression'] = regression
-            params['context_nt'] = args.context_nt
-            save_best_model_params = os.path.join(args.save_best_model,
-                    'best_model.params.pkl')
-            with open(save_best_model_params, 'wb') as f:
-                pickle.dump(params, f)
-            print('Saved best model parameters to {}'.format(
-                args.save_best_model))
-
-        # Test the model
-        print('***')
-        # test() prints results
-        predictor.test(model, x_test, y_test)
         print('***')
     elif args.command == 'nested-cross-val':
         print('Note: The test data is not used at all in this command.')
@@ -594,7 +644,7 @@ def main(args):
                     args.params_mean_val_loss_out_tsv, 'w', buffering=1)
 
             # Write header
-            header = ['params']
+            header = ['params_id', 'params']
             metrics = _regression_losses if regression else _classification_losses
             for metric in metrics:
                 header += [metric + '_mean']
@@ -708,10 +758,10 @@ if __name__ == "__main__":
                   "hyperparameters; with nested cross-validation, each "
                   "choice of hyperparameters is written for *each* outer "
                   "fold"))
-    parser.add_argument('--save-best-model',
-            help=("If set, path to directory in which to save best parameters "
-                  "and the model weights; only applies to hyperparameter "
-                  "search"))
+    parser.add_argument('--save-models',
+            help=("If set, path to directory in which to save parameters and "
+                  "model weights for each model validated (each is in a "
+                  "subfolder); only applies to hyperparameter search"))
     parser.add_argument('--seed',
             type=int,
             default=1,

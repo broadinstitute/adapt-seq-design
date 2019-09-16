@@ -27,9 +27,9 @@ def parse_args():
     """
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--load-best-model',
+    parser.add_argument('--load-model',
             help=("Path from which to load parameters and model weights "
-                  "for best model found by hyperparameter search; if set, "
+                  "for model found by hyperparameter search; if set, "
                   "any other arguments provided about the model "
                   "architecture or hyperparameters will be overridden and "
                   "this will skip training and only test the model"))
@@ -287,7 +287,7 @@ def make_dataset_and_batch(x, y, batch_size=32):
     return tf.data.Dataset.from_tensor_slices((x, y)).batch(batch_size)
 
 
-def load_best_model(load_path, params, x_train, y_train, x_validate, y_validate):
+def load_model(load_path, params, x_train, y_train, x_validate, y_validate):
     """Construct model and load weights according to hyperparameter search.
 
     Args:
@@ -353,7 +353,7 @@ def load_best_model(load_path, params, x_train, y_train, x_validate, y_validate)
         assert (weights_are_eq(w_before, w_after) is False)
         assert (weights_are_eq(w_after, w_after2) is True)
 
-    load_weights(model, 'best_model.weights')
+    load_weights(model, 'model.weights')
 
     return model
 
@@ -1207,11 +1207,11 @@ def main():
     # Read arguments and data
     args = parse_args()
 
-    if args.load_best_model:
+    if args.load_model:
         # Read saved parameters and load them into the args namespace
-        print('Loading parameters for best model..')
-        load_path_params = os.path.join(args.load_best_model,
-                'best_model.params.pkl')
+        print('Loading parameters for model..')
+        load_path_params = os.path.join(args.load_model,
+                'model.params.pkl')
         with open(load_path_params, 'rb') as f:
             saved_params = pickle.load(f)
         params = vars(args)
@@ -1240,12 +1240,12 @@ def main():
         raise Exception(("Can only use --plot-predictions when doing "
             "regression"))
 
-    if args.load_best_model:
-        # Load the best model
-        print('Loading best model weights..')
-        model = load_best_model(args.load_best_model, params,
+    if args.load_model:
+        # Load the model
+        print('Loading model weights..')
+        model = load_model(args.load_model, params,
                 x_train, y_train, x_validate, y_validate)
-        print('Done loading best model.')
+        print('Done loading model.')
     else:
         # Construct model
         params = vars(args)
