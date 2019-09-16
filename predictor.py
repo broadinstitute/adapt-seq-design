@@ -358,17 +358,27 @@ def load_best_model(load_path, params, x_train, y_train, x_validate, y_validate)
 # Construct a convolutional network model
 #####################################################################
 class CasCNNWithParallelFilters(tf.keras.Model):
-    def __init__(self, params, regression):
+    def __init__(self, params, regression, add_gc_content=True):
         """
         Args:
             params: dict of hyperparameters
             regression: if True, perform regression; if False, classification
+            add_gc_content: if True, add GC content as a feature to the
+                fully connected layer at the end
         """
         super(CasCNNWithParallelFilters, self).__init__()
 
         self.regression = regression
+        self.add_gc_content = add_gc_content
+        self.context_nt = params['context_nt']
+
         self.batch_size = params['batch_size']
         self.learning_rate = params['learning_rate']
+
+        if self.add_gc_content:
+            # Construct a layer to extract the guide sequence (and target)
+            self.guide_slice = tf.keras.layers.Cropping1D((self.context_nt,
+                self.context_nt))
 
         # Construct groups, where each consists of a convolutional
         # layer with a particular width, a batch normalization layer, and
@@ -551,6 +561,25 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         # Run parallel convolution filters of different widths, each with
         # batch norm and pooling
         # If set, also add a locally connected layer(s) for each group
+
+        # If self.add_gc_content is True, then 'manually' add a feature to
+        # the fully connected layer giving the GC content of the guide
+        if self.add_gc_content:
+            # Extract the region of the guide/target
+            x_guide_region = self.guide_slice(x)
+            # Pull out just the guide; in dimension 3, the first 4 bases
+            # are target and the next 4 are guide
+            x_guide = tf.slice(x_guide_region,
+                    [0, 0, 4],  # begin at position 4 in dimension 3
+                    [-1, -1, 4])    # take the 4 positions of the guide
+            # Compute the number of bases for each base by summing the
+            # one-hot encoding for the corresponding dimension
+            base_count = tf.reduce_sum(x_guide, axis=1, keepdims=True)
+            # Pull out just the C and G counts, and sum across these
+            gc_count = base_count[:,:,1] + base_count[:,:,2]
+            guide_len = tf.cast(tf.shape(x_guide)[1], tf.float32)
+            gc_content = gc_count / guide_len
+
         group_outputs = []
         for conv, batchnorm, pool_1, pool_2, lcs in zip(self.convs, self.batchnorms,
                 self.pools, self.pools_2, self.lcs):
@@ -592,6 +621,12 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         else:
             x = self.merge(group_outputs)
         x = self.flatten(x)
+
+        if self.add_gc_content:
+            # Concatenate x and gc_content along the flattened dimension
+            # (axis 0 is batch; use '-1' or '1' for the axis to concat along)
+            x_with_gc = tf.concat([x, gc_content], -1)
+            x = x_with_gc
 
         # Run through fully connected layers
         for dropout, fc in zip(self.dropouts, self.fcs):

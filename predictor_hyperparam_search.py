@@ -260,7 +260,7 @@ def hyperparam_random_dist(num_samples):
         yield params
 
 
-def search_for_hyperparams(x, y, search_type, regression,
+def search_for_hyperparams(x, y, search_type, regression, context_nt,
         num_splits=5, loss_out=None, num_random_samples=None,
         max_sem=None):
     """Search for optimal hyperparameters.
@@ -278,6 +278,7 @@ def search_for_hyperparams(x, y, search_type, regression,
         y: labels
         search_type: 'grid' or 'random' search
         regression: if True, perform regression; if False, classification
+        context_nt: number of nt on each side of guide to use for context
         num_splits: number of splits of the data to make (i.e., k in k-fold)
         loss_out: if set, an opened file object to write to write the
             validation loss values for each choice of hyperparameters
@@ -306,6 +307,8 @@ def search_for_hyperparams(x, y, search_type, regression,
     best_loss = None
     best_loss_sem = None
     for params in params_iter:
+        params['context_nt'] = context_nt
+
         # Compute a mean validation loss at this choice of params
         val_losses_default, val_losses_different_metrics = cross_validate(
                 params, x, y, num_splits, regression)
@@ -356,7 +359,7 @@ def search_for_hyperparams(x, y, search_type, regression,
     return (best_params, best_loss, best_loss_sem)
 
 
-def nested_cross_validate(x, y, search_type, regression,
+def nested_cross_validate(x, y, search_type, regression, context_nt,
         num_outer_splits=5, num_inner_splits=5, loss_out=None,
         num_random_samples=None,
         max_sem=None):
@@ -376,6 +379,7 @@ def nested_cross_validate(x, y, search_type, regression,
         y: labels
         search_type: 'grid' or 'random' search
         regression: if True, perform regression; if False, classification
+        context_nt: number of nt to use on each side of guide for context
         num_outer_splits: number of folds in the outer cross-validation
             procedure
         num_inner_splits: number of folds in the inner cross-validation
@@ -419,7 +423,7 @@ def nested_cross_validate(x, y, search_type, regression,
         #       y_validate), effectively treating this outer validation data
         #       as a test set for best_params
         best_model = predictor.construct_model(best_params, x_train.shape,
-                regression)
+                regression, context_nt)
         _, val_results = predictor.train_and_validate(best_model, x_train, y_train,
                 x_validate, y_validate, best_params['max_num_epochs'])
         val_loss, val_loss_different_metrics = determine_val_loss(val_results)
@@ -508,6 +512,7 @@ def main(args):
         params, loss, loss_sem = search_for_hyperparams(x, y,
                 args.search_type,
                 regression,
+                args.context_nt,
                 num_splits=args.hyperparam_search_cross_val_num_splits,
                 loss_out=params_mean_val_loss_out_tsv_f,
                 num_random_samples=args.num_random_samples,
@@ -564,6 +569,7 @@ def main(args):
             print('Saved best model weights to {}'.format(args.save_best_model))
 
             params['regression'] = regression
+            params['context_nt'] = args.context_nt
             save_best_model_params = os.path.join(args.save_best_model,
                     'best_model.params.pkl')
             with open(save_best_model_params, 'wb') as f:
@@ -599,6 +605,7 @@ def main(args):
         fold_results = nested_cross_validate(x, y,
                 args.search_type,
                 regression,
+                args.context_nt,
                 num_outer_splits=args.nested_cross_val_outer_num_splits,
                 num_inner_splits=args.hyperparam_search_cross_val_num_splits,
                 loss_out=params_mean_val_loss_out_tsv_f,
