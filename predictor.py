@@ -106,6 +106,10 @@ def parse_args():
     parser.add_argument('--skip-batch-norm',
             action='store_true',
             help=("If set, skip batch normalization layer"))
+    parser.add_argument('--add-gc-content',
+            action='store_true',
+            help=("If set, add GC content of a guide explicitly into the "
+                  "first fully connected layer of the predictor"))
     parser.add_argument('--activation-fn',
             choices=['relu', 'elu'],
             default='relu',
@@ -358,25 +362,24 @@ def load_best_model(load_path, params, x_train, y_train, x_validate, y_validate)
 # Construct a convolutional network model
 #####################################################################
 class CasCNNWithParallelFilters(tf.keras.Model):
-    def __init__(self, params, regression, add_gc_content=True):
+    def __init__(self, params, regression):
         """
         Args:
             params: dict of hyperparameters
             regression: if True, perform regression; if False, classification
-            add_gc_content: if True, add GC content as a feature to the
-                fully connected layer at the end
         """
         super(CasCNNWithParallelFilters, self).__init__()
 
         self.regression = regression
-        self.add_gc_content = add_gc_content
+        self.add_gc_content = params['add_gc_content']
         self.context_nt = params['context_nt']
 
         self.batch_size = params['batch_size']
         self.learning_rate = params['learning_rate']
 
         if self.add_gc_content:
-            # Construct a layer to extract the guide sequence (and target)
+            # Construct a layer to extract the region (along the width axis)
+            # of the guide sequence (and target)
             self.guide_slice = tf.keras.layers.Cropping1D((self.context_nt,
                 self.context_nt))
 
