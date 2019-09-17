@@ -47,7 +47,8 @@ def determine_val_loss(results):
     increase the loss).
 
     Args:
-        results: dict returned by predictor.train_and_validate()
+        results: dict returned by predictor.train_and_validate() or
+            predictor.test()
 
     Returns:
         (default loss value to use for ranking, dict of loss values for
@@ -60,7 +61,7 @@ def determine_val_loss(results):
         assert 'r-spearman' not in results
 
         losses = {'bce': results['bce'],
-                '1_minus_auc-roc': 1.0 - results['auc-roc']}
+                  '1_minus_auc-roc': 1.0 - results['auc-roc']}
         default_loss = losses[_default_classification_loss]
     elif 'mse' in results:
         # Regression results
@@ -69,7 +70,7 @@ def determine_val_loss(results):
         assert 'auc-roc' not in results
 
         losses = {'mse': results['mse'],
-                '1_minus_rho': 1.0 - results['r-spearman']}
+                  '1_minus_rho': 1.0 - results['r-spearman']}
         default_loss = losses[_default_regression_loss]
     else:
         raise Exception("Unknown whether classification or regression")
@@ -386,6 +387,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
     searches for optimal hyperparameters. The outer cross-validation
     procedure sees how well this search generalizes, by performing and
     testing it on different folds of the data. If the selected hyperparameters
+    are similar across the outer folds, and results on the validation set
     are similar across the outer folds, that's good.
 
     This is not for selecting a final model.
@@ -410,10 +412,11 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
             choice of hyperparameters (if None, no limit)
 
     Returns:
-        list x of tuples (params, loss) where params is an optimal choice
-        of parameters (a dict) and loss is the loss for that choice on the
-        outer validation data; each element of x corresponds to an outer fold
-        of the data
+        list x where x[i] is a tuple (params, loss, metrics) where params is an
+        optimal choice of parameters (a dict), loss is the (default) loss for
+        that choice on the outer validation data, and metrics gives loss values
+        for different metrics on the outer validation data; each x[i]
+        corresponds to an outer fold of the data
     """
     optimal_choices = []
     i = 0
@@ -426,7 +429,8 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
 
         # Start a new model for this fold
         best_params, _, _ = search_for_hyperparams(x_train, y_train,
-                search_type, num_splits=num_inner_splits, loss_out=loss_out,
+                search_type, regression, context_nt,
+                num_splits=num_inner_splits, loss_out=loss_out,
                 num_random_samples=num_random_samples,
                 max_sem=max_sem)
 
@@ -434,16 +438,30 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
         #   (1) train the model on all the training data (in the inner
         #       fold loop of search_for_hyperparams(), the model will have
         #       only been trained on a subset of the data (i.e., on k-1
-        #       folds))
+        #       folds)); on this training data, split it further into
+        #       data actually used for training and 'validation' data only
+        #       used for early stopping
         #   (2) test the model on the outer validation data (x_validate,
         #       y_validate), effectively treating this outer validation data
         #       as a test set for best_params
         best_model = predictor.construct_model(best_params, x_train.shape,
-                regression, context_nt)
-        _, val_results = predictor.train_and_validate(best_model, x_train, y_train,
-                x_validate, y_validate, best_params['max_num_epochs'])
+                regression)
+        # Split x_train,y_train into train/validate sets and the validation
+        # data is used only for early stopping during training
+        train_split_iter = parse_data.split(x_train, y_train,
+                num_inner_splits,
+                stratify_by_pos=True)
+        # Only take the first split of the generator as the train/validation
+        # split
+        x_train_for_train, y_train_for_train, x_train_for_es, y_train_for_es = next(train_split_iter)
+        predictor.train_and_validate(best_model,
+                x_train_for_train, y_train_for_train,
+                x_train_for_es, y_train_for_es,
+                best_params['max_num_epochs'])
+        # Test the model on the validation data
+        val_results = predictor.test(best_model, x_validate, y_validate)
         val_loss, val_loss_different_metrics = determine_val_loss(val_results)
-        optimal_choices += [(best_params, val_loss)]
+        optimal_choices += [(best_params, val_loss, val_loss_different_metrics)]
         print(('FINISHED OUTER FOLD {} of {}; validation loss on this outer '
             'fold is {}').format(i+1, num_outer_splits, val_loss))
         i += 1
@@ -670,13 +688,28 @@ def main(args):
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
 
+        if args.nested_cross_val_out_tsv:
+            # Write results for each fold
+            with open(args.nested_cross_val_out_tsv, 'w') as fw:
+                header = ['fold', 'best_params_id', 'best_params']
+                header += metrics
+                fw.write('\t'.join(header) + '\n')
+                for fold in range(len(fold_results)):
+                    fold_params, fold_loss, fold_metrics = fold_results[fold]
+                    row = [fold, params_hash(fold_params), fold_params]
+                    for metric in metrics:
+                        row += [fold_metrics[metric]]
+                    fw.write('\t'.join(str(r) for r in row) + '\n')
+
         # Print results (parameter selection and loss) for each outer fold
         print('***')
         for fold in range(len(fold_results)):
             print('Outer fold {} results:'.format(fold+1))
-            params, loss = fold_results[fold]
-            print('  Parameters: {}'.format(params))
-            print('  Loss of parameters on outer validation data: {}'.format(loss))
+            fold_params, fold_loss, fold_metrics = fold_results[fold]
+            print('  Parameters: {}'.format(fold_params))
+            print('  Loss of parameters on outer validation data: {}'.format(fold_loss))
+            print('  Metrics of parameters on outer validation data: {}'.format(fold_metrics))
+        print('***')
     else:
         raise Exception("Unknown command '%s'" % args.command)
 
@@ -767,6 +800,11 @@ if __name__ == "__main__":
                   "hyperparameters; with nested cross-validation, each "
                   "choice of hyperparameters is written for *each* outer "
                   "fold"))
+    parser.add_argument('--nested-cross-val-out-tsv',
+            help=("If set, path to out TSV at which to write metrics on "
+                  "the validation data for each outer fold of nested "
+                  "cross-validation (one row per outer fold; each column "
+                  "gives a metric)"))
     parser.add_argument('--save-models',
             help=("If set, path to directory in which to save parameters and "
                   "model weights for each model validated (each is in a "

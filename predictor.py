@@ -1073,7 +1073,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
 
     Returns:
         dict with test metrics at the end (keys are 'loss'
-        and ('auc-roc' or 'r-spearman'))
+        and ('bce' or 'mse') and ('auc-roc' or 'r-spearman'))
     """
     tf_test_step = tf.function(test_step)
 
