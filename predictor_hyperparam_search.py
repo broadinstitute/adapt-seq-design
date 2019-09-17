@@ -657,6 +657,10 @@ def main(args):
         print('***')
     elif args.command == 'nested-cross-val':
         print('Note: The test data is not used at all in this command.')
+        if args.test_split_frac > 0:
+            print(('WARNING: Performing nested cross-validation but there is '
+                   'unused test data; it may make sense to set '
+                   '--test-split-frac to 0'))
 
         # Perform nested cross-validation
         if args.params_mean_val_loss_out_tsv:

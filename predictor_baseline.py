@@ -72,6 +72,20 @@ def parse_args():
             default=0.3,
             help=("Fraction of the dataset to use for testing the final "
                   "model"))
+    parser.add_argument('--nested-cross-val',
+            action='store_true',
+            help=("If set, perform nested cross-validation to evaluate "
+                  "model selection, rather than just cross-validation to "
+                  "select a single model"))
+    parser.add_argument('--nested-cross-val-outer-num-splits',
+            type=int,
+            default=3,
+            help=("Number of outer folds to use for nested cross-validation"))
+    parser.add_argument('--nested-cross-val-out-tsv',
+            help=("Path to output TSV at which to write metrics on the "
+                  "validation data for each outer fold of nested "
+                  "cross-validation (one row per outer fold; each column "
+                  "gives a metric)"))
     parser.add_argument('--seed',
             type=int,
             default=1,
@@ -97,12 +111,23 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-def classify(x_train, y_train, x_validate, y_validate, x_test, y_test):
+def classify(x_train, y_train, x_test, y_test,
+        num_inner_splits=2):
     """Perform classification.
 
+    Test data is used for evaluating the model with the best choice of
+    hyperparameters, after refitting across *all* the train data.
+
     Args:
-        x_{train,validate,test}: input data for train/validate/test
-        y_{train,validate,test}: output labels for train/validate/test
+        x_{train,test}: input data for train/test
+        y_{train,test}: output labels for train/test
+        num_inner_splits: number of splits for cross-validation
+
+    Returns:
+        dict {'l1_logistic_regression': metrics on test data for best choice of
+        hyperparameters with L1 logistic regression, 'l2_logistic_regression':
+        metrics on test data for best choice of hyperparameters with L2
+        logistic regression}
     """
     # TODO implement other models, e.g., SVM
     # TODO as done in regress() below, optimize hyperparameters for a
@@ -136,8 +161,8 @@ def classify(x_train, y_train, x_validate, y_validate, x_test, y_test):
     # function, passing in the 'labels' argument to it (one issue would be
     # having to also determine a 'sample_weight' argument to give the log_loss
     # function).
-    def cv(num_splits=2):
-        return parse_data.split(x_train, y_train, num_splits,
+    def cv():
+        return parse_data.split(x_train, y_train, num_inner_splits,
                 stratify_by_pos=True, yield_indices=True)
 
     # It helps to provide an explicit function/callable as the scorer;
@@ -145,6 +170,7 @@ def classify(x_train, y_train, x_validate, y_validate, x_test, y_test):
     # log_loss function expects a 'labels' argument when y_true contains
     # only one label
 
+    metrics_for_models = {}
     for penalty in ['l1', 'l2']:
         # Build and fit model
         scoring = 'neg_log_loss'
@@ -181,16 +207,30 @@ def classify(x_train, y_train, x_validate, y_validate, x_test, y_test):
         print("    Score ({}) = {}".format(scoring, score))
         print('#'*20)
 
+        metrics = {'roc_auc': roc_auc, 'pr_auc': pr_auc, 'ap': ap}
+        metrics_for_models[penalty + '_logistic_regression'] = metrics
 
-def regress(x_train, y_train, x_validate, y_validate, x_test, y_test,
+    return metrics_for_models
+
+
+def regress(x_train, y_train, x_test, y_test,
+        num_inner_splits=3,
         scoring_method='mse'):
     """Perform regression.
+
+    Test data is used for evaluating the model with the best choice of
+    hyperparameters, after refitting across *all* the train data.
 
     Args:
         x_{train,validate,test}: input data for train/validate/test
         y_{train,validate,test}: output labels for train/validate/test
+        num_inner_splits: number of splits for cross-validation
         scoring_method: method to use for scoring test results; 'mse' (mean
             squared error) or 'rho' (Spearman's rank correlation)
+
+    Returns:
+        dict {model: metrics on test data for best choice of hyperparameters
+        for model}
     """
     # With models, perform cross-validation to determine hyperparameters
     # Most of the built-in cross-validators find the best choice based on
@@ -199,8 +239,8 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test,
     # GridSearchCV object, which does support a custom scoring metric. Use
     # spearman rank correlation coefficient for this.
 
-    def cv(num_splits=5):
-        return parse_data.split(x_train, y_train, num_splits,
+    def cv():
+        return parse_data.split(x_train, y_train, num_inner_splits,
                 stratify_by_pos=True, yield_indices=True)
 
     def rho_f(y, y_pred):
@@ -226,6 +266,9 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test,
             model_desc: string describing model
             hyperparams: list [p] of hyperparameters where each p is a string
                 and reg.p gives the value chosen by the hyperparameter search
+
+        Returns:
+            dict giving metrics for the best choice of model hyperparameters
         """
         # Fit model
         reg.fit(x_train, y_train)
@@ -267,29 +310,37 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test,
         print("    rho = {}".format(rho))
         print('#'*20)
 
+        return {'mse': mse, 'mae': mae, 'r2': R2, 'r': r, 'rho': rho,
+                '1_minus_rho': 1.0-rho}
+
+    metrics_for_models = {}
+
     # Linear regression (no regularization)
     reg = sklearn.linear_model.LinearRegression(copy_X=True)    # no CV because there are no hyperparameters
-    fit_and_test_model(reg, 'Linear regression', [])
+    metrics = fit_and_test_model(reg, 'Linear regression', [])
+    metrics_for_models['lr'] = metrics
 
     # L1 linear regression
     params = {
-            'alpha': np.logspace(-5, 5, num=100, base=10.0)
+            'alpha': np.logspace(-7, 7, num=100, base=10.0)
     }
     reg = sklearn.linear_model.Lasso(max_iter=10000, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
             param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=1)
-    fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
+    metrics = fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
+    metrics_for_models['l1_lr'] = metrics
 
     # L2 linear regression
     params = {
-            'alpha': np.logspace(-5, 5, num=100, base=10.0)
+            'alpha': np.logspace(-7, 7, num=100, base=10.0)
     }
     reg = sklearn.linear_model.Ridge(max_iter=10000, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
             param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=1)
-    fit_and_test_model(reg_cv, 'L2 linear regression', hyperparams=reg_cv)
+    metrics = fit_and_test_model(reg_cv, 'L2 linear regression', hyperparams=reg_cv)
+    metrics_for_models['l2_lr'] = metrics
 
     # Elastic net (L1+L2 linear regression)
     # Recommendation for l1_ratio is to place more values close to 1 (lasso)
@@ -302,14 +353,15 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test,
     #  hyperparameters on splits of the train set
     params = {
             'l1_ratio': 1.0 - np.logspace(-5, 0, num=10, base=2.0)[::-1] + 2.0**(-5),
-            'alpha': np.logspace(-5, 5, num=100, base=10.0)
+            'alpha': np.logspace(-7, 7, num=100, base=10.0)
     }
-    reg = sklearn.linear_model.ElasticNet(max_iter=1000, copy_X=True)
+    reg = sklearn.linear_model.ElasticNet(max_iter=10000, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
             param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=1)
-    fit_and_test_model(reg_cv, 'L1+L2 linear regression',
+    metrics = fit_and_test_model(reg_cv, 'L1+L2 linear regression',
             hyperparams=reg_cv)
+    metrics_for_models['l1l2_lr'] = metrics
 
     # Gradient-boosted regression trees
     params = {
@@ -323,9 +375,61 @@ def regress(x_train, y_train, x_validate, y_validate, x_test, y_test,
     reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls')
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
             param_grid=params, cv=cv(), refit=True, scoring=scorer,
-            verbose=2)
-    fit_and_test_model(reg_cv, 'Gradient Boosting regression',
+            verbose=1)
+    metrics = fit_and_test_model(reg_cv, 'Gradient Boosting regression',
             hyperparams=reg_cv)
+    metrics_for_models['gbrt'] = metrics
+
+    return metrics_for_models
+
+
+def nested_cross_validate(x, y, num_outer_splits,
+        regression, regression_scoring_method=None):
+    """Perform nested cross-validation to validate model and search.
+
+    Args:
+        x: input data
+        y: labels
+        num_outer_splits: number of folds in the outer cross-validation
+            procedure
+        regression: True if performing regression; False if classification
+        regression_scoring_method: if regression, method to use for 
+            evaluating a model ('mse' or 'rho')
+
+    Returns:
+        list x where each x[i] is an output of regress() or classify() on
+        an outer fold
+    """
+    fold_results = []
+    i = 0
+    outer_split_iter = parse_data.split(x, y, num_splits=num_outer_splits,
+            stratify_by_pos=True)
+    for x_train, y_train, x_validate, y_validate in outer_split_iter:
+        print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
+
+        # Search for hyperparameters on this outer fold of the data
+        if regression:
+            metrics_for_models = regress(x_train, y_train,
+                    x_validate, y_validate,
+                    scoring_method=regression_scoring_method)
+        else:
+            metrics_for_models = classify(x_train, y_train,
+                    x_validate, y_validate)
+        fold_results += [metrics_for_models]
+
+        # Print metrics on this fold
+        print('Results on fold {}'.format(i+1))
+        print('  Metrics on validation data')
+        for model in metrics_for_models.keys():
+            print('    Model: {}'.format(model))
+            for metric in metrics_for_models[model].keys():
+                print('      {} = {}'.format(metric,
+                    metrics_for_models[model][metric]))
+
+        print(('FINISHED OUTER FOLD {} of {}').format(i+1, num_outer_splits))
+        i += 1
+
+    return fold_results
 
 
 def main():
@@ -350,12 +454,42 @@ def main():
     elif args.dataset == 'cas9' or args.dataset == 'simulated-cas13':
         regression = False
 
-    if regression:
-        regress(x_train, y_train, x_validate, y_validate,
-                x_test, y_test, scoring_method=args.regression_scoring_method)
+    if args.nested_cross_val:
+        # Perform nested cross-validation
+
+        if args.test_split_frac > 0:
+            print(('WARNING: Performing nested cross-validation but there is '
+                   'unused test data; it may make sense to set '
+                   '--test-split-frac to 0'))
+
+        fold_results = nested_cross_validate(x_train, y_train,
+                args.nested_cross_val_outer_num_splits,
+                regression,
+                regression_scoring_method=args.regression_scoring_method)
+
+        if args.nested_cross_val_out_tsv:
+            # Write fold results to a tsv file
+            if regression:
+                metrics = ['mse', '1_minus_rho']
+            else:
+                metrics = ['roc_auc', 'pr_auc']
+            with open(args.nested_cross_val_out_tsv, 'w') as fw:
+                header = ['fold', 'model'] + metrics
+                fw.write('\t'.join(header) + '\n')
+                for fold in range(len(fold_results)):
+                    metrics_for_models = fold_results[fold]
+                    for model in metrics_for_models.keys():
+                        row = [fold, model]
+                        for metric in metrics:
+                            row += [metrics_for_models[model][metric]]
+                        fw.write('\t'.join(str(r) for r in row) + '\n')
     else:
-        classify(x_train, y_train, x_validate, y_validate,
-                x_test, y_test)
+        # Simply perform a hyperparameter search for each model
+        if regression:
+            regress(x_train, y_train, x_test, y_test,
+                    scoring_method=args.regression_scoring_method)
+        else:
+            classify(x_train, y_train, x_test, y_test)
 
 
 if __name__ == "__main__":
