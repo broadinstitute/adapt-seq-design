@@ -406,6 +406,8 @@ def nested_cross_validate(x, y, num_outer_splits,
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in outer_split_iter:
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
+        print('There are n={} train points and n={} validation points'.format(
+            len(x_train), len(x_validate)))
 
         # Search for hyperparameters on this outer fold of the data
         if regression:
