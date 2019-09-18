@@ -125,3 +125,7 @@ dmypy.json
 
 # vim swap files
 *.swp
+
+# Models during hyperparameter search, but allow
+# selected models
+models/predictor_exp-and-pos_regress-on-active/*
