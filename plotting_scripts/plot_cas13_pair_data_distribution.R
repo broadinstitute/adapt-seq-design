@@ -124,6 +124,7 @@ p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
 p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
 p <- p + xlab("Activity") + ylab("Density")
+p <- p + theme_bw()
 p + ggsave(OUT.DIST.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
@@ -131,6 +132,7 @@ p + ggsave(OUT.DIST.PDF, width=8, height=8, useDingbats=FALSE)
 # Make a separate plot showing a separate facet for each choice of crrna.block
 # (which will be used to split data in train/validate/test)
 p.faceted <- p + facet_wrap(. ~ crrna.block, scales="free")
+p <- p + theme_bw()
 p.faceted + ggsave(OUT.DIST.BLOCKS.FACETS.PDF, width=16, height=16, useDingbats=FALSE)
 ##############################################################################
 
@@ -141,6 +143,7 @@ guide.target.expandpos$crrna.block.factor <- factor(guide.target.expandpos$crrna
 p <- ggplot(guide.target.expandpos, aes(x=out.logk.median, y=crrna.block.factor))
 p <- p + geom_density_ridges()
 p <- p + xlab("Activity") + ylab("Block")
+p <- p + theme_bw()
 p + ggsave(OUT.DIST.BLOCKS.RIDGES.PDF, width=8, height=48, useDingbats=FALSE)
 ##############################################################################
 
@@ -152,6 +155,7 @@ p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
 p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
 p <- p + xlab("Activity") + ylab("Density")
+p <- p + theme_bw()
 p + ggsave(OUT.DIST.TRAIN.AND.TEST.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
@@ -186,6 +190,7 @@ p <- ggplot(guide.target.expandpos.summarized.ordered, aes(x=median, y=order))
 p <- p + geom_errorbarh(aes(xmin=lower, xmax=upper), height=0, size=0.5, color="black", alpha=0.5)
 p <- p + geom_point(size=1)
 p <- p + xlab("Activity (variation is across targets)") + ylab("crRNA")
+p <- p + theme_bw()
 p <- p + theme(axis.text.y=element_blank(), # y-axis text/ticks are meaningless
                axis.ticks.y=element_blank())
 p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF, width=8, height=8, useDingbats=FALSE)
@@ -214,6 +219,7 @@ p <- ggplot(guide.target.expandpos.summarized, aes(x=gc.content, y=median))
 p <- p + geom_point(aes(color=guide.pos.nt))
 p <- p + scale_color_viridis() # adjust color gradient
 p <- p + xlab("GC content") + ylab("Median activity")
+p <- p + theme_bw()
 # Include text with the rho value
 p <- p + annotate(geom='text', x=Inf, y=Inf, hjust=1, vjust=1, size=5,
                   label=as.character(as.expression(substitute(
