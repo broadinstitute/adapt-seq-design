@@ -129,3 +129,4 @@ dmypy.json
 # Models during hyperparameter search, but allow
 # selected models
 models/predictor_exp-and-pos_regress-on-active/*
+!models/predictor_exp-and-pos_regress-on-active/model-524b9795
