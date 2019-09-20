@@ -15,4 +15,8 @@ python predictor.py --load-model models/predictor_exp-and-pos_regress-on-active/
 
 # Plot test results
 Rscript plotting_scripts/plot_predictor_test_results.R out/cas13-hyperparam-search.exp-and-pos.regress-on-active.model-524b9795.test.tsv.gz out/cas13-hyperparam-search.exp-and-pos.regress-on-active.model-524b9795.test.pdf
+
+# Run the baseline predictors to select models and evaluate
+# on the test set
+python -u predictor_baseline.py --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --regression-scoring-method mse --test-split-frac 0.3 --seed 1 &> out/cas13-baseline.exp-and-pos.regress-on-active.out
 ###########################################################
