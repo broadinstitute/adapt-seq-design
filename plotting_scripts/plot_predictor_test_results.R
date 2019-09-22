@@ -82,6 +82,7 @@ test.results.melted <- melt(test.results,
 p <- ggplot(test.results.melted, aes(x=activity, fill=activity.type))
 p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + xlab("Activity") + ylab("Density")
+p <- p + scale_fill_viridis(discrete=TRUE) # adjust color gradient
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
                legend.position=c(0.01,0.99),
@@ -222,7 +223,7 @@ p <- p + geom_point(aes(color=crrna.pos), size=5)
 p <- p + geom_errorbarh(aes(xmin=activity.true-sd.true, xmax=activity.true+sd.true), alpha=0.5)
 p <- p + geom_errorbar(aes(ymin=activity.predicted-sd.predicted, ymax=activity.predicted+sd.predicted), alpha=0.5)
 p <- p + scale_color_viridis() # adjust color gradient
-#p <- p + xlim(-2.5, 0) + ylim(-2.5, 0)  # make plot be square
+p <- p + xlim(-2.3, -0.3) + ylim(-2.3, -0.3)  # make plot be square
 p <- p + xlab("True activity") + ylab("Predicted activity")
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
