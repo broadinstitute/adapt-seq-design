@@ -138,6 +138,24 @@ p.by.predicted.quantile.group <- p
 #####################################################################
 
 #####################################################################
+# Plot true activity value for different predicted quantile groupings
+# y-axis shows the quantile (grouped) for the predicted activity and
+# x-axis shows the true activity as a boxplot
+# Use quartiles here (4 groupings)
+
+# Only show top quartile, bottom quartile, and all
+test.results.with.quantile.group.subset <- test.results.with.quantile.group[test.results.with.quantile.group$predicted.quantile %in% c("all", "1", "4"), ]
+
+# For geom_boxplot(), we need the variable of interest to be y, so use
+# this and then do coord_flip()
+p <- ggplot(test.results.with.quantile.group.subset, aes(y=true.activity, x=predicted.quantile))
+p <- p + ylab("Activity") + xlab("Quartile")
+p <- p + geom_boxplot() + coord_flip()
+p <- p + theme_bw(base_size=18)    # bw & larger font sizes
+p.by.predicted.quantile.group.boxplot <- p
+#####################################################################
+
+#####################################################################
 # Plot true activity quantile vs. predicted activity quantile
 # x-axis shows the quantile for the true activity and
 # y-axis shows the quantile for the predicted
@@ -243,6 +261,7 @@ p.true.vs.predicted.summarized <- p
 g <- arrangeGrob(p.output.dist,
                  p.true.vs.predicted,
                  p.by.predicted.quantile.group,
+                 p.by.predicted.quantile.group.boxplot,
                  p.true.vs.predicted.quantiles,
                  p.true.vs.predicted.faceted.by.crrna,
                  p.rho.across.crrnas,
