@@ -424,6 +424,10 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in outer_split_iter:
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
+        print('  MSE on train data if predicting mean of train data:',
+                np.mean(np.square(np.mean(y_train) - np.array(y_train))))
+        print('  MSE on validate data if predicting mean of train data:',
+                np.mean(np.square(np.mean(y_train) - np.array(y_validate))))
 
         # Search for hyperparameters on this outer fold of the data
 
@@ -462,6 +466,11 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
         val_results = predictor.test(best_model, x_validate, y_validate)
         val_loss, val_loss_different_metrics = determine_val_loss(val_results)
         optimal_choices += [(best_params, val_loss, val_loss_different_metrics)]
+
+        # Print metrics on fold
+        print('Results on fold {}'.format(i+1))
+        print('  Metrics on validation data: {}'.format(val_results))
+
         print(('FINISHED OUTER FOLD {} of {}; validation loss on this outer '
             'fold is {}').format(i+1, num_outer_splits, val_loss))
         i += 1
