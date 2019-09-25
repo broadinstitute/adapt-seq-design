@@ -26,4 +26,7 @@ python -u predictor_hyperparam_search.py --dataset cas13 --cas13-subset exp-and-
 # Run the baseline predictors to select models and evaluate
 # on the test set
 python -u predictor_baseline.py --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --regression-scoring-method mse --test-split-frac 0.3 --seed 1 &> out/cas13-baseline.exp-and-pos.regress-on-active.out
+
+# Perform nested cross-validation on the baseline models
+python -u predictor_baseline.py --seed 1 --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --nested-cross-val --nested-cross-val-outer-num-splits 5 --nested-cross-val-out-tsv out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.folds.tsv --test-split-frac 0 &> out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.out
 ###########################################################
