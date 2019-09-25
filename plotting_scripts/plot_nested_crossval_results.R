@@ -92,7 +92,7 @@ if ('mse' %in% colnames(results)) {
 
     # Order the models explicitly
     results$model <- factor(results$model,
-                            levels=c("lr", "l1_lr", "l2_lr", "l1l2_lr", "adapt"))
+                            levels=c("lr", "l1_lr", "l2_lr", "l1l2_lr", "gbrt", "adapt"))
 
     # Pull out mse and make a plot of this
     results.mse <- results[, c("fold", "model", "mse")]
