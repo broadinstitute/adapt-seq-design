@@ -105,6 +105,7 @@ if ('mse' %in% colnames(results)) {
     p.mse <- p.mse + geom_errorbar(aes(ymin=mse-ci, ymax=mse+ci), width=0.1, alpha=0.5)   # 95% CI
     p.mse <- p.mse + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.mse <- p.mse + xlab("Model") + ylab("Mean squared error")
+    p.mse <- p.mse + theme_bw()
 
     # Pull out rho and make a plot of this
     results$rho <- 1.0 - results$`1.minus.rho`
@@ -118,6 +119,7 @@ if ('mse' %in% colnames(results)) {
     p.rho <- p.rho + geom_errorbar(aes(ymin=rho-ci, ymax=rho+ci), width=0.1, alpha=0.5)   # 95% CI
     p.rho <- p.rho + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.rho <- p.rho + xlab("Model") + ylab("Spearman's rho")
+    p.rho <- p.rho + theme_bw()
 
     # Save to PDF
     g <- arrangeGrob(p.mse,
@@ -129,7 +131,7 @@ if ('mse' %in% colnames(results)) {
 
     # Order the models explicitly
     results$model <- factor(results$model,
-                            levels=c("l1", "l2", "adaot"))
+                            levels=c("l1", "l2", "adapt"))
 
     # Pull out roc_auc and make a plot of this
     results.roc_auc <- results[, c("fold", "model", "roc_auc")]
@@ -142,6 +144,7 @@ if ('mse' %in% colnames(results)) {
     p.roc_auc <- p.roc_auc + geom_errorbar(aes(ymin=roc_auc-ci, ymax=roc_auc+ci), width=0.1, alpha=0.5)   # 95% CI
     p.roc_auc <- p.roc_auc + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.roc_auc <- p.roc_auc + xlab("Model") + ylab("auROC")
+    p.roc_auc <- p.roc_auc + theme_bw()
 
     # Save to PDF
     g <- arrangeGrob(p.roc_auc,
