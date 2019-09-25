@@ -47,5 +47,8 @@ python -u predictor_hyperparam_search.py --dataset cas13 --cas13-subset exp-and-
 # Select model f08075e6 from the above
 
 # Create test results
-python predictor.py --load-model models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/model-f08075e6 --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --cas13-normalize-crrna-activity --seed
+python predictor.py --load-model models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/model-f08075e6 --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --cas13-normalize-crrna-activity --write-test-tsv out/cas13-hyperparam-search.exp-and-pos.regress-on-active.normalized-crrnas.model-f08075e6.test.tsv.gz --seed 1 &> out/cas13-hyperparam-search.exp-and-pos.regress-on-active.normalized-crrnas.model-f08075e6.test.out
+
+# Plot test results
+Rscript plotting_scripts/plot_predictor_test_results.R out/cas13-hyperparam-search.exp-and-pos.regress-on-active.normalized-crrnas.model-f08075e6.test.tsv.gz out/cas13-hyperparam-search.exp-and-pos.regress-on-active.normalized-crrnas.model-f08075e6.test.pdf
 ###########################################################
