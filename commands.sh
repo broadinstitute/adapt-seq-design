@@ -29,4 +29,8 @@ python -u predictor_baseline.py --dataset cas13 --cas13-subset exp-and-pos --cas
 
 # Perform nested cross-validation on the baseline models
 python -u predictor_baseline.py --seed 1 --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --nested-cross-val --nested-cross-val-outer-num-splits 5 --nested-cross-val-out-tsv out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.folds.tsv --test-split-frac 0 &> out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.out
+
+# Produce plot of nested cross-validation results on
+# predictor and baseline mdoels
+Rscript plotting_scripts/plot_nested_crossval_results.R out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.folds.tsv.gz out/cas13-nested-cross-val.exp-and-pos.regress-on-active.folds.tsv.gz out/cas13-nested-cross-val.exp-and-pos.regress-on-active.pdf
 ###########################################################
