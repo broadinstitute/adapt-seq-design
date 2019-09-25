@@ -214,7 +214,7 @@ def classify(x_train, y_train, x_test, y_test,
 
 
 def regress(x_train, y_train, x_test, y_test,
-        num_inner_splits=3,
+        num_inner_splits=5,
         scoring_method='mse'):
     """Perform regression.
 
