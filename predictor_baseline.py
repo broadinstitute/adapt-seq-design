@@ -79,7 +79,7 @@ def parse_args():
                   "select a single model"))
     parser.add_argument('--nested-cross-val-outer-num-splits',
             type=int,
-            default=3,
+            default=5,
             help=("Number of outer folds to use for nested cross-validation"))
     parser.add_argument('--nested-cross-val-out-tsv',
             help=("Path to output TSV at which to write metrics on the "
