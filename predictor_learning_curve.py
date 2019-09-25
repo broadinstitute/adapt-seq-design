@@ -10,6 +10,7 @@ import random
 
 import parse_data
 import predictor
+import predictor_hyperparam_search
 
 import numpy as np
 
@@ -17,7 +18,7 @@ import numpy as np
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-def construct_model(params, x):
+def construct_model(params, regression, x):
     """Construct model according to hyperparameter search.
 
     Note that this reads hyperparameters to construct a model, but does not
@@ -25,6 +26,7 @@ def construct_model(params, x):
 
     Args:
         params: hyperparameters for model
+        regression: if True, perform regression; if False, classification
         x: train data (only needed for shape)
 
     Returns:..
@@ -32,13 +34,13 @@ def construct_model(params, x):
     """
     # Construct the model
     model = predictor.construct_model(params, x.shape,
-            regression=params['regression'])
+            regression=regression)
 
     return model
 
 
-def compute_learning_curve(params, x, y, num_splits=5,
-        num_sizes=10):
+def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
+        num_inner_splits=5, num_sizes=10):
     """Compute a learning curve.
 
     This splits the data num_splits ways. In each split S, there is a training
@@ -54,12 +56,15 @@ def compute_learning_curve(params, x, y, num_splits=5,
     will be reserved for early stopping during training.
 
     Args:
-        params: hyperparameters for model
         x: input data
         y: labels/output
+        regression: if True, perform regression; if False, classification
+        context_nt: number of nt on each side of guide to use for context
         num_splits: number of splits of the data to make (i.e., k in k-fold);
             at each size, this yields num_splits different train/validation
             metrics based on the different splits of the data
+        num_inner_splits: number of splits to perform for hyperparameter
+            search on each outer fold and sampling size
         num_sizes: number of different sizes of the training data to compute
             a train/validation metrics for
 
@@ -152,28 +157,13 @@ def compute_learning_curve(params, x, y, num_splits=5,
         # Use x_validate, y_validate for validation of the model on
         # this fold
 
-        # Split the training data (x_train, y_train) *again* to get a
-        # separate validation set (x_validate_for_es, y_validate_for_es) to
-        # pass to predictor.train_and_validate(), which it will use for early
-        # stopping
-        # This way, we do not use the same validation set both for early
-        # stopping and for measuring the performance of the model (otherwise
-        # our 'training' of the model, which includes deciding when to
-        # stop, would have seen and factored in the data used for evaluating
-        # it on the fold)
-        # Only use one of the splits, with 3/4 being used to train the model
-        # and 1/4 for early stopping
-        train_split_iter = parse_data.split(x_train, y_train, num_splits=4,
-                stratify_by_pos=True)
-        x_train_for_train, y_train_for_train, x_validate_for_es, y_validate_for_es = next(train_split_iter)
-
         # Use num_sizes different subsamplings of x_train_for_train, in
         # increasing size
         for size_i in range(num_sizes):
             print('Training on sampling {} of {} of the training set'.format(
                 size_i+1, num_sizes))
 
-            if params['regression']:
+            if regression:
                 # Print what the MSE would be if only predicting the mean of
                 # the training data
                 print('  MSE on train data if predicting mean of train data:',
@@ -187,11 +177,33 @@ def compute_learning_curve(params, x, y, num_splits=5,
             size = sample_sizes_all[size_i]
             x_train_sample, y_train_sample = sample_over_all_data(
                     size, x_train_for_train, y_train_for_train)
-            model = construct_model(params, x_train_sample)
+            # Perform hyperparameter search; do this because hyperparameters
+            # may vary based on sampling size
+            hyperparams, _, _ = predictor_hyperparam_search.search_for_hyperparams(
+                    x_train_sample, y_train_sample, 'random', regression,
+                    context_nt, num_splits=num_inner_splits,
+                    num_random_samples=100)
+            # Split the training data ({x,y}_train_sample) *again* to get a
+            # separate validation set ({x,y}_train_sample_for_es)) to
+            # pass to predictor.train_and_validate(), which it will use for early
+            # stopping
+            # This way, we do not use the same validation set both for early
+            # stopping and for measuring the performance of the model (otherwise
+            # our 'training' of the model, which includes deciding when to
+            # stop, would have seen and factored in the data used for evaluating
+            # it on the fold)
+            # Only use one of the splits, with 3/4 being used to train the model
+            # and 1/4 for early stopping
+            train_split_iter = parse_data.split(x_train_sample, y_train_sample,
+                    num_splits=4, stratify_by_pos=True)
+            x_train_sample_for_train, y_train_sample_for_train, x_train_sample_for_es, y_train_sample_for_es = next(train_split_iter)
+            # Construct model
+            model = construct_model(hyperparams, regression,
+                    x_train_sample_for_train)
             train_results, _ = predictor.train_and_validate(
-                    model, x_train_sample, y_train_sample,
-                    x_validate_for_es, y_validate_for_es,
-                    params['max_num_epochs'])
+                    model, x_train_sample_for_train, y_train_sample_for_train,
+                    x_train_sample_for_es, y_train_sample_for_es,
+                    hyperparams['max_num_epochs'])
             val_results = predictor.test(model, x_validate, y_validate)
             learning_curve[fold]['sample_all'][size] = {'train': train_results,
                     'val': val_results}
@@ -204,11 +216,23 @@ def compute_learning_curve(params, x, y, num_splits=5,
             size = sample_sizes_crrnas[size_i]
             x_train_sample, y_train_sample = sample_over_crrnas(
                     size, x_train_for_train, y_train_for_train)
-            model = construct_model(params, x_train_sample)
+            # Perform hyperparameter search; do this because hyperparameters
+            # may vary based on sampling size
+            hyperparams, _, _ = predictor_hyperparam_search.search_for_hyperparams(
+                    x_train_sample, y_train_sample, 'random', regression,
+                    context_nt, num_splits=num_inner_splits,
+                    num_random_samples=100)
+            # Split the training data ({x,y}_train_sample), as explained above
+            train_split_iter = parse_data.split(x_train_sample, y_train_sample,
+                    num_splits=4, stratify_by_pos=True)
+            x_train_sample_for_train, y_train_sample_for_train, x_train_sample_for_es, y_train_sample_for_es = next(train_split_iter)
+            # Construct model
+            model = construct_model(hyperparams, regression,
+                    x_train_sample_for_train)
             train_results, _ = predictor.train_and_validate(
-                    model, x_train_sample, y_train_sample,
-                    x_validate_for_es, y_validate_for_es,
-                    params['max_num_epochs'])
+                    model, x_train_sample_for_train, y_train_sample_for_train,
+                    x_train_sample_for_es, y_train_sample_for_es,
+                    hyperparams['max_num_epochs'])
             val_results = predictor.test(model, x_validate, y_validate)
             learning_curve[fold]['sample_crrnas'][size] = {'train': train_results,
                     'val': val_results}
@@ -224,21 +248,24 @@ def main(args):
     predictor.set_seed(args.seed)
 
     # Read data
-    # Do not have a validation set; read the test set, but don't use it for
-    # anything
-    split_frac = (0.7, 0, 0.3)
+    # Do not have a validation set; read the test set if desired, but
+    # don't use it for anything
+    split_frac = (1.0 - args.test_split_frac, 0, args.test_split_frac)
     (x, y), (_, _), (x_test, y_test), x_test_pos = predictor.read_data(args,
             split_frac)
-
-    # Read saved parameters
-    print('Loading parameters for best model..')
-    load_path_params = os.path.join(args.load_model,
-            'best_model.params.pkl')
-    with open(load_path_params, 'rb') as f:
-        params = pickle.load(f)
+    if args.dataset == 'cas9':
+        regression = False
+    elif args.dataset == 'simulated-cas13':
+        regression = False
+    elif args.dataset == 'cas13':
+        if args.cas13_classify:
+            regression = False
+        else:
+            regression = True
 
     # Compute the learning curve
-    learning_curve = compute_learning_curve(params, x, y,
+    learning_curve = compute_learning_curve(x, y,
+            regression, args.context_nt,
             num_splits=args.num_splits, num_sizes=args.num_sizes)
 
     # Write the learning curve to a TSV file
@@ -263,11 +290,6 @@ def main(args):
 if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--load-model',
-            required=True,
-            help=("Path from which to load model architecture and "
-                  "hyperparameters. This path might contain (trained) model "
-                  "weights, but they are not loaded"))
     parser.add_argument('--write-tsv',
             required=True,
             help=("Path to .tsv.gz file to which to write learning curve "
@@ -315,6 +337,11 @@ if __name__ == "__main__":
             default=10,
             help=("Number of different sizes of the training data to compute "
                   "train/validation metrics for"))
+    parser.add_argument('--test-split-frac',
+            type=float,
+            default=0,
+            help=("Fraction of the dataset to leave out (completely ignore) "
+                  "from this analysis"))
     parser.add_argument('--seed',
             type=int,
             default=1,

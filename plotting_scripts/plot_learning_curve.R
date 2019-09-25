@@ -92,24 +92,28 @@ learning.curve.summarized.sampling.all <- learning.curve.summarized[learning.cur
 learning.curve.summarized.sampling.crrnas <- learning.curve.summarized[learning.curve.summarized$sampling.approach == "sample_crrnas", ]
 
 # Plot for sampling from all data points
-# Plot mean value (across folds) with +/- standard error
+# Plot mean value (across folds) with 95% confidence interval
 p.sampling.all <- ggplot(learning.curve.summarized.sampling.all,
                          aes(x=size))
 p.sampling.all <- p.sampling.all + geom_line(aes(y=value, color=dataset))
-p.sampling.all <- p.sampling.all + geom_ribbon(aes(ymin=value-se, ymax=value+se, fill=dataset), alpha=0.5)
+p.sampling.all <- p.sampling.all + geom_ribbon(aes(ymin=value-ci, ymax=value+ci, fill=dataset), alpha=0.5)
 p.sampling.all <- p.sampling.all + xlim(0, max(learning.curve.summarized.sampling.all$size))
 p.sampling.all <- p.sampling.all + xlab("Number of data points for training") + ylab(metric)
 p.sampling.all <- p.sampling.all + ggtitle("Sampling from all data points")
+p.sampling.all <- p.sampling.all + scale_color_viridis(discrete=TRUE)
+p.sampling.all <- p.sampling.all + scale_fill_viridis(discrete=TRUE)
 
 # Plot for sampling from crRNAs
-# Plot mean value (across folds) with +/- standard error
+# Plot mean value (across folds) with 95% confidence interval
 p.sampling.crrnas <- ggplot(learning.curve.summarized.sampling.crrnas,
                          aes(x=size))
 p.sampling.crrnas <- p.sampling.crrnas + geom_line(aes(y=value, color=dataset))
-p.sampling.crrnas <- p.sampling.crrnas + geom_ribbon(aes(ymin=value-se, ymax=value+se, fill=dataset), alpha=0.5)
+p.sampling.crrnas <- p.sampling.crrnas + geom_ribbon(aes(ymin=value-ci, ymax=value+ci, fill=dataset), alpha=0.5)
 p.sampling.crrnas <- p.sampling.crrnas + xlim(0, max(learning.curve.summarized.sampling.crrnas$size))
 p.sampling.crrnas <- p.sampling.crrnas + xlab("Number of crRNAs for training") + ylab(metric)
 p.sampling.crrnas <- p.sampling.crrnas + ggtitle("Sampling from crRNAs")
+p.sampling.crrnas <- p.sampling.crrnas + scale_color_viridis(discrete=TRUE)
+p.sampling.crrnas <- p.sampling.crrnas + scale_fill_viridis(discrete=TRUE)
 
 # Produce PDF
 g <- arrangeGrob(p.sampling.all,
