@@ -34,3 +34,18 @@ python -u predictor_baseline.py --seed 1 --dataset cas13 --cas13-subset exp-and-
 # predictor and baseline mdoels
 Rscript plotting_scripts/plot_nested_crossval_results.R out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.folds.tsv.gz out/cas13-nested-cross-val.exp-and-pos.regress-on-active.folds.tsv.gz out/cas13-nested-cross-val.exp-and-pos.regress-on-active.pdf
 ###########################################################
+
+###########################################################
+# Cas13 data
+# exp-and-pos subset, regression only on active data points
+# Normalize each crRNA across its targets, so that we predict
+# the effects due to mismatches
+
+# Perform hyperparameter search for the best model
+python -u predictor_hyperparam_search.py --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --command hyperparam-search --hyperparam-search-cross-val-num-splits 5 --search-type random --num-random-samples 200 --cas13-normalize-crrna-activity --params-mean-val-loss-out-tsv out/cas13-hyperparam-search.exp-and-pos.regress-on-active.normalized-crrnas.tsv --save-models models/predictor_exp-and-pos_regress-on-active_normalized-crrnas --seed 1 &> out/cas13-hyperparam-search.exp-and-pos.regress-on-active.normalized-crrnas.out
+
+# Select model f08075e6 from the above
+
+# Create test results
+python predictor.py --load-model models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/model-f08075e6 --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --cas13-normalize-crrna-activity --seed
+###########################################################
