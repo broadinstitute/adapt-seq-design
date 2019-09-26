@@ -373,8 +373,9 @@ def regress(x_train, y_train, x_test, y_test,
             'max_features': [None, 0.1, 'sqrt', 'log2']
     }
     reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls')
-    reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, scoring=scorer,
+    reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
+            param_distributions=params, n_iter=100,
+            cv=cv(), refit=True, scoring=scorer,
             verbose=1)
     metrics = fit_and_test_model(reg_cv, 'Gradient Boosting regression',
             hyperparams=reg_cv)
