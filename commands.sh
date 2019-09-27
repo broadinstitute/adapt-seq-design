@@ -52,6 +52,9 @@ python predictor.py --load-model models/predictor_exp-and-pos_regress-on-active_
 # Plot test results
 Rscript plotting_scripts/plot_predictor_test_results.R out/cas13-hyperparam-search.exp-and-pos.regress-on-active.normalized-crrnas.model-f08075e6.test.tsv.gz out/cas13-hyperparam-search.exp-and-pos.regress-on-active.normalized-crrnas.model-f08075e6.test.pdf
 
+# Perform nested cross-validation on the predictor
+python -u predictor_hyperparam_search.py --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 100 --max-sem 0.05 --test-split-frac 0 --cas13-normalize-crrna-activity --params-mean-val-loss-out-tsv out/cas13-nested-cross-val.exp-and-pos.regress-on-active.normalized-crrnas.models.tsv --nested-cross-val-out-tsv out/cas13-nested-cross-val.exp-and-pos.regress-on-active.normalized-crrnas.folds.tsv --seed 1 &> out/cas13-nested-cross-val.exp-and-pos.regress-on-active.normalized-crrnas.out
+
 # Perform nested cross-validation on the baseline models
 python -u predictor_baseline.py --seed 1 --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --nested-cross-val --nested-cross-val-outer-num-splits 5 --nested-cross-val-out-tsv out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.normalized-crrnas.folds.tsv --test-split-frac 0 --regression-scoring-method mse --cas13-normalize-crrna-activity &> out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.normalized-crrnas.out
 ###########################################################
