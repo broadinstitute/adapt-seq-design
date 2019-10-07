@@ -6,14 +6,24 @@
 
 # Paths to input/output files
 IN = "CCF005_pairs_annotated.csv"
+IN_DROPLETS = "CCF005_pairs_droplets.filtered.csv.gz"
 OUT = "CCF005_pairs_annotated.curated.tsv"
 
 # Amount of target sequence context to extract for each guide
 CONTEXT_NT = 20
 
 
+from collections import defaultdict
+import csv
+import gzip
+import math
+import statistics
+
+
 def read_input():
-    """Read input csv file.
+    """Read annotated (summarized) input csv file.
+
+    In this file, every line represents a guide-target pair.
 
     Returns:
         list of dicts where each element corresponds to a row
@@ -36,6 +46,36 @@ def read_input():
                 for j, val in enumerate(ls):
                     row[col_names[j]] = val
                 lines += [row]
+    return lines
+
+
+def read_droplet_input():
+    """Read input csv file of droplets.
+
+    In this file, every line represents a droplet. There may be multiple
+    droplets for each guide-target pair, so a pair can be represented by many
+    lines.
+
+    This file is messy -- e.g., newline characters within quotes -- so let's
+    use the csv module here to read.
+
+    Returns:
+        list of dicts where each element corresponds to a droplet
+    """
+    # Only keep a subset of the columns
+    cols_to_keep = ['Target', 'crRNA', 'k']
+
+    col_name_idx = {}
+    lines = []
+    with gzip.open(IN_DROPLETS, 'rt') as f:
+        reader = csv.reader(f)
+        col_names = next(reader, None)
+        col_name_idx = {k: i for i, k in enumerate(col_names)}
+        for i, ls in enumerate(reader):
+            row = {}
+            for col in cols_to_keep:
+                row[col] = ls[col_name_idx[col]]
+            lines += [row]
     return lines
 
 
@@ -100,6 +140,9 @@ def reverse_complement(x):
 def reformat_row(row):
     """Verify and summarize contents of a row.
 
+    Args:
+        row: dict representing a row (guide-target pair)
+
     Returns:
         row with new columns, removed columns, and renamed columns
     """
@@ -149,6 +192,8 @@ def reformat_row(row):
 
     # Remake row
     row_new = {}
+    row_new['crrna'] = row['crRNA']
+    row_new['target'] = row['Target']
     row_new['guide_seq'] = guide_seq
     row_new['guide_pos_nt'] = guide_pos
     row_new['target_at_guide'] = target_at_guide
@@ -159,9 +204,59 @@ def reformat_row(row):
     row_new['guide_target_hamming_dist'] = hd
     row_new['out_logk_median'] = float(row['median'])
     row_new['out_logk_stdev'] = float(row['std']) if row['count'] != '1' else 0
-    row_new['out_replicate_count'] = int(row['count'])
+    row_new['out_logk_replicate_count'] = int(row['count'])
 
     return row_new
+
+
+def add_replicate_measurements(rows, droplets):
+    """Add a column giving replicate information to each row.
+
+    Each technical replicate measurement is a droplet. For each guide-target
+    pair, there are 1 or more replicate measurements.
+
+    Args:
+        rows: list of dicts, where each element represents a guide-target pair
+        droplets: list of dicts, where each element represents a droplet
+
+    Returns:
+        rows with an added column 'out_logk_measurements', as given by the
+        individual droplets
+    """
+    # Construct a mapping {(target, crRNA): [replicate measurements]}
+    measurements = defaultdict(list)
+    
+    for droplet in droplets:
+        # Note that, in droplets, 'k' is really log(k)
+        target = droplet['Target']
+        crrna = droplet['crRNA']
+        logk = float(droplet['k'])
+        measurements[(target, crrna)].append(logk)
+
+    rows_new = []
+    for row in rows:
+        # Fetch and sort the list of measurements for this guide-target pair
+        m = measurements[(row['target'], row['crrna'])]
+        m = sorted(m)
+
+        # Check that the summary statistics agree with the measurements
+        assert len(m) >= 1
+        assert row['out_logk_replicate_count'] == len(m)
+        assert math.isclose(row['out_logk_median'], statistics.median(m),
+                rel_tol=1e-5)
+        if len(m) == 1:
+            assert row['out_logk_stdev'] == 0
+        else:
+            assert math.isclose(row['out_logk_stdev'], statistics.stdev(m),
+                    rel_tol=1e-5)
+
+        # Comma-separate the measurements
+        m_str = ','.join(str(v) for v in m)
+
+        row['out_logk_measurements'] = m_str
+        rows_new += [row]
+
+    return rows_new
 
 
 def write_output(rows):
@@ -169,7 +264,8 @@ def write_output(rows):
     """
     cols = ['guide_seq', 'guide_pos_nt', 'target_at_guide', 'target_before',
             'target_after', 'crrna_block', 'type', 'guide_target_hamming_dist',
-            'out_logk_median', 'out_logk_stdev', 'out_replicate_count']
+            'out_logk_median', 'out_logk_stdev', 'out_logk_replicate_count',
+            'out_logk_measurements']
     with open(OUT, 'w') as fw:
         def write_list(l):
             fw.write('\t'.join([str(x) for x in l]) + '\n')
@@ -184,12 +280,18 @@ def main():
     rows = filter_controls(rows)
     rows = filter_inactive_guides(rows)
 
+    # Reformat rows and check a few things
     new_rows = []
     for row in rows:
         row_new = reformat_row(row)
         new_rows += [row_new]
+    rows = new_rows
 
-    write_output(new_rows)
+    # Add droplet-level (replicate) measurements
+    droplets = read_droplet_input()
+    rows = add_replicate_measurements(rows, droplets)
+
+    write_output(rows)
 
 
 if __name__ == "__main__":
