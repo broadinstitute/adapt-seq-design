@@ -602,6 +602,7 @@ def main(args):
             data_parser.set_normalize_crrna_activity()
     data_parser.read()
     parse_data._split_parser = data_parser
+    parse_data._weight_parser = data_parser
 
     x, y = data_parser.train_set()
     x_test, y_test = data_parser.test_set()

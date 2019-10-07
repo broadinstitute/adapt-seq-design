@@ -236,6 +236,7 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
     data_parser.read()
 
     parse_data._split_parser = data_parser
+    parse_data._weight_parser = data_parser
     parse_data._seq_features_context_nt = data_parser.context_nt
 
     x_train, y_train = data_parser.train_set()
@@ -923,12 +924,33 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         class_weights = list(class_weights)
         model.class_weights = class_weights
         print('Using class weights: {}'.format(class_weights))
-    def determine_sample_weights(outputs):
+
+    # For regression, determine mean sample weight so that we can
+    # normalize to have mean=1
+    if model.regression:
+        train_weights = []
+        for seqs, outputs in train_ds:
+            train_weights += [parse_data.sample_regression_weight(xi, yi, p=0)
+                    for xi, yi in zip(seqs, outputs)]
+        train_weight_mean = np.mean(train_weights)
+        validate_weights = []
+        for seqs, outputs in validate_ds:
+            validate_weights += [parse_data.sample_regression_weight(xi, yi, p=0)
+                    for xi, yi in zip(seqs, outputs)]
+        validate_weight_mean = np.mean(validate_weights)
+
+    def determine_sample_weights(seqs, outputs, norm_factor=None):
         if not model.regression:
+            # Classification; weight by class
             labels = [int(o.numpy()[0]) for o in outputs]
             return [class_weights[label] for label in labels]
         else:
-            return None
+            # Regression; weight by variance
+            weights = [parse_data.sample_regression_weight(xi, yi, p=0)
+                    for xi, yi in zip(seqs, outputs)]
+            if norm_factor is not None:
+                weights = [w / norm_factor for w in weights]
+            return weights
 
     best_val_loss = None
     num_epochs_past_best_loss = 0
@@ -936,7 +958,9 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     for epoch in range(max_num_epochs):
         # Train on each batch
         for seqs, outputs in train_ds:
-            sample_weight = determine_sample_weights(outputs)
+            sample_weight = determine_sample_weights(seqs, outputs,
+                    norm_factor=train_weight_mean)
+            print('weight:', sample_weight)
             y_true, y_pred = tf_train_step(model, seqs, outputs, optimizer,
                     sample_weight=sample_weight)
             if model.regression:
@@ -949,7 +973,8 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         # at once (not batched), but batching may help with memory usage by
         # reducing how much data is run through the network at once
         for seqs, outputs in validate_ds:
-            sample_weight = determine_sample_weights(outputs)
+            sample_weight = determine_sample_weights(seqs, outputs,
+                    norm_factor=validate_weight_mean)
             y_true, y_pred = tf_validate_step(model, seqs, outputs,
                     sample_weight=sample_weight)
             if model.regression:
@@ -1080,17 +1105,33 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     test_ds = make_dataset_and_batch(x_test, y_test,
             batch_size=model.batch_size)
 
-    def determine_sample_weights(outputs):
+    # For regression, determine mean sample weight so that we can
+    # normalize to have mean=1
+    if model.regression:
+        test_weights = []
+        for seqs, outputs in test_ds:
+            test_weights += [parse_data.sample_regression_weight(xi, yi, p=0)
+                    for xi, yi in zip(seqs, outputs)]
+        test_weight_mean = np.mean(test_weights)
+
+    def determine_sample_weights(seqs, outputs, norm_factor=None):
         if not model.regression:
+            # Classification; weight by class
             labels = [int(o.numpy()[0]) for o in outputs]
             return [model.class_weights[label] for label in labels]
         else:
-            return None
+            # Regression; weight by variance
+            weights = [parse_data.sample_regression_weight(xi, yi, p=0)
+                    for xi, yi in zip(seqs, outputs)]
+            if norm_factor is not None:
+                weights = [w / norm_factor for w in weights]
+            return weights
 
     all_true = []
     all_predictions = []
     for seqs, outputs in test_ds:
-        sample_weight = determine_sample_weights(outputs)
+        sample_weight = determine_sample_weights(seqs, outputs,
+                norm_factor=test_weight_mean)
         y_true, y_pred = tf_test_step(model, seqs, outputs,
                 sample_weight=sample_weight)
         if model.regression:

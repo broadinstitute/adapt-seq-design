@@ -982,6 +982,37 @@ class Cas13ActivityParser:
         return self._data_set(self._test_set)
 
 
+_weight_parser = None
+def sample_regression_weight(xi, yi, p=0):
+    """Compute a sample weight to use during regression while training.
+
+    Args:
+        xi: data point, namely input features
+        yi: activity of xi
+        p: coefficient of z-score in weight
+
+    Returns:
+        relative weight of sample
+    """
+    # xi is a guide-target pair
+    # Determine the mean and stdev across all targets of the guide in xi
+    guide_pos = _weight_parser.pos_for_input(xi)
+    guide_mean = _weight_parser.crrna_activity_mean[guide_pos]
+    guide_stdev = _weight_parser.crrna_activity_stdev[guide_pos]
+
+    # Compute a z-score for this activity: the number of standard deviations by
+    # which yi differs from the mean across all targets for the guide
+    z_score = (yi - guide_mean) / guide_stdev
+    z_score = z_score.numpy()[0]    # tensor to scalar
+
+    # Let the weight be 1 + p*abs(z_score)
+    # This way guide-target pairs where the activity is much more different
+    # than the mean for the guide are weighted more heavily during training
+    weight = 1 + p*np.absolute(z_score)
+
+    return weight
+
+
 _split_parser = None
 def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
         yield_indices=False):
