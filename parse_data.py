@@ -521,8 +521,23 @@ class Cas13ActivityParser:
     CRRNA_LEN = 28
 
     # A threshold is of 1.0 for negative/positive points is reasonable based
-    # on the distribution of the output variable (out_logk_median)
+    # on the distribution of the median output variable (out_logk_median)
+    # across replicates
     ACTIVITY_THRESHOLD = -2.5
+
+    # Define the number of technical replicate measurements (each from a
+    # droplet) to sample
+    # Each guide-target pair has some number of technical replicates; most
+    # have >= 10
+    # We'll sample this number for each guide-target pair, randomly with
+    # replacement; if the number of guide-target pairs was N, then we'll wind
+    # up with N*NUM_REPLICATES_TO_SAMPLE data points (or 'samples') in our
+    # dataset
+    # Note that this is preferable to just using all technical
+    # replicates/measurements in the dataset, because the number of replicates
+    # varies per guide-target pair and this ensures that every guide-target
+    # pair is represented with the same number of samples in the dataset
+    NUM_REPLICATES_TO_SAMPLE = 10
 
 
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
@@ -618,8 +633,10 @@ class Cas13ActivityParser:
         is the same for 'G' in the target and 'A' in the guide) which might
         be important here.
 
-        This assigns the output to be the value of 'out_logk_median' (or
-        1/0 if doing classification).
+        This yields a single output value (1/0) if doing classification,
+        according to the median of the replicates ('out_logk_median').
+        Otherwise, this yields a list of NUM_REPLICATES_TO_SAMPLE output
+        values.
 
         Note that when self.make_feats_for_baseline is set, the input feature
         vector is simplified but contains the same information.
@@ -630,7 +647,7 @@ class Cas13ActivityParser:
 
         Returns:
             tuple (i, out) where i is a one-hot encoding of the input
-            and out is the output
+            and out is a list of the sampled output measurements
         """
         onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
         def onehot(b):
@@ -724,21 +741,24 @@ class Cas13ActivityParser:
         input_feats = np.array(input_feats)
 
         # Determine an output for this row
-        activity = float(row['out_logk_median'])
+        activity_median = float(row['out_logk_median'])
         if self.classify_activity:
             # Make the output be a 1/0 label
             # Since most labels will be active, let's make active be 0 and
             # inactive be 1 (i.e., predict the inactive ones)
-            if activity < self.ACTIVITY_THRESHOLD:
+            if activity_median < self.ACTIVITY_THRESHOLD:
                 activity = 1
             else:
                 activity = 0
         else:
+            # Return a list of activity values
+            activity = row['out_logk_measurements_sampled']
+
             if self.normalize_crrna_activity:
                 pos = int(row['guide_pos_nt'])
                 crrna_mean = self.crrna_activity_mean[pos]
                 crrna_stdev = self.crrna_activity_stdev[pos]
-                activity = (activity - crrna_mean) / crrna_stdev
+                activity = [(a - crrna_mean) / crrna_stdev for a in activity]
 
         return (input_feats, activity)
 
@@ -758,19 +778,26 @@ class Cas13ActivityParser:
                 else:
                     rows += [ls]
 
+        # Convert rows to be key'd by column name
+        rows_new = []
+        for row in rows:
+            row_dict = {k: row[header_idx[k]] for k in header_idx.keys()}
+            rows_new += [row_dict]
+        rows = rows_new
+
         if self.subset == 'exp':
             # Only keep rows where type is 'exp'
-            rows = [row for row in rows if row[header_idx['type']] == 'exp']
+            rows = [row for row in rows if row['type'] == 'exp']
         if self.subset == 'pos':
             # Only keep rows where type is 'pos'
-            rows = [row for row in rows if row[header_idx['type']] == 'pos']
+            rows = [row for row in rows if row['type'] == 'pos']
         if self.subset == 'neg':
             # Only keep rows where type is 'neg'
-            rows = [row for row in rows if row[header_idx['type']] == 'neg']
+            rows = [row for row in rows if row['type'] == 'neg']
         if self.subset == 'exp-and-pos':
             # Only keep rows where type is 'exp' or 'pos'
-            rows = [row for row in rows if row[header_idx['type']] == 'exp' or
-                    row[header_idx['type']] == 'pos']
+            rows = [row for row in rows if row['type'] == 'exp' or
+                    row['type'] == 'pos']
 
         # Shuffle the rows before splitting
         if self.stratify_randomly:
@@ -778,20 +805,44 @@ class Cas13ActivityParser:
 
         # Sort by position before splitting
         if self.stratify_by_pos:
-            rows = sorted(rows, key=lambda x: float(x[header_idx['guide_pos_nt']]))
+            rows = sorted(rows, key=lambda x: float(x['guide_pos_nt']))
 
         # Remove the inactive points
         if self.regress_only_on_active:
             rows = [row for row in rows if
-                    float(row[header_idx['out_logk_median']]) >= self.ACTIVITY_THRESHOLD]
+                    float(row['out_logk_median']) >= self.ACTIVITY_THRESHOLD]
+
+        # Sample a list of activity values from the measurements
+        # Note that this is only used for regression, so only add it for the
+        # active guide-target pairs
+        # To make this cleaner, only sample from the active measurements;
+        # few active guide-target pairs (as identified according to the
+        # median) have inactive measurements, so this should remove few
+        # measurements
+        for row in rows:
+            if float(row['out_logk_median']) < self.ACTIVITY_THRESHOLD:
+                # This row (guide-target pair) is inactive
+                continue
+            activity_measurements = [float(a) for a in
+                    row['out_logk_measurements'].split(',')]
+            activity_measurements = [a for a in activity_measurements if a >=
+                    self.ACTIVITY_THRESHOLD]
+            activity_sampled = random.choices(activity_measurements,
+                    k=self.NUM_REPLICATES_TO_SAMPLE)
+            row['out_logk_measurements_sampled'] = activity_sampled
 
         # Calculate the mean and stdev of activity for each crRNA (according
-        # to position)
+        # to position); take this across the sampled measurements
+        # Note that this is only used for regression, so only add it for the
+        # active guide-target pairs
         activity_by_pos = defaultdict(list)
         for row in rows:
-            pos = int(row[header_idx['guide_pos_nt']])
-            activity = float(row[header_idx['out_logk_median']])
-            activity_by_pos[pos].append(activity)
+            if float(row['out_logk_median']) < self.ACTIVITY_THRESHOLD:
+                # This row (guide-target pair) is inactive
+                continue
+            pos = int(row['guide_pos_nt'])
+            activity_sampled = row['out_logk_measurements_sampled']
+            activity_by_pos[pos].extend(activity_sampled)
         self.crrna_activity_mean = {pos: np.mean(activity_by_pos[pos])
                 for pos in activity_by_pos.keys()}
         self.crrna_activity_stdev = {pos: np.std(activity_by_pos[pos])
@@ -801,15 +852,29 @@ class Cas13ActivityParser:
         inputs_and_outputs = []
         self.input_feats_pos = {}
         row_idx_pos = {}
-        for i, row in enumerate(rows):
-            row_dict = {k: row[header_idx[k]] for k in header_idx.keys()}
-            input_feats, output = self._gen_input_and_output(row_dict)
-            inputs_and_outputs += [(input_feats, output)]
+        i = 0
+        for row in rows:
+            pos = int(row['guide_pos_nt'])
 
+            # Generate an input feature vector and a (list of) output(s)
+            input_feats, output = self._gen_input_and_output(row)
+            if self.classify_activity:
+                inputs_and_outputs += [(input_feats, output)]
+                row_idx_pos[i] = pos
+                i += 1
+            else:
+                # Add multiple data points ('samples') here; row represents one
+                # guide-target pair, but there are NUM_REPLICATES_TO_SAMPLE
+                # different output values
+                for o in output:
+                    inputs_and_outputs += [(input_feats, o)]
+                    row_idx_pos[i] = pos
+                    i += 1
+
+            # Store a mapping from the input feature vector to the guide
+            # position in the library design
             input_feats_key = np.array(input_feats, dtype='f').tostring()
-            pos = int(row[header_idx['guide_pos_nt']])
             self.input_feats_pos[input_feats_key] = pos
-            row_idx_pos[i] = pos
 
         # Split into train, validate, and test sets
         train_end_idx = int(len(inputs_and_outputs) * self.split_train)
