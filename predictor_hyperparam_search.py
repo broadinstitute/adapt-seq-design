@@ -600,6 +600,8 @@ def main(args):
                 classify_activity, regress_on_all, regress_only_on_active)
         if args.cas13_normalize_crrna_activity:
             data_parser.set_normalize_crrna_activity()
+        if args.cas13_use_difference_from_wildtype_activity:
+            data_parser.set_use_difference_from_wildtype_activity()
     data_parser.read()
     parse_data._split_parser = data_parser
     parse_data._weight_parser = data_parser
@@ -763,6 +765,14 @@ if __name__ == "__main__":
                   "across its targets to have mean 0 and stdev 1; this means "
                   "prediction is performed based on target differences (e.g., "
                   "mismatches) rather than inherent sequence of the crRNA"))
+    parser.add_argument('--cas13-use-difference-from-wildtype-activity',
+            action='store_true',
+            help=("If set, use the activity value of a guide g and target t "
+                  "pair to be the difference between the measured activity of "
+                  "g-t and the mean activity between g and all wildtype "
+                  "(matching) targets of g; this means prediction is "
+                  "performed based on targeted differences (e.g., mismatches) "
+                  "rather than inherent sequence of the crRNA"))
     parser.add_argument('--context-nt',
             type=int,
             default=10,

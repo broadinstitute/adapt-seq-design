@@ -57,6 +57,14 @@ def parse_args():
                   "across its targets to have mean 0 and stdev 1; this means "
                   "prediction is performed based on target differences (e.g., "
                   "mismatches) rather than inherent sequence of the crRNA"))
+    parser.add_argument('--cas13-use-difference-from-wildtype-activity',
+            action='store_true',
+            help=("If set, use the activity value of a guide g and target t "
+                  "pair to be the difference between the measured activity of "
+                  "g-t and the mean activity between g and all wildtype "
+                  "(matching) targets of g; this means prediction is "
+                  "performed based on targeted differences (e.g., mismatches) "
+                  "rather than inherent sequence of the crRNA"))
     parser.add_argument('--context-nt',
             type=int,
             default=10,

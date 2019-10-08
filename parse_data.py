@@ -541,8 +541,7 @@ class Cas13ActivityParser:
 
 
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
-            shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False,
-            normalize_crrna_activity=False):
+            shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
         """
         Args:
             subset: either 'exp' (use only experimental data points, which
@@ -583,6 +582,7 @@ class Cas13ActivityParser:
         self.make_feats_for_baseline = False
 
         self.normalize_crrna_activity = False
+        self.use_difference_from_wildtype_activity = False
 
         self.was_read = False
 
@@ -614,8 +614,23 @@ class Cas13ActivityParser:
     def set_normalize_crrna_activity(self):
         """Normalize activity of each crRNA, across targets, to have mean 0 and
         stdev 1.
+
+        We can only set one of 'normalize_crrna_activity' and
+        'use_difference_from_wildtype_activity'.
         """
+        assert self.use_difference_from_wildtype_activity is False
         self.normalize_crrna_activity = True
+
+    def set_use_difference_from_wildtype_activity(self):
+        """Use, as the activity value for a pair of guide g and target t, the
+        difference between the g-t activity and the mean activity between g and
+        its wildtype (matching) targets.
+
+        We can only set one of 'normalize_crrna_activity' and
+        'use_difference_from_wildtype_activity'.
+        """
+        assert self.normalize_crrna_activity is False
+        self.use_difference_from_wildtype_activity = True
 
     def _gen_input_and_output(self, row):
         """Generate input features and output for each row.
@@ -754,11 +769,14 @@ class Cas13ActivityParser:
             # Return a list of activity values
             activity = row['out_logk_measurements_sampled']
 
+            pos = int(row['guide_pos_nt'])
             if self.normalize_crrna_activity:
-                pos = int(row['guide_pos_nt'])
                 crrna_mean = self.crrna_activity_mean[pos]
                 crrna_stdev = self.crrna_activity_stdev[pos]
                 activity = [(a - crrna_mean) / crrna_stdev for a in activity]
+            if self.use_difference_from_wildtype_activity:
+                wildtype_mean = self.crrna_wildtype_activity_mean[pos]
+                activity = [a - wildtype_mean for a in activity]
 
         return (input_feats, activity)
 
@@ -847,6 +865,24 @@ class Cas13ActivityParser:
                 for pos in activity_by_pos.keys()}
         self.crrna_activity_stdev = {pos: np.std(activity_by_pos[pos])
                 for pos in activity_by_pos.keys()}
+
+        # For each crRNA (according to positive), calculate the mean activity
+        # between it and the wildtype targets; take this across the sampled
+        # measurements
+        # Note that this is only used for regression, so only add it for the
+        # active guide-target pairs
+        wildtype_activity_by_pos = defaultdict(list)
+        for row in rows:
+            if float(row['out_logk_median']) < self.ACTIVITY_THRESHOLD:
+                # This row (guide-target pair) is inactive
+                continue
+            if int(row['guide_target_hamming_dist']) == 0:
+                # This is a wildtype type
+                pos = int(row['guide_pos_nt'])
+                activity_sampled = row['out_logk_measurements_sampled']
+                wildtype_activity_by_pos[pos].extend(activity_sampled)
+        self.crrna_wildtype_activity_mean = {pos: np.mean(wildtype_activity_by_pos[pos])
+                for pos in wildtype_activity_by_pos.keys()}
 
         # Generate input and outputs for each row
         inputs_and_outputs = []

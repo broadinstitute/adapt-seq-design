@@ -65,6 +65,14 @@ def parse_args():
                   "across its targets to have mean 0 and stdev 1; this means "
                   "prediction is performed based on target differences (e.g., "
                   "mismatches) rather than inherent sequence of the crRNA"))
+    parser.add_argument('--cas13-use-difference-from-wildtype-activity',
+            action='store_true',
+            help=("If set, use the activity value of a guide g and target t "
+                  "pair to be the difference between the measured activity of "
+                  "g-t and the mean activity between g and all wildtype "
+                  "(matching) targets of g; this means prediction is "
+                  "performed based on targeted differences (e.g., mismatches) "
+                  "rather than inherent sequence of the crRNA"))
     parser.add_argument('--context-nt',
             type=int,
             default=10,
@@ -233,6 +241,8 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
             data_parser.set_make_feats_for_baseline()
         if args.cas13_normalize_crrna_activity:
             data_parser.set_normalize_crrna_activity()
+        if args.cas13_use_difference_from_wildtype_activity:
+            data_parser.set_use_difference_from_wildtype_activity()
     data_parser.read()
 
     parse_data._split_parser = data_parser
@@ -960,7 +970,6 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         for seqs, outputs in train_ds:
             sample_weight = determine_sample_weights(seqs, outputs,
                     norm_factor=train_weight_mean)
-            print('weight:', sample_weight)
             y_true, y_pred = tf_train_step(model, seqs, outputs, optimizer,
                     sample_weight=sample_weight)
             if model.regression:
