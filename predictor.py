@@ -724,11 +724,14 @@ class CustomMetric:
         self.y_true = []
         self.y_pred = []
     def __call__(self, y_true, y_pred):
-        # Convert from tensors to numpy arrays, then to regular Python lists
-        y_true = list(tf.reshape(y_true, [-1]).numpy())
-        y_pred = list(tf.reshape(y_pred, [-1]).numpy())
-        self.y_true += y_true
-        self.y_pred += y_pred
+        # Save y_true and y_pred (tensors) into a list
+        self.y_true += [y_true]
+        self.y_pred += [y_pred]
+    def to_np_array(self):
+        # Concat tensors and convert to numpy arrays
+        y_true_np = tf.reshape(tf.concat(self.y_true, 0), [-1]).numpy()
+        y_pred_np = tf.reshape(tf.concat(self.y_pred, 0), [-1]).numpy()
+        return y_true_np, y_pred_np
     def result(self):
         raise NotImplementedError("result() must be implemented in a subclass")
     def reset_states(self):
@@ -743,12 +746,14 @@ class Correlation(CustomMetric):
             self.corr_fn = spearman_corr
         super().__init__(name)
     def result(self):
-        return self.corr_fn(self.y_true, self.y_pred)
+        y_true_np, y_pred_np = super(Correlation, self).to_np_array()
+        return self.corr_fn(y_true_np, y_pred_np)
 class R2Score(CustomMetric):
     def __init__(self, name='r2_score'):
         super().__init__(name)
     def result(self):
-        return sklearn.metrics.r2_score(self.y_true, self.y_pred)
+        y_true_np, y_pred_np = super(R2Score, self).to_np_array()
+        return sklearn.metrics.r2_score(y_true_np, y_pred_np)
 train_mse_metric = tf.keras.metrics.MeanSquaredError(name='train_mse')
 train_mae_metric = tf.keras.metrics.MeanAbsoluteError(name='train_mae')
 train_mape_metric = tf.keras.metrics.MeanAbsolutePercentageError(name='train_mape')
