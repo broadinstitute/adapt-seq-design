@@ -138,6 +138,15 @@ def parse_args():
             help=("L2 regularization factor. This is applied to weights "
                   "(kernal_regularizer). Note that this does not regularize "
                   "bias of activity."))
+    parser.add_argument('--sample-weight-scaling-factor',
+            type=float,
+            default=0,
+            help=("Hyperparameter p where sample weight is (1 + p*["
+                  "difference in activity from mean wildtype activity]); "
+                  "p must be >= 0. Note that p=0 means that all samples are "
+                  "weighted the same; higher p means that guide-target pairs "
+                  "whose activity deviates from the wildtype from the guide "
+                  "are treated as more important."))
     parser.add_argument('--batch-size',
             type=int,
             default=32,
@@ -393,6 +402,11 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         self.regression = regression
         self.add_gc_content = params['add_gc_content']
         self.context_nt = params['context_nt']
+
+        if params['sample_weight_scaling_factor'] < 0:
+            raise ValueError(("Parameter 'sample_weight_scaling_factor' "
+                "must be >=0"))
+        self.sample_weight_scaling_factor = params['sample_weight_scaling_factor']
 
         self.batch_size = params['batch_size']
         self.learning_rate = params['learning_rate']
@@ -945,12 +959,14 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     if model.regression:
         train_weights = []
         for seqs, outputs in train_ds:
-            train_weights += [parse_data.sample_regression_weight(xi, yi, p=0)
+            train_weights += [parse_data.sample_regression_weight(xi, yi,
+                    p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
         train_weight_mean = np.mean(train_weights)
         validate_weights = []
         for seqs, outputs in validate_ds:
-            validate_weights += [parse_data.sample_regression_weight(xi, yi, p=0)
+            validate_weights += [parse_data.sample_regression_weight(xi, yi,
+                    p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
         validate_weight_mean = np.mean(validate_weights)
 
@@ -961,7 +977,8 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
             return [class_weights[label] for label in labels]
         else:
             # Regression; weight by variance
-            weights = [parse_data.sample_regression_weight(xi, yi, p=0)
+            weights = [parse_data.sample_regression_weight(xi, yi,
+                    p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
             if norm_factor is not None:
                 weights = [w / norm_factor for w in weights]
@@ -1135,7 +1152,8 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     if model.regression:
         test_weights = []
         for seqs, outputs in test_ds:
-            test_weights += [parse_data.sample_regression_weight(xi, yi, p=0)
+            test_weights += [parse_data.sample_regression_weight(xi, yi,
+                    p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
         test_weight_mean = np.mean(test_weights)
 
@@ -1146,7 +1164,8 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
             return [model.class_weights[label] for label in labels]
         else:
             # Regression; weight by variance
-            weights = [parse_data.sample_regression_weight(xi, yi, p=0)
+            weights = [parse_data.sample_regression_weight(xi, yi,
+                    p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
             if norm_factor is not None:
                 weights = [w / norm_factor for w in weights]
