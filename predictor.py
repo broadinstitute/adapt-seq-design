@@ -78,17 +78,18 @@ def parse_args():
             default=10,
             help=("nt of target sequence context to include alongside each "
                   "guide"))
+    parser.add_argument('--conv-filter-width',
+            type=int,
+            nargs='+',
+            help=("Width of the convolutional filter (nt) (or multiple widths "
+                  "to perform parallel convolutions). If not set, do not "
+                  "use convolutional layers (or the batch norm or pooling "
+                  "that follow it)."))
     parser.add_argument('--conv-num-filters',
             type=int,
             default=20,
             help=("Number of convolutional filters (i.e., output channels) "
                   "in the first layer"))
-    parser.add_argument('--conv-filter-width',
-            type=int,
-            nargs='+',
-            default=[2],
-            help=("Width of the convolutional filter (nt) (or multiple widths "
-                  "to perform parallel convolutions)"))
     parser.add_argument('--pool-window-width',
             type=int,
             default=2,
@@ -110,7 +111,7 @@ def parse_args():
             nargs='+',
             help=("If set, width (kernel size) of the locally connected layer. "
                   "Use multiple widths to have parallel locally connected layers "
-                  "that get concatenated. If not set, do use have a locally "
+                  "that get concatenated. If not set, do not use have a locally "
                   "connected layer."))
     parser.add_argument('--locally-connected-dim',
             type=int,
@@ -418,6 +419,13 @@ class CasCNNWithParallelFilters(tf.keras.Model):
             self.guide_slice = tf.keras.layers.Cropping1D((self.context_nt,
                 self.context_nt))
 
+        if params['conv_filter_width'] is None:
+            # Use a layer of width 'None', to make it easier to construct
+            # locally connected layers below
+            conv_filter_widths = [None]
+        else:
+            conv_filter_widths = params['conv_filter_width']
+
         # Construct groups, where each consists of a convolutional
         # layer with a particular width, a batch normalization layer, and
         # a pooling layer
@@ -428,71 +436,78 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         self.pools = []
         self.pools_2 = []
         self.lcs = []
-        for filter_width in params['conv_filter_width']:
-            # Construct the convolutional layer
-            # Do not pad the input (`padding='valid'`) because all input
-            # sequences should be the same length
-            conv_layer_num_filters = params['conv_num_filters'] # ie, num of output channels
-            conv = tf.keras.layers.Conv1D(
-                    conv_layer_num_filters,
-                    filter_width,
-                    strides=1,  # stride by 1
-                    padding='valid',
-                    activation=params['activation_fn'],
-                    name='group_w' + str(filter_width) + '_conv')
-            # Note that the total number of filters in this layer will be
-            # len(conv_filter_width)*conv_layer_num_filters since there are
-            # len(conv_filter_width) groups
+        for filter_width in conv_filter_widths:
+            if filter_width is not None:
+                # Construct the convolutional layer
+                # Do not pad the input (`padding='valid'`) because all input
+                # sequences should be the same length
+                conv_layer_num_filters = params['conv_num_filters'] # ie, num of output channels
+                conv = tf.keras.layers.Conv1D(
+                        conv_layer_num_filters,
+                        filter_width,
+                        strides=1,  # stride by 1
+                        padding='valid',
+                        activation=params['activation_fn'],
+                        name='group_w' + str(filter_width) + '_conv')
+                # Note that the total number of filters in this layer will be
+                # len(conv_filter_width)*conv_layer_num_filters since there are
+                # len(conv_filter_width) groups
 
-            # Add a batch normalization layer
-            # It should not matter whether this comes before or after the
-            # pool layer, as long as it is after the conv layer
-            # This is applied after the activation of the conv layer; the
-            # original batch norm applies batch normalization before the
-            # activation function, but more recent work seems to apply it
-            # after activation
-            # Only use if the parameter specifying to skip batch norm is
-            # not set
-            if params['skip_batch_norm'] is True:
-                batchnorm = None
+                # Add a batch normalization layer
+                # It should not matter whether this comes before or after the
+                # pool layer, as long as it is after the conv layer
+                # This is applied after the activation of the conv layer; the
+                # original batch norm applies batch normalization before the
+                # activation function, but more recent work seems to apply it
+                # after activation
+                # Only use if the parameter specifying to skip batch norm is
+                # not set
+                if params['skip_batch_norm'] is True:
+                    batchnorm = None
+                else:
+                    batchnorm = tf.keras.layers.BatchNormalization(
+                            name='group_w' + str(filter_width) + '_batchnorm')
+
+                # Add a pooling layer
+                # Pool over a window of width pool_window, for
+                # each output channel of the conv layer (and, of course, for each batch)
+                # Stride by pool_stride; note that if  pool_stride = pool_window,
+                # then the pooling windows are non-overlapping
+                pool_window_width = params['pool_window_width']
+                pool_stride = max(1, int(pool_window_width / 2))
+                maxpool = tf.keras.layers.MaxPooling1D(
+                        pool_size=pool_window_width,
+                        strides=pool_stride,
+                        name='group_w' + str(filter_width) + '_maxpool')
+                avgpool = tf.keras.layers.AveragePooling1D(
+                        pool_size=pool_window_width,
+                        strides=pool_stride,
+                        name='group_w' + str(filter_width) + '_avgpool')
+
+                self.convs += [conv]
+                self.batchnorms += [batchnorm]
+
+                # If only using 1 pool, store this in self.pools
+                # If using 2 pools, store one in self.pools and the other in
+                # self.pools_2, and create self.pool_merge to concatenate the
+                # outputs of these 2 pools
+                if params['pool_strategy'] == 'max':
+                    self.pools += [maxpool]
+                    self.pools_2 += [None]
+                elif params['pool_strategy'] == 'avg':
+                    self.pools += [avgpool]
+                    self.pools_2 += [None]
+                elif params['pool_strategy'] == 'max-and-avg':
+                    self.pools += [maxpool]
+                    self.pools_2 += [avgpool]
+                else:
+                    raise Exception(("Unknown --pool-strategy"))
             else:
-                batchnorm = tf.keras.layers.BatchNormalization(
-                        name='group_w' + str(filter_width) + '_batchnorm')
-
-            # Add a pooling layer
-            # Pool over a window of width pool_window, for
-            # each output channel of the conv layer (and, of course, for each batch)
-            # Stride by pool_stride; note that if  pool_stride = pool_window,
-            # then the pooling windows are non-overlapping
-            pool_window_width = params['pool_window_width']
-            pool_stride = max(1, int(pool_window_width / 2))
-            maxpool = tf.keras.layers.MaxPooling1D(
-                    pool_size=pool_window_width,
-                    strides=pool_stride,
-                    name='group_w' + str(filter_width) + '_maxpool')
-            avgpool = tf.keras.layers.AveragePooling1D(
-                    pool_size=pool_window_width,
-                    strides=pool_stride,
-                    name='group_w' + str(filter_width) + '_avgpool')
-
-            self.convs += [conv]
-            self.batchnorms += [batchnorm]
-
-            # If only using 1 pool, store this in self.pools
-            # If using 2 pools, store one in self.pools and the other in
-            # self.pools_2, and create self.pool_merge to concatenate the
-            # outputs of these 2 pools
-            if params['pool_strategy'] == 'max':
-                self.pools += [maxpool]
+                # No convolutional layer
+                self.convs += [None]
+                self.batchnorms += [None]
+                self.pools += [None]
                 self.pools_2 += [None]
-            elif params['pool_strategy'] == 'avg':
-                self.pools += [avgpool]
-                self.pools_2 += [None]
-            elif params['pool_strategy'] == 'max-and-avg':
-                self.pools += [maxpool]
-                self.pools_2 += [avgpool]
-            else:
-                raise Exception(("Unknown --pool-strategy"))
 
             # Setup locally connected layers (if set)
             # Use one for each convolution filter grouping (if applied after
@@ -510,6 +525,10 @@ class CasCNNWithParallelFilters(tf.keras.Model):
                 lcs_for_conv = []
                 locally_connected_dim = params['locally_connected_dim']
                 for i, lc_width in enumerate(params['locally_connected_width']):
+                    if filter_width is not None:
+                        name = 'group_w' + str(filter_width) + '_lc_w' + str(lc_width)
+                    else:
+                        name = 'lc_w' + str(lc_width)
                     # Stride by 1/2 the width
                     stride = max(1, int(lc_width / 2))
                     lc = tf.keras.layers.LocallyConnected1D(
@@ -517,13 +536,13 @@ class CasCNNWithParallelFilters(tf.keras.Model):
                         lc_width,
                         strides=stride,
                         activation=params['activation_fn'],
-                        name='group_w' + str(filter_width) + '_lc_w' + str(lc_width))
+                        name=name)
                     lcs_for_conv += [lc]
                 self.lcs += [lcs_for_conv]
             else:
                 self.lcs += [None]
 
-        if params['pool_strategy'] == 'max-and-avg':
+        if conv_filter_widths != [None] and params['pool_strategy'] == 'max-and-avg':
             # Setup layer to concatenate each max/avg pooling in each group
             self.pool_merge = tf.keras.layers.Concatenate(
                     axis=1,
@@ -552,7 +571,7 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         # concatenate along the width axis (axis=1)
         # Only create the merge layer if it is needed (i.e., there are
         # multiple filter widths)
-        if len(params['conv_filter_width']) > 1:
+        if len(conv_filter_widths) > 1:
             self.merge = tf.keras.layers.Concatenate(
                     axis=1,
                     name='merge_groups')
@@ -621,19 +640,24 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         group_outputs = []
         for conv, batchnorm, pool_1, pool_2, lcs in zip(self.convs, self.batchnorms,
                 self.pools, self.pools_2, self.lcs):
-            # Run the convolutional layer and batch norm on x, to
-            # start this group
-            group_x = conv(x)
-            if batchnorm is not None:
-                group_x = batchnorm(group_x, training=training)
+            if conv is not None:
+                # Run the convolutional layer and batch norm on x, to
+                # start this group
+                group_x = conv(x)
+                if batchnorm is not None:
+                    group_x = batchnorm(group_x, training=training)
 
-            # Run the pooling layer on the current group output (group_x)
-            if pool_2 is None:
-                group_x = pool_1(group_x)
+                # Run the pooling layer on the current group output (group_x)
+                if pool_2 is None:
+                    group_x = pool_1(group_x)
+                else:
+                    group_x_1 = pool_1(group_x)
+                    group_x_2 = pool_2(group_x)
+                    group_x = self.pool_merge([group_x_1, group_x_2])
             else:
-                group_x_1 = pool_1(group_x)
-                group_x_2 = pool_2(group_x)
-                group_x = self.pool_merge([group_x_1, group_x_2])
+                # Skip the convolutional layer, as well as batch norm and
+                # pooling
+                group_x = x
 
             if lcs is not None:
                 # Run the locally connected layer (1 or more)
@@ -671,6 +695,7 @@ class CasCNNWithParallelFilters(tf.keras.Model):
             x = dropout(x, training=training)
             x = fc(x)
 
+        x = dropout(x, training=training)
         return self.fc_final(x)
 
 

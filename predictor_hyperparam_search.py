@@ -156,8 +156,8 @@ def hyperparam_grid():
     """
     # Map each parameter to a list of possible values
     grid = {
+            'conv_filter_width': [None, [1], [2], [1, 2], [1, 2, 3, 4]],
             'conv_num_filters': [5, 15, 25],
-            'conv_filter_width': [[1], [2], [1, 2], [1, 2, 3, 4]],
             'pool_window_width': [1, 2, 4],
             'fully_connected_dim': [[20], [40],
                 [20, 20], [20, 40], [40, 40],
@@ -237,15 +237,17 @@ def hyperparam_random_dist(num_samples):
 
     # Map each parameter to a distribution of values
     space = {
-             'conv_num_filters': uniform_int(10, 100),
              'conv_filter_width': uniform_discrete([
+                 None,
                  [1], [2], [3], [4],
                  [1, 2], [1, 2, 3], [1, 2, 3, 4]]),
+             'conv_num_filters': uniform_int(10, 100),
              'pool_window_width': uniform_int(1, 4),
              'fully_connected_dim': uniform_nested_dist(1, 3,
                  uniform_int(25, 75)),
              'pool_strategy': uniform_discrete(['max', 'avg', 'max-and-avg']),
-             'locally_connected_width': uniform_discrete([None,
+             'locally_connected_width': uniform_discrete([
+                 None,
                  [1], [2], [1, 2]]),
              'locally_connected_dim': uniform_int(1, 5),
              'skip_batch_norm': uniform_discrete([False, True]),
