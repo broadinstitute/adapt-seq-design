@@ -967,14 +967,26 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
                 weights = [w / norm_factor for w in weights]
             return weights
 
+    # Compute weights for all samples once, rather than having to do so in
+    # every epoch
+    train_ds_weights = []
+    for seqs, outputs in train_ds:
+        sample_weight = determine_sample_weights(seqs, outputs,
+                norm_factor=train_weight_mean)
+        train_ds_weights += [sample_weight]
+    validate_ds_weights = []
+    for seqs, outputs in validate_ds:
+        sample_weight = determine_sample_weights(seqs, outputs,
+                norm_factor=validate_weight_mean)
+        validate_ds_weights += [sample_weight]
+
     best_val_loss = None
     num_epochs_past_best_loss = 0
 
     for epoch in range(max_num_epochs):
         # Train on each batch
-        for seqs, outputs in train_ds:
-            sample_weight = determine_sample_weights(seqs, outputs,
-                    norm_factor=train_weight_mean)
+        for i, (seqs, outputs) in enumerate(train_ds):
+            sample_weight = train_ds_weights[i]
             y_true, y_pred = tf_train_step(model, seqs, outputs, optimizer,
                     sample_weight=sample_weight)
             if model.regression:
@@ -986,9 +998,8 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         # Note that we could run the validation data through the model all
         # at once (not batched), but batching may help with memory usage by
         # reducing how much data is run through the network at once
-        for seqs, outputs in validate_ds:
-            sample_weight = determine_sample_weights(seqs, outputs,
-                    norm_factor=validate_weight_mean)
+        for i, (seqs, outputs) in enumerate(validate_ds):
+            sample_weight = validate_ds_weights[i]
             y_true, y_pred = tf_validate_step(model, seqs, outputs,
                     sample_weight=sample_weight)
             if model.regression:
