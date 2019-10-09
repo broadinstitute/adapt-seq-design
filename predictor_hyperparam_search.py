@@ -170,6 +170,7 @@ def hyperparam_grid():
             'activation_fn': ['relu', 'elu'],
             'dropout_rate': [0, 0.25, 0.50],
             'l2_factor': [0, 0.0001, 0.001, 0.01, 0.1],
+            'sample_weight_scaling_factor': [0, 0.001, 0.01, 0.1, 1, 10, 100],
             'batch_size': [8, 16, 32, 64],
             'learning_rate': [0.01, 0.001, 0.0001, 0.00001],
             'max_num_epochs': [1000]
@@ -252,6 +253,7 @@ def hyperparam_random_dist(num_samples):
              'activation_fn': uniform_discrete(['relu', 'elu']),
              'dropout_rate': uniform_continuous(0, 0.5),
              'l2_factor': lognormal(-13.0, 4.0),
+             'sample_weight_scaling_factor': loguniform(-5.0, 5.0, 10.0),
              'batch_size': uniform_int(4, 65),
              'learning_rate': loguniform(-6.0, -2.0, 10.0),
              'max_num_epochs': constant(1000)
