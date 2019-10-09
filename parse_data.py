@@ -1090,26 +1090,28 @@ def sample_regression_weight(xi, yi, p=0):
     Args:
         xi: data point, namely input features
         yi: activity of xi
-        p: coefficient of z-score in weight
+        p: scaling factor for importance weight (p>=0; p=0 does not incorporate
+            sample importance, and all samples will have the same weight)
 
     Returns:
         relative weight of sample
     """
     # xi is a guide-target pair
     # Determine the mean and stdev across all targets of the guide in xi
+    # Determine the mean wildtype activity (i.e., activity across wildtype
+    # targets) of the guide in xi
     guide_pos = _weight_parser.pos_for_input(xi)
-    guide_mean = _weight_parser.crrna_activity_mean[guide_pos]
-    guide_stdev = _weight_parser.crrna_activity_stdev[guide_pos]
+    guide_wildtype_mean = _weight_parser.crrna_wildtype_activity_mean[guide_pos]
 
-    # Compute a z-score for this activity: the number of standard deviations by
-    # which yi differs from the mean across all targets for the guide
-    z_score = (yi - guide_mean) / guide_stdev
-    z_score = z_score.numpy()[0]    # tensor to scalar
-
-    # Let the weight be 1 + p*abs(z_score)
+    # Let the weight be 1 + p*abs(difference in activity from wildtype)
     # This way guide-target pairs where the activity is much more different
-    # than the mean for the guide are weighted more heavily during training
-    weight = 1 + p*np.absolute(z_score)
+    # than the wildtype for the guide are weighted more heavily during
+    # training; intuitively, these are more interesting/important samples so we
+    # want to weight them higher, and also the variation within guides (i.e.,
+    # for target variants of a guide) may be harder to learn than the variation
+    # across guides
+    activity_diff = yi - guide_wildtype_mean
+    weight = 1 + p*np.absolute(activity_diff)
 
     return weight
 
