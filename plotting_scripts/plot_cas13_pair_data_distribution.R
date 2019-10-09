@@ -19,6 +19,7 @@ OUT.DIST.BLOCKS.RIDGES.PDF <- "out/cas13-pair-activity-dist.blocks.ridges.pdf"
 OUT.DIST.TRAIN.AND.TEST.PDF <- "out/cas13-pair-activity-dist.train-and-test.pdf"
 OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF <- "out/cas13-pair-activity-dist.between-and-within-guides.pdf"
 OUT.DIST.GC.CONTENT.PDF <- "out/cas13-pair-activity-dist.gc-content.pdf"
+OUT.DIST.DIFF.FROM.WILDTYPE.PDF <- "out/cas13-pair-activity-dist.diff-from-wildtype.pdf"
 
 
 ## A helper function from:
@@ -89,6 +90,20 @@ all.data$train.or.test <- ifelse(all.data$guide.pos.nt >= TEST.START.POS,
                                  'test',
                                  'train')
 all.data$train.or.test <- factor(all.data$train.or.test)
+
+# Add a column giving the mean wildtype activity for each guide (i.e., for each
+# guide g, the mean activity across the wildtype/matching targets); use
+# position to distinguish guides and, for each wildtype guide-target pair, use
+# only the median activity (across technical replicates)
+wildtypes <- all.data[all.data$guide.target.hamming.dist == 0, ]
+mean.wildtype.activity <- summarySE(wildtypes,
+                                    measurevar="out.logk.median",
+                                    groupvars=c("guide.pos.nt"))
+all.data$out.logk.wildtype.mean <- with(mean.wildtype.activity,
+                                        out.logk.median[match(all.data$guide.pos.nt,
+                                                              guide.pos.nt)])
+all.data$diff.from.wildtype <- all.data$out.logk.median - all.data$out.logk.wildtype.mean
+
 
 # Extract subset of data points corresponding to an 'experiment' (generally,
 # a mismatch between guide/target, but not always)
@@ -175,6 +190,10 @@ guide.target.expandpos.summarized <- summarySE(guide.target.expandpos,
                                                measurevar="out.logk.median",
                                                groupvars=c("guide.pos.nt"))
 
+guide.target.expandpos.summarized$out.logk.wildtype.mean <- with(mean.wildtype.activity,
+                                                                 out.logk.median[match(guide.target.expandpos.summarized$guide.pos.nt,
+                                                                                       guide.pos.nt)])
+
 # Add a column, order, giving the order of the guides (rows) sorted by mean
 # out.logk.median value (in the column by that name)
 guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.summarized,
@@ -186,9 +205,10 @@ guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.su
                                                        upper=pctile.80)
 
 # Produce an ordered dot plot
-p <- ggplot(guide.target.expandpos.summarized.ordered, aes(x=median, y=order))
+p <- ggplot(guide.target.expandpos.summarized.ordered, aes(y=order))
 p <- p + geom_errorbarh(aes(xmin=lower, xmax=upper), height=0, size=0.5, color="black", alpha=0.5)
-p <- p + geom_point(size=1)
+p <- p + geom_point(aes(x=median), size=1)
+p <- p + geom_point(aes(x=out.logk.wildtype.mean), color="blue", size=1)    # show a blue dot for mean wildtype activity of the guide
 p <- p + xlab("Activity (variation is across targets)") + ylab("crRNA")
 p <- p + theme_bw()
 p <- p + theme(axis.text.y=element_blank(), # y-axis text/ticks are meaningless
@@ -226,6 +246,24 @@ p <- p + annotate(geom='text', x=Inf, y=Inf, hjust=1, vjust=1, size=5,
                       rho~"="~spearman.rho, list(spearman.rho=format(spearman.rho, digits=3))))),
                   parse=TRUE)
 p + ggsave(OUT.DIST.GC.CONTENT.PDF, width=8, height=8, useDingbats=FALSE)
+##############################################################################
+
+##############################################################################
+# Plot density of (activity - [mean wildtype activity]) over different data
+# subsets
+# That is, for each (guide g, target t) pair with activity A, consider the mean
+# wildtype activity for g (i.e., mean activity over all the targets matching
+# g). This plots A - [mean wildtype activity for g]. This gives a measure of
+# how different all the guide-target pair activities are from the wildtypes
+
+p <- ggplot(df, aes(x=diff.from.wildtype, fill=dataset, color=dataset))
+# Use position='identity' to overlay plots
+p <- p + geom_density(alpha=0.5, position='identity')
+p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
+p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
+p <- p + xlab("Activity - (wildtype activity)") + ylab("Density")
+p <- p + theme_bw()
+p + ggsave(OUT.DIST.DIFF.FROM.WILDTYPE.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
 # Remove the empty Rplots.pdf created above
