@@ -328,11 +328,15 @@ def regress(x_train, y_train, x_test, y_test,
     metrics = fit_and_test_model(reg, 'Linear regression', [])
     metrics_for_models['lr'] = metrics
 
+    # Note:
+    #  For below models, increasing `max_iter` or increasing `tol` can reduce
+    #  the warning 'ConvergenceWarning: Objective did not converge.'
+
     # L1 linear regression
     params = {
-            'alpha': np.logspace(-7, 7, num=100, base=10.0)
+            'alpha': np.logspace(-8, 8, num=100, base=10.0)
     }
-    reg = sklearn.linear_model.Lasso(max_iter=10000, copy_X=True)
+    reg = sklearn.linear_model.Lasso(max_iter=100000, tol=0.001, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
             param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=1)
@@ -341,9 +345,9 @@ def regress(x_train, y_train, x_test, y_test,
 
     # L2 linear regression
     params = {
-            'alpha': np.logspace(-7, 7, num=100, base=10.0)
+            'alpha': np.logspace(-8, 8, num=100, base=10.0)
     }
-    reg = sklearn.linear_model.Ridge(max_iter=10000, copy_X=True)
+    reg = sklearn.linear_model.Ridge(max_iter=100000, tol=0.001, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
             param_grid=params, cv=cv(), refit=True, scoring=scorer,
             verbose=1)
@@ -360,12 +364,13 @@ def regress(x_train, y_train, x_test, y_test,
     #  fit_and_test_model() prints values on a hold-out set, but chooses
     #  hyperparameters on splits of the train set
     params = {
-            'l1_ratio': 1.0 - np.logspace(-5, 0, num=10, base=2.0)[::-1] + 2.0**(-5),
-            'alpha': np.logspace(-7, 7, num=100, base=10.0)
+            'l1_ratio': 1.0 - np.logspace(-5, 0, num=100, base=2.0)[::-1] + 2.0**(-5),
+            'alpha': np.logspace(-8, 8, num=100, base=10.0)
     }
-    reg = sklearn.linear_model.ElasticNet(max_iter=10000, copy_X=True)
-    reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, scoring=scorer,
+    reg = sklearn.linear_model.ElasticNet(max_iter=100000, tol=0.001, copy_X=True)
+    reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
+            param_distributions=params, n_iter=100,
+            cv=cv(), refit=True, scoring=scorer,
             verbose=1)
     metrics = fit_and_test_model(reg_cv, 'L1+L2 linear regression',
             hyperparams=reg_cv)
@@ -380,7 +385,7 @@ def regress(x_train, y_train, x_test, y_test,
             'max_depth': [2**k for k in range(1, 4)],
             'max_features': [None, 0.1, 'sqrt', 'log2']
     }
-    reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls')
+    reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.001)
     reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
             param_distributions=params, n_iter=100,
             cv=cv(), refit=True, scoring=scorer,
