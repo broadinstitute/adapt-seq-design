@@ -63,3 +63,20 @@ python -u predictor_baseline.py --seed 1 --dataset cas13 --cas13-subset exp-and-
 # predictor and baseline models
 Rscript plotting_scripts/plot_nested_crossval_results.R out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.normalized-crrnas.folds.tsv.gz out/cas13-nested-cross-val.exp-and-pos.regress-on-active.normalized-crrnas.folds.tsv.gz out/cas13-nested-cross-val.exp-and-pos.regress-on-active.normalized-crrnas.pdf
 ###########################################################
+
+###########################################################
+# Cas13 data
+# exp-and-pos subset, regression only on active data points
+# Predict the difference of each guide-target pair's activity from the
+# wildtype activity for the guide (i.e., matching target)
+
+# Perform nested cross-validation on the predictor
+python -u predictor_hyperparam_search.py --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 50 --max-sem 0.05 --test-split-frac 0 --cas13-use-difference-from-wildtype-activity --params-mean-val-loss-out-tsv out/cas13-nested-cross-val.exp-and-pos.regress-on-active.diff-from-wildtype.models.tsv --nested-cross-val-out-tsv out/cas13-nested-cross-val.exp-and-pos.regress-on-active.diff-from-wildtype.folds.tsv --seed 1 &> out/cas13-nested-cross-val.exp-and-pos.regress-on-active.diff-from-wildtype.out
+
+# Perform nested cross-validation on the baseline models
+python -u predictor_baseline.py --seed 1 --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --nested-cross-val --nested-cross-val-outer-num-splits 5 --nested-cross-val-out-tsv out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.diff-from-wildtype.folds.tsv --test-split-frac 0 --regression-scoring-method mse --cas13-use-difference-from-wildtype-activity &> out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.diff-from-wildtype.out
+
+# Produce plot of nested cross-validation results on
+# predictor and baseline models
+Rscript plotting_scripts/plot_nested_crossval_results.R out/cas13-baseline.nested-cross-val.exp-and-pos.regress-on-active.diff-from-wildtype.folds.tsv.gz out/cas13-nested-cross-val.exp-and-pos.regress-on-active.diff-from-wildtype.folds.tsv.gz out/cas13-nested-cross-val.exp-and-pos.regress-on-active.diff-from-wildtype.pdf
+###########################################################
