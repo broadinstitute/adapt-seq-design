@@ -389,6 +389,47 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate):
     return model
 
 
+def load_model_for_cas13_regression_on_active(load_path, params):
+    """Construct model and load weights.
+
+    This wraps load_model(), without the need to specify x_train, etc. for
+    initializing variables.
+
+    Args:
+        load_path: path containing model weights
+        params: dict of parameters
+
+    Returns:..
+        CasCNNWithParallelFilters object
+    """
+    # Load data; we only need 1 data point, which is used to initialize
+    # variables
+    parser_class = parse_data.Cas13ActivityParser
+    subset = 'exp-and-pos'
+    regression = True
+    test_frac = 0.3
+    train_frac = (1.0 - test_frac) * (2.0/3.0)
+    validation_frac = (1.0 - test_frac) * (1.0/3.0)
+    context_nt = params['context_nt']
+    data_parser = parser_class(
+            subset=subset,
+            context_nt=context_nt,
+            split=(train_frac, validation_frac, test_frac),
+            shuffle_seed=1,
+            stratify_by_pos=True)
+    data_parser.set_activity_mode(False, False, True)
+    data_parser.read()
+    parse_data._split_parser = data_parser
+    parse_data._weight_parser = data_parser
+    parse_data._seq_features_context_nt = data_parser.context_nt
+    x_train, y_train = data_parser.train_set()
+    x_validate, y_validate = data_parser.validate_set()
+
+    # Load the model
+    return load_model(load_path, params, x_train, y_train, x_validate,
+            y_validate)
+
+
 #####################################################################
 # Construct a convolutional network model
 #####################################################################
@@ -697,6 +738,51 @@ class CasCNNWithParallelFilters(tf.keras.Model):
 
         x = dropout(x, training=training)
         return self.fc_final(x)
+
+
+def pred_from_nt(model, target_with_context, guide):
+    """Predict activity from nucleotide sequence.
+
+    Args:
+        model: model object with call() function
+        target_with_context: target sequence with self.context_nt
+            nt on each side
+        guide: guide sequence
+
+    Returns:
+        output of model.call()
+    """
+    onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
+    def onehot(b):
+        # One-hot encoding of base b
+        assert b in onehot_idx.keys()
+        v = [0, 0, 0, 0]
+        v[onehot_idx[b]] = 1
+        return v
+
+    context_nt = model.context_nt
+    assert len(target_with_context) == 2*context_nt + len(guide)
+
+    # Determine one-hot encodings -- i.e., an input vector
+    input_vec = []
+    for pos in range(context_nt):
+        v_target = onehot(target_with_context[pos])
+        v_guide = [0, 0, 0, 0]
+        input_vec += [v_target + v_guide]
+    for pos in range(len(guide)):
+        v_target = onehot(target_with_context[context_nt + pos])
+        v_guide = onehot(guide[pos])
+        input_vec += [v_target + v_guide]
+    for pos in range(context_nt):
+        v_target = onehot(target_with_context[context_nt + len(guide) + pos])
+        v_guide = [0, 0, 0, 0]
+        input_vec += [v_target + v_guide]
+    input_vec = np.array(input_vec, dtype='f')
+
+    x = tf.expand_dims(input_vec, 0)
+    pred_activity = model.call(x, training=False)
+    pred_activity = pred_activity.numpy()[0][0]
+    return pred_activity
 
 
 def construct_model(params, shape, regression=False):

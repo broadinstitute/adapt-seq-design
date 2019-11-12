@@ -2,6 +2,7 @@
 """
 
 from collections import defaultdict
+import os
 import random
 
 import numpy as np
@@ -11,11 +12,15 @@ from sklearn.model_selection import StratifiedKFold
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
+SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+
+
 class Doench2016Cas9ActivityParser:
     """Parse data from Doench et al. 2016 in NBT (curated from
     Supplementary Table 18).
     """
-    INPUT_TSV='data/doench2016-nbt.supp-table-18.curated.with-context.tsv'
+    INPUT_TSV = os.path.join(SCRIPT_PATH,
+            'data/doench2016-nbt.supp-table-18.curated.with-context.tsv')
 
     # A threshold is of 1.0 for negative/positive points is reasonable based
     # on the distribution of the output variable (day21_minus_etp) and
@@ -514,7 +519,8 @@ class Cas13ActivityParser:
     Unlike Doench2016Cas9ActivityParser, this has the output be numeric
     values (for regression) rather than labels (for classification).
     """
-    INPUT_TSV='data/CCF005_pairs_annotated.curated.tsv'
+    INPUT_TSV = os.path.join(SCRIPT_PATH,
+            'data/CCF005_pairs_annotated.curated.tsv')
 
     # Define crRNA (guide) length; used for determining range of crRNA
     # in nucleotide space
