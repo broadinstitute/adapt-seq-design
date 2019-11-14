@@ -752,12 +752,29 @@ def pred_from_nt(model, target_with_context, guide):
     Returns:
         output of model.call()
     """
+    FASTA_CODES = {'A': set(('A')),
+                   'T': set(('T')),
+                   'C': set(('C')),
+                   'G': set(('G')),
+                   'K': set(('G', 'T')),
+                   'M': set(('A', 'C')),
+                   'R': set(('A', 'G')),
+                   'Y': set(('C', 'T')),
+                   'S': set(('C', 'G')),
+                   'W': set(('A', 'T')),
+                   'B': set(('C', 'G', 'T')),
+                   'V': set(('A', 'C', 'G')),
+                   'H': set(('A', 'C', 'T')),
+                   'D': set(('A', 'G', 'T')),
+                   'N': set(('A', 'T', 'C', 'G'))}
     onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
     def onehot(b):
         # One-hot encoding of base b
-        assert b in onehot_idx.keys()
+        real_bases = FASTA_CODES[b]
         v = [0, 0, 0, 0]
-        v[onehot_idx[b]] = 1
+        for b_real in real_bases:
+            assert b_real in onehot_idx.keys()
+            v[onehot_idx[b_real]] = 1.0 / len(real_bases)
         return v
 
     context_nt = model.context_nt
