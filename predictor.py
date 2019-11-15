@@ -740,14 +740,12 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         return self.fc_final(x)
 
 
-def pred_from_nt(model, target_with_context, guide):
+def pred_from_nt(model, pairs):
     """Predict activity from nucleotide sequence.
 
     Args:
         model: model object with call() function
-        target_with_context: target sequence with self.context_nt
-            nt on each side
-        guide: guide sequence
+        pairs: list of tuples (target with context, guide)
 
     Returns:
         output of model.call()
@@ -778,27 +776,31 @@ def pred_from_nt(model, target_with_context, guide):
         return v
 
     context_nt = model.context_nt
-    assert len(target_with_context) == 2*context_nt + len(guide)
 
-    # Determine one-hot encodings -- i.e., an input vector
-    input_vec = []
-    for pos in range(context_nt):
-        v_target = onehot(target_with_context[pos])
-        v_guide = [0, 0, 0, 0]
-        input_vec += [v_target + v_guide]
-    for pos in range(len(guide)):
-        v_target = onehot(target_with_context[context_nt + pos])
-        v_guide = onehot(guide[pos])
-        input_vec += [v_target + v_guide]
-    for pos in range(context_nt):
-        v_target = onehot(target_with_context[context_nt + len(guide) + pos])
-        v_guide = [0, 0, 0, 0]
-        input_vec += [v_target + v_guide]
-    input_vec = np.array(input_vec, dtype='f')
+    l = 2*context_nt + len(pairs[0][1])
+    x = np.empty((len(pairs), l, 8), dtype='f')
+    for i, (target_with_context, guide) in enumerate(pairs):
+        assert len(target_with_context) == 2*context_nt + len(guide)
 
-    x = tf.expand_dims(input_vec, 0)
+        # Determine one-hot encodings -- i.e., an input vector
+        input_vec = []
+        for pos in range(context_nt):
+            v_target = onehot(target_with_context[pos])
+            v_guide = [0, 0, 0, 0]
+            input_vec += [v_target + v_guide]
+        for pos in range(len(guide)):
+            v_target = onehot(target_with_context[context_nt + pos])
+            v_guide = onehot(guide[pos])
+            input_vec += [v_target + v_guide]
+        for pos in range(context_nt):
+            v_target = onehot(target_with_context[context_nt + len(guide) + pos])
+            v_guide = [0, 0, 0, 0]
+            input_vec += [v_target + v_guide]
+        input_vec = np.array(input_vec, dtype='f')
+        x[i] = input_vec
+
     pred_activity = model.call(x, training=False)
-    pred_activity = pred_activity.numpy()[0][0]
+    pred_activity = [p[0] for p in pred_activity.numpy()]
     return pred_activity
 
 
