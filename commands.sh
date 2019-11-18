@@ -18,7 +18,7 @@ python predictor.py --load-model models/predictor_exp-and-pos_regress-on-active/
 Rscript plotting_scripts/plot_predictor_test_results.R out/cas13-hyperparam-search.exp-and-pos.regress-on-active.model-8f534a8c.test.tsv.gz out/cas13-hyperparam-search.exp-and-pos.regress-on-active.model-8f534a8c.test.pdf
 
 # Perform nested cross-validation on the predictor
-python -u predictor_hyperparam_search.py --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 50 --max-sem 0.05 --test-split-frac 0 --params-mean-val-loss-out-tsv out/cas13-nested-cross-val.exp-and-pos.regress-on-active.models.tsv --nested-cross-val-out-tsv out/cas13-nested-cross-val.exp-and-pos.regress-on-active.folds.tsv --seed 1 &> out/cas13-nested-cross-val.exp-and-pos.regress-on-active.out
+python -u predictor_hyperparam_search.py --dataset cas13 --cas13-subset exp-and-pos --cas13-regress-only-on-active --context-nt 10 --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 200 --max-sem 0.05 --test-split-frac 0 --params-mean-val-loss-out-tsv out/cas13-nested-cross-val.exp-and-pos.regress-on-active.models.tsv --nested-cross-val-out-tsv out/cas13-nested-cross-val.exp-and-pos.regress-on-active.folds.tsv --seed 1 &> out/cas13-nested-cross-val.exp-and-pos.regress-on-active.out
 
 # Run the baseline predictors to select models and evaluate
 # on the test set
