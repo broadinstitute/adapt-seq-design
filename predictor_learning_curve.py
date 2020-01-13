@@ -253,11 +253,7 @@ def main(args):
     split_frac = (1.0 - args.test_split_frac, 0, args.test_split_frac)
     (x, y), (_, _), (x_test, y_test), x_test_pos = predictor.read_data(args,
             split_frac)
-    if args.dataset == 'cas9':
-        regression = False
-    elif args.dataset == 'simulated-cas13':
-        regression = False
-    elif args.dataset == 'cas13':
+    if args.dataset == 'cas13':
         if args.cas13_classify:
             regression = False
         else:
@@ -295,10 +291,9 @@ if __name__ == "__main__":
             help=("Path to .tsv.gz file to which to write learning curve "
                   "results"))
     parser.add_argument('--dataset',
-            choices=['cas9', 'simulated-cas13', 'cas13'],
-            required=True,
-            help=("Dataset to use. 'simulated-cas13' is simulated Cas13 data "
-                  "from the Cas9 data"))
+            choices=['cas13'],
+            default='cas13',
+            help=("Dataset to use."))
     parser.add_argument('--cas13-subset',
             choices=['exp', 'pos', 'neg', 'exp-and-pos'],
             help=("Use a subset of the Cas13 data. See parse_data module "

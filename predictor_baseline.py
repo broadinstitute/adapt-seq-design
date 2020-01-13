@@ -26,15 +26,9 @@ def parse_args():
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset',
-            choices=['cas9', 'simulated-cas13', 'cas13'],
-            required=True,
-            help=("Dataset to use. 'simulated-cas13' is simulated Cas13 data "
-                  "from the Cas9 data"))
-    parser.add_argument('--cas9-subset',
-            choices=['guide-mismatch-and-good-pam', 'guide-match'],
-            help=("Use a subset of the Cas9 data or simulated Cas13 data. See "
-                "parse_data module for descriptions of the subsets. To use all "
-                "data, do not set."))
+            choices=['cas13'],
+            default='cas13',
+            help=("Dataset to use."))
     parser.add_argument('--cas13-subset',
             choices=['exp', 'pos', 'neg', 'exp-and-pos'],
             help=("Use a subset of the Cas13 data. See parse_data module "
@@ -467,8 +461,6 @@ def main():
             regression = False
         else:
             regression = True
-    elif args.dataset == 'cas9' or args.dataset == 'simulated-cas13':
-        regression = False
 
     if args.nested_cross_val:
         # Perform nested cross-validation

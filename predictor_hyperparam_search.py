@@ -575,15 +575,7 @@ def main(args):
 
     # Read the data
     train_split_frac = 1.0 - args.test_split_frac
-    if args.dataset == 'cas9':
-        parser_class = parse_data.Doench2016Cas9ActivityParser
-        subset = args.cas9_subset
-        regression = False
-    elif args.dataset == 'simulated-cas13':
-        parser_class = parse_data.Cas13SimulatedData
-        subset = args.cas9_subset
-        regression = False
-    elif args.dataset == 'cas13':
+    if args.dataset == 'cas13':
         parser_class = parse_data.Cas13ActivityParser
         subset = args.cas13_subset
         if args.cas13_classify:
@@ -738,15 +730,9 @@ if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset',
-            choices=['cas9', 'simulated-cas13', 'cas13'],
-            required=True,
-            help=("Dataset to use. 'simulated-cas13' is simulated Cas13 data "
-                  "from the Cas9 data"))
-    parser.add_argument('--cas9-subset',
-            choices=['guide-mismatch-and-good-pam', 'guide-match'],
-            help=("Use a subset of the Cas9 data or simulated Cas13 data. See "
-                "parse_data module for descriptions of the subsets. To use all "
-                "data, do not set."))
+            choices=['cas13'],
+            default='cas13',
+            help=("Dataset to use."))
     parser.add_argument('--cas13-subset',
             choices=['exp', 'pos', 'neg', 'exp-and-pos'],
             help=("Use a subset of the Cas13 data. See parse_data module "

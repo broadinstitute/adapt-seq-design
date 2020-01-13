@@ -34,15 +34,9 @@ def parse_args():
                   "architecture or hyperparameters will be overridden and "
                   "this will skip training and only test the model"))
     parser.add_argument('--dataset',
-            choices=['cas9', 'simulated-cas13', 'cas13'],
-            required=True,
-            help=("Dataset to use. 'simulated-cas13' is simulated Cas13 data "
-                  "from the Cas9 data"))
-    parser.add_argument('--cas9-subset',
-            choices=['guide-mismatch-and-good-pam', 'guide-match'],
-            help=("Use a subset of the Cas9 data or simulated Cas13 data. See "
-                "parse_data module for descriptions of the subsets. To use all "
-                "data, do not set."))
+            choices=['cas13'],
+            default='cas13',
+            help=("Dataset to use."))
     parser.add_argument('--cas13-subset',
             choices=['exp', 'pos', 'neg', 'exp-and-pos'],
             help=("Use a subset of the Cas13 data. See parse_data module "
@@ -215,15 +209,7 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
         raise Exception("make_feats_for_baseline only works with Cas13 data")
 
     # Read data
-    if args.dataset == 'cas9':
-        parser_class = parse_data.Doench2016Cas9ActivityParser
-        subset = args.cas9_subset
-        regression = False
-    elif args.dataset == 'simulated-cas13':
-        parser_class = parse_data.Cas13SimulatedData
-        subset = args.cas9_subset
-        regression = False
-    elif args.dataset == 'cas13':
+    if args.dataset == 'cas13':
         parser_class = parse_data.Cas13ActivityParser
         subset = args.cas13_subset
         if args.cas13_classify:
@@ -1478,8 +1464,6 @@ def main():
             regression = False
         else:
             regression = True
-    elif args.dataset == 'cas9' or args.dataset == 'simulated-cas13':
-        regression = False
 
     if regression and args.plot_roc_curve:
         raise Exception(("Can only use --plot-roc-curve when doing "
