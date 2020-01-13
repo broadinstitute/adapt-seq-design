@@ -202,6 +202,7 @@ class Cas13ActivityParser:
         input_feats_guide = []
         target = row['target_at_guide']
         guide = row['guide_seq']
+        baseline_num_mismatches = 0
         assert len(target) == len(guide)
         for pos in range(len(guide)):
             # Make a one-hot encoding (4 bits) for each of the target
@@ -219,6 +220,7 @@ class Cas13ActivityParser:
                 else:
                     # Mismatch; have the guide indicate which base there is
                     input_feats_guide += v_target + v_guide
+                    baseline_num_mismatches += 1
             else:
                 # Combine them into an 8-bit vector
                 v = v_target + v_guide
@@ -247,7 +249,8 @@ class Cas13ActivityParser:
         if self.make_feats_for_baseline:
             # Have the feature vector for the baseline include additional
             # features: position-independent nucleotide frequency, dinucleotide
-            # frequency, and GC content (all in the guide)
+            # frequency, and GC content (all in the guide); and number of
+            # mismatches between guide and target
             bases = ('A', 'C', 'G', 'T')
             for b in bases:
                 # Add a feature giving nucleotide frequency (count) of b in
@@ -260,6 +263,8 @@ class Cas13ActivityParser:
                     input_feats += [guide.count(b1 + b2)]
             # Add a feature giving GC count in the guide
             input_feats += [guide.count('G') + guide.count('C')]
+            # Add a feature giving number of mismatches
+            input_feats += [baseline_num_mismatches]
         input_feats = np.array(input_feats)
 
         # Determine an output for this row
