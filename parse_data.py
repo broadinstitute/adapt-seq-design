@@ -630,7 +630,7 @@ def sample_regression_weight(xi, yi, p=0):
 
 _split_parser = None
 def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
-        yield_indices=False):
+        yield_indices=False, split_parser=None):
     """Split the data using stratified folds, for k-fold cross validation.
 
     Args:
@@ -646,6 +646,8 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
             similar to leave-one-gene-out cross-validation
         yield_indices: if True, return indices rather than data points (see
             'Iterates:' below for detail)
+        split_parser: if set, use this parser to split data; otherwise, use
+            the global _split_parser
 
     Iterates:
         if yield_indices is False:
@@ -662,6 +664,9 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
         raise ValueError(("Exactly one of shuffle_and_split or stratify_by_pos "
             "must be set"))
 
+    if split_parser is None:
+        split_parser = _split_parser
+
     if shuffle_and_split:
         idx = list(range(len(x)))
         random.shuffle(idx)
@@ -673,7 +678,7 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
         def split_iter():
             return skf.split(x, y)
     elif stratify_by_pos:
-        x_with_pos = [(xi, _split_parser.pos_for_input(xi)) for xi in x]
+        x_with_pos = [(xi, split_parser.pos_for_input(xi)) for xi in x]
         all_pos = np.array(sorted(set(pos for xi, pos in x_with_pos)))
         kf = KFold(n_splits=num_splits)
         def split_iter():
@@ -692,7 +697,7 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
                 # ones in the train set
                 x_train = [(x[i], y[i]) for i in train_index]
                 x_test = [(x[i], y[i]) for i in test_index]
-                _, test_index_idx_to_keep = _split_parser.make_nonoverlapping_datasets(
+                _, test_index_idx_to_keep = split_parser.make_nonoverlapping_datasets(
                         x_train, x_test)
                 test_index_idx_to_keep = set(test_index_idx_to_keep)
                 test_index_nonoverlapping = []
@@ -713,6 +718,25 @@ def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
             x_train_i, y_train_i = x[train_index], y[train_index]
             x_validate_i, y_validate_i = x[test_index], y[test_index]
             yield (x_train_i, y_train_i, x_validate_i, y_validate_i)
+
+
+_onehot_idx = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
+def oh_to_nt(xi):
+    """Convert one-hot encoded nucleotide xi to a nucleotide in sequence space
+
+    Args:
+        xi: one-hot encoded nucleotide
+
+    Returns:
+        nucleotide sequence of xi
+    """
+    assert len(xi) == 4
+    if sum(xi) == 0:
+        # All values are 0, use '-'
+        return '-'
+    else:
+        assert np.isclose(sum(xi), 1.0) # either one-hot encoded or softmax
+        return _onehot_idx[np.argmax(xi)]
 
 
 _seq_features_context_nt = None
@@ -741,25 +765,14 @@ def seq_features_from_encoding(x):
     target_len = len(x)
     assert x.shape == (target_len, 8)
 
-    onehot_idx = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
-    def nt(xi):
-        # Convert one-hot encoded xi to a nucleotide
-        assert len(xi) == 4
-        if sum(xi) == 0:
-            # All values are 0, use '-'
-            return '-'
-        else:
-            assert np.isclose(sum(xi), 1.0) # either one-hot encoded or softmax
-            return onehot_idx[np.argmax(xi)]
-
     # Read the target
-    target = ''.join(nt(x[i][0:4]) for i in range(target_len))
+    target = ''.join(oh_to_nt(x[i][0:4]) for i in range(target_len))
 
     # Everything in the target should be a nucleotide
     assert '-' not in target
 
     # Read the guide
-    guide_with_context = ''.join(nt(x[i][4:8]) for i in range(target_len))
+    guide_with_context = ''.join(oh_to_nt(x[i][4:8]) for i in range(target_len))
 
     # Verify the context of the guide is all '-' (all 0s), and extract just
     # the guide
@@ -783,3 +796,48 @@ def seq_features_from_encoding(x):
             'guide': guide,
             'hamming_dist': hd,
             'cas13a_pfs': cas13a_pfs}
+
+
+def input_vec_for_embedding(x):
+    """Create an input vector to use with an embedding layer, from one-hot
+    encoded sequence.
+
+    Args:
+        x: input sequence as Lx8 vector where L is the target length; x[i][0:4]
+            gives a one-hot encoding of the target at position i and
+            x[i][4:8] gives a one-hot encoding ofthe guide at position i
+
+    Returns:
+        Lx2 vector where x[i][0] gives an index corresponding to a nucleotide
+        of the target at position i and x[i][1] for the guide. Each x[i][j]
+        is an index in [0,4] -- 0 for A, 1 for C, 2 for G, 3 for T, and 4
+        for no guide sequence (i.e., target context)
+    """
+    assert _seq_features_context_nt is not None
+    context_nt = _seq_features_context_nt
+
+    x = np.array(x)
+
+    target_len = len(x)
+    assert x.shape == (target_len, 8)
+
+    # Read the target
+    target = ''.join(oh_to_nt(x[i][0:4]) for i in range(target_len))
+
+    # Everything in the target should be a nucleotide
+    assert '-' not in target
+
+    # Read the guide
+    guide_with_context = ''.join(oh_to_nt(x[i][4:8]) for i in range(target_len))
+
+    # Verify the context of the guide is all '-' (all 0s)
+    guide_start = context_nt
+    guide_end = target_len - context_nt
+    assert guide_with_context[:guide_start] == '-'*context_nt
+    assert guide_with_context[guide_end:] == '-'*context_nt
+
+    idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3, '-': 4}
+    x_idx = [[idx[target[i]], idx[guide_with_context[i]]]
+                for i in range(target_len)]
+    return np.array(x_idx)
+

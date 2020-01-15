@@ -5,6 +5,7 @@ import argparse
 
 import parse_data
 import predictor
+import rnn
 
 import numpy as np
 import scipy
@@ -114,6 +115,7 @@ def set_seed(seed):
 
 
 def classify(x_train, y_train, x_test, y_test,
+        parsers,
         num_inner_splits=2):
     """Perform classification.
 
@@ -123,6 +125,7 @@ def classify(x_train, y_train, x_test, y_test,
     Args:
         x_{train,test}: input data for train/test
         y_{train,test}: output labels for train/test
+        parsers: parse_data parsers to use for splitting data
         num_inner_splits: number of splits for cross-validation
 
     Returns:
@@ -163,9 +166,11 @@ def classify(x_train, y_train, x_test, y_test,
     # function, passing in the 'labels' argument to it (one issue would be
     # having to also determine a 'sample_weight' argument to give the log_loss
     # function).
-    def cv():
-        return parse_data.split(x_train, y_train, num_inner_splits,
-                stratify_by_pos=True, yield_indices=True)
+    def cv(k):
+        assert k in ['baselinefeats', 'onehot']
+        return parse_data.split(x_train[k], y_train[k], num_inner_splits,
+                stratify_by_pos=True, yield_indices=True,
+                split_parser=parsers[k])
 
     # It helps to provide an explicit function/callable as the scorer;
     # when using 'neg_log_loss' for 'scoring', it crashes because the
@@ -180,7 +185,7 @@ def classify(x_train, y_train, x_test, y_test,
         lr = sklearn.linear_model.LogisticRegressionCV(
                 Cs=Cs, cv=cv(), penalty=penalty, class_weight=class_weight,
                 solver=solver, scoring=scoring, refit=True)
-        lr.fit(x_train, y_train)
+        lr.fit(x_train['baselinefeats'], y_train['baselinefeats'])
 
         # Test model
         y_pred = lr.predict(x_test)
@@ -189,15 +194,15 @@ def classify(x_train, y_train, x_test, y_test,
         # Include average precision score (ap), which is similar to area under
         # precision-recall (pr_auc), but not interpolated; this implementation
         # might be more conservative
-        score = lr.score(x_test, y_test)
+        score = lr.score(x_test['baselinefeats'], y_test['baselinefeats'])
         roc_fpr, roc_tpr, roc_thresholds = sklearn.metrics.roc_curve(
-                y_test, y_pred, pos_label=1)
+                y_test['baselinefeats'], y_pred['baselinefeats'], pos_label=1)
         pr_precision, pr_recall, pr_thresholds = sklearn.metrics.precision_recall_curve(
-                y_test, y_pred, pos_label=1)
+                y_test['baselinefeats'], y_pred['baselinefeats'], pos_label=1)
         roc_auc = sklearn.metrics.auc(roc_fpr, roc_tpr)
         pr_auc = sklearn.metrics.auc(pr_recall, pr_precision)
         ap = sklearn.metrics.average_precision_score(
-                y_test, y_pred, pos_label=1)
+                y_test['baselinefeats'], y_pred['baselinefeats'], pos_label=1)
 
         # Print metrics
         print('#'*20)
@@ -216,6 +221,7 @@ def classify(x_train, y_train, x_test, y_test,
 
 
 def regress(x_train, y_train, x_test, y_test,
+        parsers,
         num_inner_splits=5,
         scoring_method='mse'):
     """Perform regression.
@@ -227,6 +233,7 @@ def regress(x_train, y_train, x_test, y_test,
         x_{train,validate,test}: input data for train/validate/test
         y_{train,validate,test}: output labels for train/validate/test
         num_inner_splits: number of splits for cross-validation
+        parsers: parse_data parsers to use for splitting data
         scoring_method: method to use for scoring test results; 'mse' (mean
             squared error) or 'rho' (Spearman's rank correlation)
 
@@ -241,9 +248,11 @@ def regress(x_train, y_train, x_test, y_test,
     # GridSearchCV object, which does support a custom scoring metric. Use
     # spearman rank correlation coefficient for this.
 
-    def cv():
-        return parse_data.split(x_train, y_train, num_inner_splits,
-                stratify_by_pos=True, yield_indices=True)
+    def cv(k='baselinefeats'):
+        assert k in ['baselinefeats', 'onehot']
+        return parse_data.split(x_train[k], y_train[k], num_inner_splits,
+                stratify_by_pos=True, yield_indices=True,
+                split_parser=parsers[k])
 
     def rho_f(y, y_pred):
         rho, _ = scipy.stats.spearmanr(y, y_pred)
@@ -260,7 +269,7 @@ def regress(x_train, y_train, x_test, y_test,
     else:
         raise ValueError("Unknown scoring method %s" % scoring_method)
 
-    def fit_and_test_model(reg, model_desc, hyperparams):
+    def fit_and_test_model(reg, model_desc, hyperparams, k='baselinefeats'):
         """Fit and test model.
 
         Args:
@@ -268,22 +277,24 @@ def regress(x_train, y_train, x_test, y_test,
             model_desc: string describing model
             hyperparams: list [p] of hyperparameters where each p is a string
                 and reg.p gives the value chosen by the hyperparameter search
+            k: whether to use baseline features ('baselinefeats') or
+                one-hot encoded input ('onehot')
 
         Returns:
             dict giving metrics for the best choice of model hyperparameters
         """
         # Fit model
-        reg.fit(x_train, y_train)
+        reg.fit(x_train[k], y_train[k])
 
         # Test model
-        y_pred = reg.predict(x_test)
+        y_pred = reg.predict(x_test[k])
 
         # Compute metrics
-        mse = sklearn.metrics.mean_squared_error(y_test, y_pred)
-        mae = sklearn.metrics.mean_absolute_error(y_test, y_pred)
-        R2 = sklearn.metrics.r2_score(y_test, y_pred)
-        r, _ = scipy.stats.pearsonr(y_test, y_pred)
-        rho, _ = scipy.stats.spearmanr(y_test, y_pred)
+        mse = sklearn.metrics.mean_squared_error(y_test[k], y_pred)
+        mae = sklearn.metrics.mean_absolute_error(y_test[k], y_pred)
+        R2 = sklearn.metrics.r2_score(y_test[k], y_pred)
+        r, _ = scipy.stats.pearsonr(y_test[k], y_pred)
+        rho, _ = scipy.stats.spearmanr(y_test[k], y_pred)
 
         # Note that R2 does not necessarily equal r^2 here. The value R2
         # is computed by definition of R^2 (1 minus (residual sum of
@@ -328,7 +339,7 @@ def regress(x_train, y_train, x_test, y_test,
 
     # L1 linear regression
     params = {
-            'alpha': np.logspace(-8, 8, num=100, base=10.0)
+            'alpha': np.logspace(-8, 8, num=10, base=10.0)
     }
     reg = sklearn.linear_model.Lasso(max_iter=100000, tol=0.001, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
@@ -337,6 +348,7 @@ def regress(x_train, y_train, x_test, y_test,
     metrics = fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
     metrics_for_models['l1_lr'] = metrics
 
+    """
     # L2 linear regression
     params = {
             'alpha': np.logspace(-8, 8, num=100, base=10.0)
@@ -387,12 +399,27 @@ def regress(x_train, y_train, x_test, y_test,
     metrics = fit_and_test_model(reg_cv, 'Gradient Boosting regression',
             hyperparams=reg_cv)
     metrics_for_models['gbrt'] = metrics
+    """
+
+    # LSTM
+    params = {
+            'units': [4, 16, 64, 256],
+            'bidirectional': [False, True],
+            'embed_dim': [None, 1, 2, 4, 8]
+    }
+    reg = rnn.LSTM()
+    reg_cv = sklearn.model_selection.GridSearchCV(reg,
+            param_grid=params, cv=cv(k='onehot'), refit=True, scoring=scorer,
+            verbose=1)
+    metrics = fit_and_test_model(reg_cv, 'LSTM', hyperparams=reg_cv,
+            k='onehot')
+    metrics_for_models['lstm'] = metrics
 
     return metrics_for_models
 
 
 def nested_cross_validate(x, y, num_outer_splits,
-        regression, regression_scoring_method=None):
+        regression, parsers, regression_scoring_method=None):
     """Perform nested cross-validation to validate model and search.
 
     Args:
@@ -401,6 +428,7 @@ def nested_cross_validate(x, y, num_outer_splits,
         num_outer_splits: number of folds in the outer cross-validation
             procedure
         regression: True if performing regression; False if classification
+        parsers: parse_data parsers to use for splitting data
         regression_scoring_method: if regression, method to use for 
             evaluating a model ('mse' or 'rho')
 
@@ -410,12 +438,32 @@ def nested_cross_validate(x, y, num_outer_splits,
     """
     fold_results = []
     i = 0
-    outer_split_iter = parse_data.split(x, y, num_splits=num_outer_splits,
-            stratify_by_pos=True)
-    for x_train, y_train, x_validate, y_validate in outer_split_iter:
+    outer_split_iter_bf = parse_data.split(x['baselinefeats'],
+            y['baselinefeats'], num_splits=num_outer_splits,
+            stratify_by_pos=True,
+            split_parser=parsers['baselinefeats'])
+    outer_split_iter_oh = parse_data.split(x['onehot'],
+            y['onehot'], num_splits=num_outer_splits,
+            stratify_by_pos=True,
+            split_parser=parsers['onehot'])
+    outer_split_iter = zip(outer_split_iter_bf, outer_split_iter_oh)
+    for (x_train_bf, y_train_bf, x_validate_bf, y_validate_bf), (x_train_oh,
+            y_train_oh, x_validate_oh, y_validate_oh) in outer_split_iter:
+        assert len(x_train_bf) == len(y_train_bf)
+        assert len(x_train_bf) == len(x_train_oh)
+        assert len(x_train_oh) == len(y_train_oh)
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
         print('There are n={} train points and n={} validation points'.format(
-            len(x_train), len(x_validate)))
+            len(x_train_bf), len(x_validate_bf)))
+
+        x_train = {'baselinefeats': x_train_bf,
+                   'onehot': x_train_oh}
+        y_train = {'baselinefeats': y_train_bf,
+                   'onehot': y_train_oh}
+        x_validate = {'baselinefeats': x_validate_bf,
+                      'onehot': x_validate_oh}
+        y_validate = {'baselinefeats': y_validate_bf,
+                      'onehot': y_validate_oh}
 
         # Search for hyperparameters on this outer fold of the data
         if regression:
@@ -447,12 +495,29 @@ def main():
     args = parse_args()
     set_seed(args.seed)
     split_frac = (1.0 - args.test_split_frac, 0.0, args.test_split_frac)
-    (x_train, y_train), (x_validate, y_validate), (x_test, y_test), x_test_pos = predictor.read_data(args, split_frac=split_frac, make_feats_for_baseline=True)
+    (x_train_bf, y_train_bf), (x_validate_bf, y_validate_bf), (x_test_bf, y_test_bf), x_test_pos = predictor.read_data(args, split_frac=split_frac, make_feats_for_baseline=True)
+    parsers = {'baselinefeats': parse_data._split_parser}
+    (x_train_oh, y_train_oh), (x_validate_oh, y_validate_oh), (x_test_oh, y_test_oh), _ = predictor.read_data(args, split_frac=split_frac, make_feats_for_baseline=False)
+    parsers['onehot'] = parse_data._split_parser
+    x_train = {'baselinefeats': x_train_bf,
+               'onehot': x_train_oh}
+    y_train = {'baselinefeats': y_train_bf,
+               'onehot': y_train_oh}
+    x_validate = {'baselinefeats': x_validate_bf,
+                  'onehot': x_validate_oh}
+    y_validate = {'baselinefeats': y_validate_bf,
+                  'onehot': y_validate_oh}
+    x_test = {'baselinefeats': x_test_bf,
+              'onehot': x_test_oh}
+    y_test = {'baselinefeats': y_test_bf,
+              'onehot': y_test_oh}
+
 
     # Convert column to 1D array
-    y_train = y_train.ravel()
-    y_validate = y_validate.ravel()
-    y_test = y_test.ravel()
+    for k in ['baselinefeats', 'onehot']:
+        y_train[k] = y_train[k].ravel()
+        y_validate[k] = y_validate[k].ravel()
+        y_test[k] = y_test[k].ravel()
 
     # Determine, based on the dataset, whether to do regression or
     # classification
@@ -473,6 +538,7 @@ def main():
         fold_results = nested_cross_validate(x_train, y_train,
                 args.nested_cross_val_outer_num_splits,
                 regression,
+                parsers,
                 regression_scoring_method=args.regression_scoring_method)
 
         if args.nested_cross_val_out_tsv:
@@ -495,9 +561,10 @@ def main():
         # Simply perform a hyperparameter search for each model
         if regression:
             regress(x_train, y_train, x_test, y_test,
+                    parsers,
                     scoring_method=args.regression_scoring_method)
         else:
-            classify(x_train, y_train, x_test, y_test)
+            classify(x_train, y_train, x_test, y_test, parsers)
 
 
 if __name__ == "__main__":
