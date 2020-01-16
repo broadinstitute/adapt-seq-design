@@ -348,7 +348,6 @@ def regress(x_train, y_train, x_test, y_test,
     metrics = fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
     metrics_for_models['l1_lr'] = metrics
 
-    """
     # L2 linear regression
     params = {
             'alpha': np.logspace(-8, 8, num=100, base=10.0)
@@ -399,7 +398,23 @@ def regress(x_train, y_train, x_test, y_test,
     metrics = fit_and_test_model(reg_cv, 'Gradient Boosting regression',
             hyperparams=reg_cv)
     metrics_for_models['gbrt'] = metrics
-    """
+
+    # Random forest regression
+    params = {
+            'n_estimators': [2**k for k in range(0, 9)],
+            'min_samples_split': [2**k for k in range(1, 4)],
+            'min_samples_leaf': [2**k for k in range(0, 3)],
+            'max_depth': [None] + [2**k for k in range(1, 5)],
+            'max_features': [None, 0.1, 'sqrt', 'log2']
+    }
+    reg = sklearn.ensemble.RandomForestRegressor(criterion='mse')
+    reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
+            param_distributions=params, n_iter=100,
+            cv=cv(), refit=True, scoring=scorer,
+            verbose=1)
+    metrics = fit_and_test_model(reg_cv, 'Random forest regression',
+            hyperparams=reg_cv)
+    metrics_for_models['rfr'] = metrics
 
     # LSTM
     params = {
