@@ -318,7 +318,7 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate):
         cnn.CasCNNWithParallelFilters object
     """
     # First construct the model
-    model = predictor.construct_model(params, x_train.shape,
+    model = construct_model(params, x_train.shape,
             regression=params['regression'])
 
     # See https://www.tensorflow.org/beta/guide/keras/saving_and_serializing
