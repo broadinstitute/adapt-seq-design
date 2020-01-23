@@ -484,10 +484,11 @@ def nested_cross_validate(x, y, num_outer_splits,
         if regression:
             metrics_for_models = regress(x_train, y_train,
                     x_validate, y_validate,
+                    parsers,
                     scoring_method=regression_scoring_method)
         else:
             metrics_for_models = classify(x_train, y_train,
-                    x_validate, y_validate)
+                    x_validate, y_validate, parsers)
         fold_results += [metrics_for_models]
 
         # Print metrics on this fold
