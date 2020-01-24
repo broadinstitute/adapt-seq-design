@@ -531,10 +531,18 @@ test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
 # linear correlation y_pred = y_true, whereas r measures the correlation from
 # the regression (y_pred = m*y_true + b).
 def pearson_corr(y_true, y_pred):
-    r, _ = scipy.stats.pearsonr(y_true, y_pred)
+    if len(y_true) < 2:
+        # Avoid exception
+        r = np.nan
+    else:
+        r, _ = scipy.stats.pearsonr(y_true, y_pred)
     return r
 def spearman_corr(y_true, y_pred):
-    rho, _ = scipy.stats.spearmanr(y_true, y_pred)
+    if len(y_true) < 2:
+        # Avoid exception
+        rho = np.nan
+    else:
+        rho, _ = scipy.stats.spearmanr(y_true, y_pred)
     return rho
 class CustomMetric:
     def __init__(self, name):
