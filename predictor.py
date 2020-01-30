@@ -448,19 +448,28 @@ def pred_from_nt(model, pairs):
     return pred_activity
 
 
-def load_model_for_cas13_regression_on_active(load_path, params):
-    """Construct model and load weights.
+def load_model_for_cas13_regression_on_active(load_path):
+    """Construct model and load parameters and weights.
 
     This wraps load_model(), without the need to specify x_train, etc. for
     initializing variables.
 
     Args:
         load_path: path containing model weights
-        params: dict of parameters
 
     Returns:..
         cnn.CasCNNWithParallelFilters object
     """
+    # Load parameters
+    load_path_params = os.path.join(load_path,
+            'model.params.pkl')
+    with open(load_path_params, 'rb') as f:
+        saved_params = pickle.load(f)
+    params = {'dataset': 'cas13', 'cas13_subset': 'exp-and-pos',
+            'cas13_regress_only_on_active': True}
+    for k, v in saved_params.items():
+        params[k] = v
+
     # Load data; we only need 1 data point, which is used to initialize
     # variables
     parser_class = parse_data.Cas13ActivityParser
