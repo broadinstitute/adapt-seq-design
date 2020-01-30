@@ -22,7 +22,6 @@ import scipy.stats
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-
 _regression_losses = ['mse', '1_minus_rho']
 _default_regression_loss = 'mse'
 _classification_losses = ['bce', '1_minus_auc-roc']
@@ -81,7 +80,7 @@ def determine_val_loss(results):
 def cross_validate(params, x, y, num_splits, regression):
     """Perform k-fold cross-validation.
 
-    This uses parse_data.split() to split data, which uses stratified
+    This uses data_parser.split() to split data, which uses stratified
     k-fold cross validation.
 
     Args:
@@ -100,7 +99,7 @@ def cross_validate(params, x, y, num_splits, regression):
     val_losses_default = []
     val_losses_different_metrics = defaultdict(list)
     i = 0
-    split_iter = parse_data.split(x, y, num_splits=num_splits,
+    split_iter = data_parser.split(x, y, num_splits=num_splits,
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in split_iter:
         print('STARTING FOLD {} of {}'.format(i+1, num_splits))
@@ -121,7 +120,7 @@ def cross_validate(params, x, y, num_splits, regression):
         # it on the fold)
         # Only use one of the splits, with 3/4 being used to train the model
         # and 1/4 for early stopping
-        train_split_iter = parse_data.split(x_train, y_train, num_splits=4,
+        train_split_iter = data_parser.split(x_train, y_train, num_splits=4,
                 stratify_by_pos=True)
         x_train_for_train, y_train_for_train, x_validate_for_es, y_validate_for_es = next(train_split_iter)
 
@@ -132,11 +131,12 @@ def cross_validate(params, x, y, num_splits, regression):
         # Train this fold
         predictor.train_and_validate(model, x_train_for_train,
                 y_train_for_train, x_validate_for_es, y_validate_for_es,
-                params['max_num_epochs'])
+                params['max_num_epochs'],
+                data_parser)
 
         # Run predictor.test() on the validation data for this fold, to
         # get its validation results
-        results = predictor.test(model, x_validate, y_validate)
+        results = predictor.test(model, x_validate, y_validate, data_parser)
         a, b = determine_val_loss(results)
         val_losses_default += [a]
         for k in b.keys():
@@ -424,7 +424,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
     """
     optimal_choices = []
     i = 0
-    outer_split_iter = parse_data.split(x, y, num_splits=num_outer_splits,
+    outer_split_iter = data_parser.split(x, y, num_splits=num_outer_splits,
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in outer_split_iter:
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
@@ -456,7 +456,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
                 regression)
         # Split x_train,y_train into train/validate sets and the validation
         # data is used only for early stopping during training
-        train_split_iter = parse_data.split(x_train, y_train,
+        train_split_iter = data_parser.split(x_train, y_train,
                 num_inner_splits,
                 stratify_by_pos=True)
         # Only take the first split of the generator as the train/validation
@@ -465,9 +465,11 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
         predictor.train_and_validate(best_model,
                 x_train_for_train, y_train_for_train,
                 x_train_for_es, y_train_for_es,
-                best_params['max_num_epochs'])
+                best_params['max_num_epochs'],
+                data_parser)
         # Test the model on the validation data
-        val_results = predictor.test(best_model, x_validate, y_validate)
+        val_results = predictor.test(best_model, x_validate, y_validate,
+                data_parser)
         val_loss, val_loss_different_metrics = determine_val_loss(val_results)
         optimal_choices += [(best_params, val_loss, val_loss_different_metrics)]
 
@@ -532,14 +534,15 @@ def train_and_save_model(params, x, y, regression, context_nt,
     # So we will split x,y into train/validate sets and the validation data
     # can also be used for early stopping during training.
     model = predictor.construct_model(params, x.shape, regression)
-    split_iter = parse_data.split(x, y,
+    split_iter = data_parser.split(x, y,
             hyperparam_search_cross_val_num_splits,
             stratify_by_pos=True)
     # Only take the first split of the generator as the train/validation
     # split
     x_train, y_train, x_validate, y_validate = next(split_iter)
     predictor.train_and_validate(model, x_train, y_train,
-            x_validate, y_validate, params['max_num_epochs'])
+            x_validate, y_validate, params['max_num_epochs'],
+            data_parser)
 
     # Save the model weights and best parameters to out_path
     if not os.path.exists(out_path):
@@ -573,6 +576,9 @@ def main(args):
     np.random.seed(args.seed)
     random.seed(args.seed)
 
+    # Make the data_parser be module wide
+    global data_parser
+
     # Read the data
     train_split_frac = 1.0 - args.test_split_frac
     if args.dataset == 'cas13':
@@ -600,7 +606,6 @@ def main(args):
             data_parser.set_use_difference_from_wildtype_activity()
     data_parser.read()
     parse_data._split_parser = data_parser
-    parse_data._weight_parser = data_parser
 
     x, y = data_parser.train_set()
     x_test, y_test = data_parser.test_set()

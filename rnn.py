@@ -18,10 +18,11 @@ class LSTM:
 
     TODO: multiplicative LSTMs.
     """
-    def __init__(self, units=64, bidirectional=False, embed_dim=None,
-            regression=True):
+    def __init__(self, context_nt, units=64, bidirectional=False,
+            embed_dim=None, regression=True):
         """
         Args:
+            context_nt: amount of context to use in target
             units: dimensionality of LSTM output vector (and cell state vector)
             bidirectional: if True, use bidirectional LSTM
             embed_dim: if set, embed sequences with embedding layer and use
@@ -30,6 +31,7 @@ class LSTM:
             regression: if True, perform regression; else, classification
 
         """
+        self.context_nt = context_nt
         self.units = units
         self.bidirectional = bidirectional
         self.embed_dim = embed_dim
@@ -101,8 +103,8 @@ class LSTM:
         self.setup(seq_len)
 
         if self.embed_dim is not None:
-            x_train = np.array([parse_data.input_vec_for_embedding(x)
-                for x in x_train])
+            x_train = np.array([parse_data.input_vec_for_embedding(x,
+                self.context_nt) for x in x_train])
         self.model.fit(x_train, y_train)
 
     def predict(self, x_test):
@@ -115,7 +117,7 @@ class LSTM:
             predictions
         """
         if self.embed_dim is not None:
-            x_test = np.array([parse_data.input_vec_for_embedding(x)
-                for x in x_test])
+            x_test = np.array([parse_data.input_vec_for_embedding(x,
+                self.context_nt) for x in x_test])
         return self.model.predict(x_test).ravel()
 

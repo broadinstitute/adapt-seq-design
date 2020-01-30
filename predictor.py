@@ -203,8 +203,7 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
             models (only applies to Cas13)
 
     Returns:
-        train, validate, test data where each is a tuple (x, y) and
-        positions of each element in the test data
+        data parser object from parse_data
     """
     if make_feats_for_baseline and args.dataset != 'cas13':
         raise Exception("make_feats_for_baseline only works with Cas13 data")
@@ -243,10 +242,6 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
             data_parser.set_use_difference_from_wildtype_activity()
     data_parser.read()
 
-    parse_data._split_parser = data_parser
-    parse_data._weight_parser = data_parser
-    parse_data._seq_features_context_nt = data_parser.context_nt
-
     x_train, y_train = data_parser.train_set()
     x_validate, y_validate = data_parser.validate_set()
     x_test, y_test = data_parser.test_set()
@@ -283,12 +278,7 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
         if args.dataset == 'cas13' and args.cas13_classify:
             print('Note that inactive=1 and active=0')
 
-    test_pos = [data_parser.pos_for_input(xi) for xi in x_test]
-
-    return ((x_train, y_train),
-            (x_validate, y_validate),
-            (x_test, y_test),
-            test_pos)
+    return data_parser
 
 
 def make_dataset_and_batch(x, y, batch_size=32):
@@ -305,7 +295,8 @@ def make_dataset_and_batch(x, y, batch_size=32):
     return tf.data.Dataset.from_tensor_slices((x, y)).batch(batch_size)
 
 
-def load_model(load_path, params, x_train, y_train, x_validate, y_validate):
+def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
+        data_parser):
     """Construct model and load weights according to hyperparameter search.
 
     Args:
@@ -313,6 +304,7 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate):
         params: dict of parameters
         x_train, y_train, x_validate, y_validate: train and validate data
             (only needed to initialize variables)
+        data_parser: data parser object from parse_data
 
     Returns:..
         cnn.CasCNNWithParallelFilters object
@@ -331,7 +323,7 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate):
     print('#'*20)
     print('Initializing variables; ignore metrics..')
     train_and_validate(model, x_train[:1], y_train[:1], x_validate[:1],
-            y_validate[:1], 1)
+            y_validate[:1], 1, data_parser)
     print('#'*20)
 
     def copy_weights(model):
@@ -486,15 +478,12 @@ def load_model_for_cas13_regression_on_active(load_path, params):
             stratify_by_pos=True)
     data_parser.set_activity_mode(False, False, True)
     data_parser.read()
-    parse_data._split_parser = data_parser
-    parse_data._weight_parser = data_parser
-    parse_data._seq_features_context_nt = data_parser.context_nt
     x_train, y_train = data_parser.train_set()
     x_validate, y_validate = data_parser.validate_set()
 
     # Load the model
     return load_model(load_path, params, x_train, y_train, x_validate,
-            y_validate)
+            y_validate, data_parser)
 
 
 #####################################################################
@@ -731,7 +720,7 @@ def test_step(model, seqs, outputs, sample_weight=None):
 STOPPING_PATIENCE = 2
 
 def train_and_validate(model, x_train, y_train, x_validate, y_validate,
-        max_num_epochs):
+        max_num_epochs, data_parser):
     """Train the model and also validate on each epoch.
 
     Args:
@@ -741,6 +730,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         x_validate, y_validate: validation input and outputs (labels, if
             classification)
         max_num_epochs: maximum number of epochs to train for
+        data_parser: data parser object from parse_data
 
     Returns:
         tuple (dict with training metrics at the end, dict with validation
@@ -782,13 +772,13 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     if model.regression:
         train_weights = []
         for seqs, outputs in train_ds:
-            train_weights += [parse_data.sample_regression_weight(xi, yi,
+            train_weights += [data_parser.sample_regression_weight(xi, yi,
                     p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
         train_weight_mean = np.mean(train_weights)
         validate_weights = []
         for seqs, outputs in validate_ds:
-            validate_weights += [parse_data.sample_regression_weight(xi, yi,
+            validate_weights += [data_parser.sample_regression_weight(xi, yi,
                     p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
         validate_weight_mean = np.mean(validate_weights)
@@ -800,7 +790,7 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
             return [class_weights[label] for label in labels]
         else:
             # Regression; weight by variance
-            weights = [parse_data.sample_regression_weight(xi, yi,
+            weights = [data_parser.sample_regression_weight(xi, yi,
                     p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
             if norm_factor is not None:
@@ -949,8 +939,9 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     return train_metrics, val_metrics
 
 
-def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
-            x_test_pos=None, write_test_tsv=None, y_train=None):
+def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
+        plot_predictions=None, write_test_tsv=None,
+        y_train=None):
     """Test a model.
 
     This prints metrics.
@@ -959,11 +950,10 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         model: model object
         x_test, y_test: testing input and outputs (labels, if
             classification)
+        data_parser: data parser object from parse_data
         plot_roc_curve: if set, path to PDF at which to save plot of ROC curve
         plot_predictions: if set, path to PDF at which to save plot of
             predictions vs. true values
-        x_test_pos: if set, position of each element in x_test (used for
-            plotting with plot_predictions)
         write_test_tsv: if set, path to TSV at which to write data on predictions
             as well as the testing sequences (one row per data point)
         y_train: (optional) if set, print metrics if the predictor simply
@@ -983,7 +973,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
     if model.regression:
         test_weights = []
         for seqs, outputs in test_ds:
-            test_weights += [parse_data.sample_regression_weight(xi, yi,
+            test_weights += [data_parser.sample_regression_weight(xi, yi,
                     p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
         test_weight_mean = np.mean(test_weights)
@@ -995,7 +985,7 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
             return [model.class_weights[label] for label in labels]
         else:
             # Regression; weight by variance
-            weights = [parse_data.sample_regression_weight(xi, yi,
+            weights = [data_parser.sample_regression_weight(xi, yi,
                     p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
             if norm_factor is not None:
@@ -1067,11 +1057,13 @@ def test(model, x_test, y_test, plot_roc_curve=None, plot_predictions=None,
         print('  MSE on test data if predicting mean of train data:',
                 np.mean(np.square(np.mean(y_train) - np.array(all_true))))
 
+    x_test_pos = [data_parser.pos_for_input(xi) for xi in x_test]
+
     if write_test_tsv:
         # Determine features for all input sequences
         seq_feats = []
         for i in range(len(x_test)):
-            seq_feats += [parse_data.seq_features_from_encoding(x_test[i])]
+            seq_feats += [data_parser.seq_features_from_encoding(x_test[i])]
 
         cols = ['target', 'target_without_context', 'guide',
                 'hamming_dist', 'cas13a_pfs', 'crrna_pos', 'true_activity',
@@ -1150,7 +1142,10 @@ def main():
 
     # Set seed and read data
     set_seed(args.seed)
-    (x_train, y_train), (x_validate, y_validate), (x_test, y_test), x_test_pos = read_data(args)
+    data_parser = read_data(args)
+    x_train, y_train = data_parser.train_set()
+    x_validate, y_validate = data_parser.validate_set()
+    x_test, y_test = data_parser.test_set()
 
     # Determine, based on the dataset, whether to do regression or
     # classification
@@ -1171,7 +1166,8 @@ def main():
         # Load the model
         print('Loading model weights..')
         model = load_model(args.load_model, params,
-                x_train, y_train, x_validate, y_validate)
+                x_train, y_train, x_validate, y_validate,
+                data_parser)
         print('Done loading model.')
     else:
         # Construct model
@@ -1180,12 +1176,13 @@ def main():
 
         # Train the model, with validation
         train_and_validate(model, x_train, y_train, x_validate, y_validate,
-                args.max_num_epochs)
+                args.max_num_epochs, data_parser)
 
     # Test the model
-    test(model, x_test, y_test, plot_roc_curve=args.plot_roc_curve,
+    test(model, x_test, y_test, data_parser,
+            plot_roc_curve=args.plot_roc_curve,
             plot_predictions=args.plot_predictions,
-            x_test_pos=x_test_pos, write_test_tsv=args.write_test_tsv,
+            write_test_tsv=args.write_test_tsv,
             y_train=y_train)
 
 

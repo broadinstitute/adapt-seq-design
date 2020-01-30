@@ -116,11 +116,11 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
     # that we sample the same set of sizes for each fold)
     sample_sizes_all = [None]*num_sizes
     sample_sizes_crrnas = [None]*num_sizes
-    split_iter = parse_data.split(x, y, num_splits=num_splits,
+    split_iter = data_parser.split(x, y, num_splits=num_splits,
             stratify_by_pos=True)
     for x_train, y_train, _, _ in split_iter:
         # Reserve some of x_train for early stopping
-        train_split_iter = parse_data.split(x_train, y_train, num_splits=4,
+        train_split_iter = data_parser.split(x_train, y_train, num_splits=4,
                 stratify_by_pos=True)
         x_train_for_train, y_train_for_train, _, _ = next(train_split_iter)
 
@@ -145,7 +145,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
     # Construct the learning curve
     learning_curve = {}
     fold = 0
-    split_iter = parse_data.split(x, y, num_splits=num_splits,
+    split_iter = data_parser.split(x, y, num_splits=num_splits,
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in split_iter:
         print('STARTING SPLIT {} of {}'.format(fold+1, num_splits))
@@ -194,7 +194,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             # it on the fold)
             # Only use one of the splits, with 3/4 being used to train the model
             # and 1/4 for early stopping
-            train_split_iter = parse_data.split(x_train_sample, y_train_sample,
+            train_split_iter = data_parser.split(x_train_sample, y_train_sample,
                     num_splits=4, stratify_by_pos=True)
             x_train_sample_for_train, y_train_sample_for_train, x_train_sample_for_es, y_train_sample_for_es = next(train_split_iter)
             # Construct model
@@ -203,8 +203,9 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             train_results, _ = predictor.train_and_validate(
                     model, x_train_sample_for_train, y_train_sample_for_train,
                     x_train_sample_for_es, y_train_sample_for_es,
-                    hyperparams['max_num_epochs'])
-            val_results = predictor.test(model, x_validate, y_validate)
+                    hyperparams['max_num_epochs'], data_parser)
+            val_results = predictor.test(model, x_validate, y_validate,
+                    data_parser)
             learning_curve[fold]['sample_all'][size] = {'train': train_results,
                     'val': val_results}
 
@@ -223,7 +224,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
                     context_nt, num_splits=num_inner_splits,
                     num_random_samples=100)
             # Split the training data ({x,y}_train_sample), as explained above
-            train_split_iter = parse_data.split(x_train_sample, y_train_sample,
+            train_split_iter = data_parser.split(x_train_sample, y_train_sample,
                     num_splits=4, stratify_by_pos=True)
             x_train_sample_for_train, y_train_sample_for_train, x_train_sample_for_es, y_train_sample_for_es = next(train_split_iter)
             # Construct model
@@ -232,8 +233,9 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             train_results, _ = predictor.train_and_validate(
                     model, x_train_sample_for_train, y_train_sample_for_train,
                     x_train_sample_for_es, y_train_sample_for_es,
-                    hyperparams['max_num_epochs'])
-            val_results = predictor.test(model, x_validate, y_validate)
+                    hyperparams['max_num_epochs'], data_parser)
+            val_results = predictor.test(model, x_validate, y_validate,
+                    data_parser)
             learning_curve[fold]['sample_crrnas'][size] = {'train': train_results,
                     'val': val_results}
 
@@ -247,12 +249,16 @@ def main(args):
     # Seed the predictor
     predictor.set_seed(args.seed)
 
+    # Make the data parser be module wide
+    global data_parser
+
     # Read data
     # Do not have a validation set; read the test set if desired, but
     # don't use it for anything
     split_frac = (1.0 - args.test_split_frac, 0, args.test_split_frac)
-    (x, y), (_, _), (x_test, y_test), x_test_pos = predictor.read_data(args,
-            split_frac)
+    data_parser = predictor.read_data(args, split_frac)
+    x, y = data_parser.train_set()
+    x_test, y_test = data_parser.test_set()
     if args.dataset == 'cas13':
         if args.cas13_classify:
             regression = False

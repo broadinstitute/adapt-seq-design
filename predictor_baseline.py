@@ -168,9 +168,8 @@ def classify(x_train, y_train, x_test, y_test,
     # function).
     def cv(k):
         assert k in ['baselinefeats', 'onehot']
-        return parse_data.split(x_train[k], y_train[k], num_inner_splits,
-                stratify_by_pos=True, yield_indices=True,
-                split_parser=parsers[k])
+        return parsers[k].split(x_train[k], y_train[k], num_inner_splits,
+                stratify_by_pos=True, yield_indices=True)
 
     # It helps to provide an explicit function/callable as the scorer;
     # when using 'neg_log_loss' for 'scoring', it crashes because the
@@ -250,9 +249,8 @@ def regress(x_train, y_train, x_test, y_test,
 
     def cv(k='baselinefeats'):
         assert k in ['baselinefeats', 'onehot']
-        return parse_data.split(x_train[k], y_train[k], num_inner_splits,
-                stratify_by_pos=True, yield_indices=True,
-                split_parser=parsers[k])
+        return parsers[k].split(x_train[k], y_train[k], num_inner_splits,
+                stratify_by_pos=True, yield_indices=True)
 
     def rho_f(y, y_pred):
         rho, _ = scipy.stats.spearmanr(y, y_pred)
@@ -422,7 +420,7 @@ def regress(x_train, y_train, x_test, y_test,
             'bidirectional': [False, True],
             'embed_dim': [None, 1, 2, 4, 8]
     }
-    reg = rnn.LSTM()
+    reg = rnn.LSTM(data_parser.context_nt)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
             param_grid=params, cv=cv(k='onehot'), refit=True, scoring=scorer,
             verbose=1)
@@ -453,14 +451,12 @@ def nested_cross_validate(x, y, num_outer_splits,
     """
     fold_results = []
     i = 0
-    outer_split_iter_bf = parse_data.split(x['baselinefeats'],
+    outer_split_iter_bf = parsers['baselinefeats'].split(x['baselinefeats'],
             y['baselinefeats'], num_splits=num_outer_splits,
-            stratify_by_pos=True,
-            split_parser=parsers['baselinefeats'])
-    outer_split_iter_oh = parse_data.split(x['onehot'],
+            stratify_by_pos=True)
+    outer_split_iter_oh = parsers['onehot'].split(x['onehot'],
             y['onehot'], num_splits=num_outer_splits,
-            stratify_by_pos=True,
-            split_parser=parsers['onehot'])
+            stratify_by_pos=True)
     outer_split_iter = zip(outer_split_iter_bf, outer_split_iter_oh)
     for (x_train_bf, y_train_bf, x_validate_bf, y_validate_bf), (x_train_oh,
             y_train_oh, x_validate_oh, y_validate_oh) in outer_split_iter:
@@ -511,10 +507,18 @@ def main():
     args = parse_args()
     set_seed(args.seed)
     split_frac = (1.0 - args.test_split_frac, 0.0, args.test_split_frac)
-    (x_train_bf, y_train_bf), (x_validate_bf, y_validate_bf), (x_test_bf, y_test_bf), x_test_pos = predictor.read_data(args, split_frac=split_frac, make_feats_for_baseline=True)
-    parsers = {'baselinefeats': parse_data._split_parser}
-    (x_train_oh, y_train_oh), (x_validate_oh, y_validate_oh), (x_test_oh, y_test_oh), _ = predictor.read_data(args, split_frac=split_frac, make_feats_for_baseline=False)
-    parsers['onehot'] = parse_data._split_parser
+    data_parser_bf = predictor.read_data(args,
+            split_frac=split_frac, make_feats_for_baseline=True)
+    x_train_bf, y_train_bf = data_parser_bf.train_set()
+    x_validate_bf, y_validate_bf = data_parser_bf.validate_set()
+    x_test_bf, y_test_bf = data_parser_bf.test_set()
+    parsers = {'baselinefeats': data_parser_bf}
+    data_parser_oh = predictor.read_data(args,
+            split_frac=split_frac, make_feats_for_baseline=False)
+    x_train_oh, y_train_oh = data_parser_oh.train_set()
+    x_validate_oh, y_validate_oh = data_parser_oh.validate_set()
+    x_test_oh, y_test_oh = data_parser_oh.test_set()
+    parsers['onehot'] = data_parser_oh
     x_train = {'baselinefeats': x_train_bf,
                'onehot': x_train_oh}
     y_train = {'baselinefeats': y_train_bf,

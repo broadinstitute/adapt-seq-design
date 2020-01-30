@@ -15,6 +15,25 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 
 
+_onehot_idx = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
+def oh_to_nt(xi):
+    """Convert one-hot encoded nucleotide xi to a nucleotide in sequence space
+
+    Args:
+        xi: one-hot encoded nucleotide
+
+    Returns:
+        nucleotide sequence of xi
+    """
+    assert len(xi) == 4
+    if sum(xi) == 0:
+        # All values are 0, use '-'
+        return '-'
+    else:
+        assert np.isclose(sum(xi), 1.0) # either one-hot encoded or softmax
+        return _onehot_idx[np.argmax(xi)]
+
+
 class Cas13ActivityParser:
     """Parse data from paired crRNA/target Cas13 data tested with CARMEN.
 
@@ -271,6 +290,11 @@ class Cas13ActivityParser:
         activity_median = float(row['out_logk_median'])
         if self.classify_activity:
             # Make the output be a 1/0 label
+            # TODO: return a list of values corresponding to samples, and let
+            # 1=active, 0=inactive if distribution in the newer dataset is more
+            # roughly even; this will also require updating the sampling
+            # procedure in read()
+
             # Since most labels will be active, let's make active be 0 and
             # inactive be 1 (i.e., predict the inactive ones)
             if activity_median < self.ACTIVITY_THRESHOLD:
@@ -349,6 +373,7 @@ class Cas13ActivityParser:
         # few active guide-target pairs (as identified according to the
         # median) have inactive measurements, so this should remove few
         # measurements
+        # TODO Sample as well for classification
         for row in rows:
             if float(row['out_logk_median']) < self.ACTIVITY_THRESHOLD:
                 # This row (guide-target pair) is inactive
@@ -399,30 +424,32 @@ class Cas13ActivityParser:
         # Generate input and outputs for each row
         inputs_and_outputs = []
         self.input_feats_pos = {}
-        row_idx_pos = {}
-        i = 0
+        row_idx_pos = []
         for row in rows:
             pos = int(row['guide_pos_nt'])
 
             # Generate an input feature vector and a (list of) output(s)
             input_feats, output = self._gen_input_and_output(row)
             if self.classify_activity:
+                # TODO follow below (`for o in output`) after using all
+                # activity values for classification
                 inputs_and_outputs += [(input_feats, output)]
-                row_idx_pos[i] = pos
-                i += 1
+                row_idx_pos += [pos]
             else:
                 # Add multiple data points ('samples') here; row represents one
                 # guide-target pair, but there are NUM_REPLICATES_TO_SAMPLE
                 # different output values
                 for o in output:
                     inputs_and_outputs += [(input_feats, o)]
-                    row_idx_pos[i] = pos
-                    i += 1
+                    row_idx_pos += [pos]
 
             # Store a mapping from the input feature vector to the guide
             # position in the library design
             input_feats_key = np.array(input_feats, dtype='f').tostring()
-            self.input_feats_pos[input_feats_key] = pos
+            if input_feats_key in self.input_feats_pos:
+                assert self.input_feats_pos[input_feats_key] == pos
+            else:
+                self.input_feats_pos[input_feats_key] = pos
 
         # Split into train, validate, and test sets
         train_end_idx = int(len(inputs_and_outputs) * self.split_train)
@@ -465,6 +492,7 @@ class Cas13ActivityParser:
             train_and_validate = self._train_set + self._validate_set
             test_set_nonoverlapping, _ = self.make_nonoverlapping_datasets(
                     train_and_validate, self._test_set)
+            assert len(test_set_nonoverlapping) <= len(self._test_set)
             self._test_set = test_set_nonoverlapping
 
             # The data points should still be shuffled; currently they
@@ -472,6 +500,17 @@ class Cas13ActivityParser:
             random.shuffle(self._train_set)
             random.shuffle(self._validate_set)
             random.shuffle(self._test_set)
+
+        # Verify the correctness of self.pos_for_input(); it's key for later
+        # steps
+        # Include making a numpy array out of input_feats, as done when
+        # generating the data sets
+        for row in rows:
+            pos = int(row['guide_pos_nt'])
+            input_feats, _ = self._gen_input_and_output(row)
+            input_feats = np.array(input_feats, dtype='f')
+            assert self.pos_for_input(input_feats) == pos
+
 
     def pos_for_input(self, x):
         """Return position (in nucleotide space) of the crRNA of a data point.
@@ -485,6 +524,7 @@ class Cas13ActivityParser:
         if not self.was_read:
             raise Exception("read() must be called first")
         x_key = np.array(x, dtype='f').tostring()
+        assert x_key in self.input_feats_pos
         return self.input_feats_pos[x_key]
 
     def make_nonoverlapping_datasets(self, data1, data2):
@@ -594,212 +634,176 @@ class Cas13ActivityParser:
         """
         return self._data_set(self._test_set)
 
+    def sample_regression_weight(self, xi, yi, p=0):
+        """Compute a sample weight to use during regression while training.
 
-_weight_parser = None
-def sample_regression_weight(xi, yi, p=0):
-    """Compute a sample weight to use during regression while training.
+        Args:
+            xi: data point, namely input features
+            yi: activity of xi
+            p: scaling factor for importance weight (p>=0; p=0 does not incorporate
+                sample importance, and all samples will have the same weight)
 
-    Args:
-        xi: data point, namely input features
-        yi: activity of xi
-        p: scaling factor for importance weight (p>=0; p=0 does not incorporate
-            sample importance, and all samples will have the same weight)
+        Returns:
+            relative weight of sample
+        """
+        # xi is a guide-target pair
+        # Determine the mean and stdev across all targets of the guide in xi
+        guide_pos = self.pos_for_input(xi)
+        guide_wildtype_mean = self.crrna_activity_mean[guide_pos]
+        guide_wildtype_stdev = self.crrna_activity_stdev[guide_pos]
 
-    Returns:
-        relative weight of sample
-    """
-    # xi is a guide-target pair
-    # Determine the mean and stdev across all targets of the guide in xi
-    guide_pos = _weight_parser.pos_for_input(xi)
-    guide_wildtype_mean = _weight_parser.crrna_activity_mean[guide_pos]
-    guide_wildtype_stdev = _weight_parser.crrna_activity_stdev[guide_pos]
+        # Let the weight be 1 + p*|z|, where z is
+        #     ([guide activity for xi] - [mean activity across targets at xi]) /
+        #         [stdev of activity across targets at xi]
+        # This way guide-target pairs where the activity is much more different
+        # than the average for the guide are weighted more heavily during
+        # training; intuitively, these are more interesting/important samples so we
+        # want to weight them higher, and also the variation within guides (i.e.,
+        # for target variants of a guide) may be harder to learn than the variation
+        # across guides
+        z = (yi - guide_wildtype_mean) / guide_wildtype_stdev
+        weight = 1 + p*np.absolute(z)
 
-    # Let the weight be 1 + p*|z|, where z is
-    #     ([guide activity for xi] - [mean activity across targets at xi]) /
-    #         [stdev of activity across targets at xi]
-    # This way guide-target pairs where the activity is much more different
-    # than the average for the guide are weighted more heavily during
-    # training; intuitively, these are more interesting/important samples so we
-    # want to weight them higher, and also the variation within guides (i.e.,
-    # for target variants of a guide) may be harder to learn than the variation
-    # across guides
-    z = (yi - guide_wildtype_mean) / guide_wildtype_stdev
-    weight = 1 + p*np.absolute(z)
+        return weight
 
-    return weight
+    def split(self, x, y, num_splits, shuffle_and_split=False,
+            stratify_by_pos=False, yield_indices=False):
+        """Split the data using stratified folds, for k-fold cross validation.
 
+        Args:
+            x: input data
+            y: labels
+            num_splits: number of folds
+            shuffle_and_split: if True, shuffle before splitting and stratify based
+                on the distribution of output variables (here, classes) to ensure they
+                are roughly the same across the different folds
+            stratify_by_pos: if True, determine the different folds based on
+                the position of each data point (ensuring that the
+                validate set is a contiguous region of the target molecule; this is
+                similar to leave-one-gene-out cross-validation
+            yield_indices: if True, return indices rather than data points (see
+                'Iterates:' below for detail)
 
-_split_parser = None
-def split(x, y, num_splits, shuffle_and_split=False, stratify_by_pos=False,
-        yield_indices=False, split_parser=None):
-    """Split the data using stratified folds, for k-fold cross validation.
+        Iterates:
+            if yield_indices is False:
+                (x_train_i, y_train_i, x_validate_i, y_validate_i) where each is
+                for a fold of the data; these are actual data points from x, y
+            if yield_indices is True:
+                (train_i, validate_i) where each is for a fold of the data;
+                these are indices referring to data in x, y
+        """
+        assert len(x) == len(y)
 
-    Args:
-        x: input data
-        y: labels
-        num_splits: number of folds
-        shuffle_and_split: if True, shuffle before splitting and stratify based
-            on the distribution of output variables (here, classes) to ensure they
-            are roughly the same across the different folds
-        stratify_by_pos: if True, determine the different folds based on
-            the position of each data point (ensuring that the
-            validate set is a contiguous region of the target molecule; this is
-            similar to leave-one-gene-out cross-validation
-        yield_indices: if True, return indices rather than data points (see
-            'Iterates:' below for detail)
-        split_parser: if set, use this parser to split data; otherwise, use
-            the global _split_parser
+        if ((shuffle_and_split is False and stratify_by_pos is False) or
+                (shuffle_and_split is True and stratify_by_pos is True)):
+            raise ValueError(("Exactly one of shuffle_and_split or stratify_by_pos "
+                "must be set"))
 
-    Iterates:
-        if yield_indices is False:
-            (x_train_i, y_train_i, x_validate_i, y_validate_i) where each is
-            for a fold of the data; these are actual data points from x, y
-        if yield_indices is True:
-            (train_i, validate_i) where each is for a fold of the data;
-            these are indices referring to data in x, y
-    """
-    assert len(x) == len(y)
+        if shuffle_and_split:
+            idx = list(range(len(x)))
+            random.shuffle(idx)
+            x_shuffled = [x[i] for i in idx]
+            y_shuffled = [y[i] for i in idx]
+            x = np.array(x_shuffled)
+            y = np.array(y_shuffled)
+            skf = StratifiedKFold(n_splits=num_splits)
+            def split_iter():
+                return skf.split(x, y)
+        elif stratify_by_pos:
+            x_with_pos = [(xi, self.pos_for_input(xi)) for xi in x]
+            all_pos = np.array(sorted(set(pos for xi, pos in x_with_pos)))
+            kf = KFold(n_splits=num_splits)
+            def split_iter():
+                for train_pos_idx, test_pos_idx in kf.split(all_pos):
+                    train_pos = set(all_pos[train_pos_idx])
+                    test_pos = set(all_pos[test_pos_idx])
+                    train_index, test_index = [], []
+                    for i, (xi, pos) in enumerate(x_with_pos):
+                        assert pos in train_pos or pos in test_pos
+                        if pos in train_pos:
+                            train_index += [i]
+                        if pos in test_pos:
+                            test_index += [i]
 
-    if ((shuffle_and_split is False and stratify_by_pos is False) or
-            (shuffle_and_split is True and stratify_by_pos is True)):
-        raise ValueError(("Exactly one of shuffle_and_split or stratify_by_pos "
-            "must be set"))
+                    # Get rid of test indices for data points that overlap with
+                    # ones in the train set
+                    x_train = [(x[i], y[i]) for i in train_index]
+                    x_test = [(x[i], y[i]) for i in test_index]
+                    _, test_index_idx_to_keep = self.make_nonoverlapping_datasets(
+                            x_train, x_test)
+                    test_index_idx_to_keep = set(test_index_idx_to_keep)
+                    test_index_nonoverlapping = []
+                    for i in range(len(test_index)):
+                        if i in test_index_idx_to_keep:
+                            test_index_nonoverlapping += [test_index[i]]
+                    test_index = test_index_nonoverlapping
 
-    if split_parser is None:
-        split_parser = _split_parser
+                    # Shuffle order of data points within the train and test sets
+                    random.shuffle(train_index)
+                    random.shuffle(test_index)
+                    yield train_index, test_index
 
-    if shuffle_and_split:
-        idx = list(range(len(x)))
-        random.shuffle(idx)
-        x_shuffled = [x[i] for i in idx]
-        y_shuffled = [y[i] for i in idx]
-        x = np.array(x_shuffled)
-        y = np.array(y_shuffled)
-        skf = StratifiedKFold(n_splits=num_splits)
-        def split_iter():
-            return skf.split(x, y)
-    elif stratify_by_pos:
-        x_with_pos = [(xi, split_parser.pos_for_input(xi)) for xi in x]
-        all_pos = np.array(sorted(set(pos for xi, pos in x_with_pos)))
-        kf = KFold(n_splits=num_splits)
-        def split_iter():
-            for train_pos_idx, test_pos_idx in kf.split(all_pos):
-                train_pos = set(all_pos[train_pos_idx])
-                test_pos = set(all_pos[test_pos_idx])
-                train_index, test_index = [], []
-                for i, (xi, pos) in enumerate(x_with_pos):
-                    assert pos in train_pos or pos in test_pos
-                    if pos in train_pos:
-                        train_index += [i]
-                    if pos in test_pos:
-                        test_index += [i]
+        for train_index, test_index in split_iter():
+            if yield_indices:
+                yield (train_index, test_index)
+            else:
+                x_train_i, y_train_i = x[train_index], y[train_index]
+                x_validate_i, y_validate_i = x[test_index], y[test_index]
+                yield (x_train_i, y_train_i, x_validate_i, y_validate_i)
 
-                # Get rid of test indices for data points that overlap with
-                # ones in the train set
-                x_train = [(x[i], y[i]) for i in train_index]
-                x_test = [(x[i], y[i]) for i in test_index]
-                _, test_index_idx_to_keep = split_parser.make_nonoverlapping_datasets(
-                        x_train, x_test)
-                test_index_idx_to_keep = set(test_index_idx_to_keep)
-                test_index_nonoverlapping = []
-                for i in range(len(test_index)):
-                    if i in test_index_idx_to_keep:
-                        test_index_nonoverlapping += [test_index[i]]
-                test_index = test_index_nonoverlapping
+    def seq_features_from_encoding(self, x):
+        """Determine sequence features by parsing the input vector for a data point.
 
-                # Shuffle order of data points within the train and test sets
-                random.shuffle(train_index)
-                random.shuffle(test_index)
-                yield train_index, test_index
+        In some ways this reverses the parsing done above. This converts a one-hot
+        encoding of both target and guide back into nucleotide sequence space.
 
-    for train_index, test_index in split_iter():
-        if yield_indices:
-            yield (train_index, test_index)
-        else:
-            x_train_i, y_train_i = x[train_index], y[train_index]
-            x_validate_i, y_validate_i = x[test_index], y[test_index]
-            yield (x_train_i, y_train_i, x_validate_i, y_validate_i)
+        Args:
+            x: input sequence as Lx8 vector where L is the target length; x[i][0:4]
+                gives a one-hot encoding of the target at position i and
+                x[i][4:8] gives a one-hot encoding ofthe guide at position i
 
+        Returns:
+            dict where keys are features (e.g., 'target', 'guide', and 'PFS')
+        """
+        x = np.array(x)
 
-_onehot_idx = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
-def oh_to_nt(xi):
-    """Convert one-hot encoded nucleotide xi to a nucleotide in sequence space
+        target_len = len(x)
+        assert x.shape == (target_len, 8)
 
-    Args:
-        xi: one-hot encoded nucleotide
+        # Read the target
+        target = ''.join(oh_to_nt(x[i][0:4]) for i in range(target_len))
 
-    Returns:
-        nucleotide sequence of xi
-    """
-    assert len(xi) == 4
-    if sum(xi) == 0:
-        # All values are 0, use '-'
-        return '-'
-    else:
-        assert np.isclose(sum(xi), 1.0) # either one-hot encoded or softmax
-        return _onehot_idx[np.argmax(xi)]
+        # Everything in the target should be a nucleotide
+        assert '-' not in target
 
+        # Read the guide
+        guide_with_context = ''.join(oh_to_nt(x[i][4:8]) for i in range(target_len))
 
-_seq_features_context_nt = None
-def seq_features_from_encoding(x):
-    """Determine sequence features by parsing the input vector for a data point.
+        # Verify the context of the guide is all '-' (all 0s), and extract just
+        # the guide
+        guide_start = self.context_nt
+        guide_end = target_len - context_nt
+        assert guide_with_context[:guide_start] == '-'*self.context_nt
+        assert guide_with_context[guide_end:] == '-'*self.context_nt
+        guide = guide_with_context[guide_start:guide_end]
+        assert '-' not in guide
+        target_without_context = target[guide_start:guide_end]
 
-    In some ways this reverses the parsing does above. This converts a one-hot
-    encoding of both target and guide back into nucleotide sequence space.
+        # Compute the Hamming distance
+        hd = sum(1 for i in range(len(guide)) if guide[i] != target_without_context[i])
 
-    This must know the amount of context included in the target, so
-    _seq_features_context_nt must be set.
+        # Determine the Cas13a PFS (immediately adjacent to guide,
+        # 3' end in target space)
+        cas13a_pfs = target[guide_end]
 
-    Args:
-        x: input sequence as Lx8 vector where L is the target length; x[i][0:4]
-            gives a one-hot encoding of the target at position i and
-            x[i][4:8] gives a one-hot encoding ofthe guide at position i
-
-    Returns:
-        dict where keys are features (e.g., 'target', 'guide', and 'PFS')
-    """
-    assert _seq_features_context_nt is not None
-    context_nt = _seq_features_context_nt
-
-    x = np.array(x)
-
-    target_len = len(x)
-    assert x.shape == (target_len, 8)
-
-    # Read the target
-    target = ''.join(oh_to_nt(x[i][0:4]) for i in range(target_len))
-
-    # Everything in the target should be a nucleotide
-    assert '-' not in target
-
-    # Read the guide
-    guide_with_context = ''.join(oh_to_nt(x[i][4:8]) for i in range(target_len))
-
-    # Verify the context of the guide is all '-' (all 0s), and extract just
-    # the guide
-    guide_start = context_nt
-    guide_end = target_len - context_nt
-    assert guide_with_context[:guide_start] == '-'*context_nt
-    assert guide_with_context[guide_end:] == '-'*context_nt
-    guide = guide_with_context[guide_start:guide_end]
-    assert '-' not in guide
-    target_without_context = target[guide_start:guide_end]
-
-    # Compute the Hamming distance
-    hd = sum(1 for i in range(len(guide)) if guide[i] != target_without_context[i])
-
-    # Determine the Cas13a PFS (immediately adjacent to guide,
-    # 3' end in target space)
-    cas13a_pfs = target[guide_end]
-
-    return {'target': target,
-            'target_without_context': target_without_context,
-            'guide': guide,
-            'hamming_dist': hd,
-            'cas13a_pfs': cas13a_pfs}
+        return {'target': target,
+                'target_without_context': target_without_context,
+                'guide': guide,
+                'hamming_dist': hd,
+                'cas13a_pfs': cas13a_pfs}
 
 
-def input_vec_for_embedding(x):
+def input_vec_for_embedding(x, context_nt):
     """Create an input vector to use with an embedding layer, from one-hot
     encoded sequence.
 
@@ -807,6 +811,7 @@ def input_vec_for_embedding(x):
         x: input sequence as Lx8 vector where L is the target length; x[i][0:4]
             gives a one-hot encoding of the target at position i and
             x[i][4:8] gives a one-hot encoding ofthe guide at position i
+        context_nt: amount of context in target
 
     Returns:
         Lx2 vector where x[i][0] gives an index corresponding to a nucleotide
@@ -814,9 +819,6 @@ def input_vec_for_embedding(x):
         is an index in [0,4] -- 0 for A, 1 for C, 2 for G, 3 for T, and 4
         for no guide sequence (i.e., target context)
     """
-    assert _seq_features_context_nt is not None
-    context_nt = _seq_features_context_nt
-
     x = np.array(x)
 
     target_len = len(x)
