@@ -2,12 +2,8 @@
 #
 # This data is from Nick Haradhvala's synthetic library of Cas13 crRNAs
 # tested using CARMEN/Cas13.
+# This is for the fisrt experiment we did (Spring, 2019): CCF005.
 
-
-# Paths to input/output files
-IN = "CCF005_pairs_annotated.csv"
-IN_DROPLETS = "CCF005_pairs_droplets.filtered.csv.gz"
-OUT = "CCF005_pairs_annotated.curated.tsv"
 
 # Amount of target sequence context to extract for each guide
 CONTEXT_NT = 20
@@ -20,17 +16,20 @@ import math
 import statistics
 
 
-def read_input():
+def read_input(in_fn):
     """Read annotated (summarized) input csv file.
 
     In this file, every line represents a guide-target pair.
+
+    Args:
+        in_fn: path to input file
 
     Returns:
         list of dicts where each element corresponds to a row
     """
     col_names = {}
     lines = []
-    with open(IN) as f:
+    with open(in_fn) as f:
         for i, line in enumerate(f):
             # Split the line and skip the first column (row number)
             ls = line.rstrip().split(',')
@@ -49,7 +48,7 @@ def read_input():
     return lines
 
 
-def read_droplet_input():
+def read_droplet_input(in_droplets):
     """Read input csv file of droplets.
 
     In this file, every line represents a droplet. There may be multiple
@@ -59,6 +58,9 @@ def read_droplet_input():
     This file is messy -- e.g., newline characters within quotes -- so let's
     use the csv module here to read.
 
+    Args:
+        in_droplets: path to input file
+
     Returns:
         list of dicts where each element corresponds to a droplet
     """
@@ -67,7 +69,7 @@ def read_droplet_input():
 
     col_name_idx = {}
     lines = []
-    with gzip.open(IN_DROPLETS, 'rt') as f:
+    with gzip.open(in_droplets, 'rt') as f:
         reader = csv.reader(f)
         col_names = next(reader, None)
         col_name_idx = {k: i for i, k in enumerate(col_names)}
@@ -113,9 +115,9 @@ def filter_inactive_guides(rows):
 
     rows_filtered = []
     for row in rows:
-        if row ['crRNA'] in inactive_guides:
+        if row['crRNA'] in inactive_guides:
             # Verify this is inactive
-            assert float(row['median']) < -3.0
+            assert float(row['median']) < -2.5
         else:
             # Keep it
             rows_filtered += [row]
@@ -259,14 +261,14 @@ def add_replicate_measurements(rows, droplets):
     return rows_new
 
 
-def write_output(rows):
+def write_output(rows, out_fn):
     """Write a TSV file output, after reformatting.
     """
     cols = ['guide_seq', 'guide_pos_nt', 'target_at_guide', 'target_before',
             'target_after', 'crrna_block', 'type', 'guide_target_hamming_dist',
             'out_logk_median', 'out_logk_stdev', 'out_logk_replicate_count',
             'out_logk_measurements']
-    with open(OUT, 'w') as fw:
+    with open(out_fn, 'w') as fw:
         def write_list(l):
             fw.write('\t'.join([str(x) for x in l]) + '\n')
         write_list(cols)
@@ -276,7 +278,12 @@ def write_output(rows):
 
 
 def main():
-    rows = read_input()
+    # Paths to input/output files
+    IN = "CCF005_pairs_annotated.csv"
+    IN_DROPLETS = "CCF005_pairs_droplets.filtered.csv.gz"
+    OUT = "CCF005_pairs_annotated.curated.tsv"
+
+    rows = read_input(IN)
     rows = filter_controls(rows)
     rows = filter_inactive_guides(rows)
 
@@ -288,10 +295,10 @@ def main():
     rows = new_rows
 
     # Add droplet-level (replicate) measurements
-    droplets = read_droplet_input()
+    droplets = read_droplet_input(IN_DROPLETS)
     rows = add_replicate_measurements(rows, droplets)
 
-    write_output(rows)
+    write_output(rows, OUT)
 
 
 if __name__ == "__main__":
