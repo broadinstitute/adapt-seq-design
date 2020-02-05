@@ -1,7 +1,9 @@
 # Plot distribution of output variable describing Cas13 activity.
 #
-# This data is from Nick Haradhvala's library, tested using CARMEN, of
-# guide/target pairs.
+# Note that most of these plots incorporate a data point for each technical
+# replicate (i.e., measurement), in order to account for the measurement
+# variability; they are generally not showing summary statistics across
+# measurements for each guide-target pair.
 #
 # By Hayden Metsky <hayden@mit.edu>
 
@@ -11,15 +13,18 @@ require(reshape2)
 require(viridis)
 require(ggridges)
 require(stringr)
+require(ggforce)    # for sina plots
 
-IN.TABLE <- "data/CCF005_pairs_annotated.curated.tsv"
+IN.TABLE <- "data/CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz"
 OUT.DIST.PDF <- "out/cas13-pair-activity-dist.pdf"
 OUT.DIST.BLOCKS.FACETS.PDF <- "out/cas13-pair-activity-dist.blocks.facets.pdf"
 OUT.DIST.BLOCKS.RIDGES.PDF <- "out/cas13-pair-activity-dist.blocks.ridges.pdf"
 OUT.DIST.TRAIN.AND.TEST.PDF <- "out/cas13-pair-activity-dist.train-and-test.pdf"
 OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF <- "out/cas13-pair-activity-dist.between-and-within-guides.pdf"
+OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDE.TARGET.PAIRS.PDF <- "out/cas13-pair-activity-dist.between-and-within-guide-target-pairs.pdf"
 OUT.DIST.GC.CONTENT.PDF <- "out/cas13-pair-activity-dist.gc-content.pdf"
 OUT.DIST.DIFF.FROM.WILDTYPE.PDF <- "out/cas13-pair-activity-dist.diff-from-wildtype.pdf"
+OUT.DIST.HAMMING.DIST.PDF <- "out/cas13-pair-activity-dist.hamming-dist.pdf"
 
 
 ## A helper function from:
@@ -62,8 +67,8 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
       measurevar
     )
 
-    # Rename the "mean" column    
-    datac <- rename(datac, c("mean" = measurevar))
+    # Add measurevar as another name for the "mean" column
+    datac[, measurevar] <- datac$mean
 
     datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
 
@@ -78,7 +83,7 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
 
 
 # Read table and replace '_' in column names with '.'
-all.data <- read.table(IN.TABLE, header=TRUE, sep="\t")
+all.data <- read.table(gzfile(IN.TABLE), header=TRUE, sep="\t")
 names(all.data) <- gsub("_", ".", names(all.data))
 
 # Add a column giving whether the data point will get placed into the train
@@ -94,16 +99,15 @@ all.data$train.or.test <- factor(all.data$train.or.test)
 # Add a column giving the mean wildtype activity for each guide (i.e., for each
 # guide g, the mean activity across the wildtype/matching targets); use
 # position to distinguish guides and, for each wildtype guide-target pair, use
-# only the median activity (across technical replicates)
+# a summary statistic across the resampled technical replicates
 wildtypes <- all.data[all.data$guide.target.hamming.dist == 0, ]
 mean.wildtype.activity <- summarySE(wildtypes,
-                                    measurevar="out.logk.median",
-                                    groupvars=c("guide.pos.nt"))
+                                    measurevar="out.logk.measurement",
+                                    groupvars=c("guide.pos.nt", "guide.seq"))
 all.data$out.logk.wildtype.mean <- with(mean.wildtype.activity,
-                                        out.logk.median[match(all.data$guide.pos.nt,
+                                        out.logk.measurement[match(all.data$guide.pos.nt,
                                                               guide.pos.nt)])
-all.data$diff.from.wildtype <- all.data$out.logk.median - all.data$out.logk.wildtype.mean
-
+all.data$diff.from.wildtype <- all.data$out.logk.measurement - all.data$out.logk.wildtype.mean
 
 # Extract subset of data points corresponding to an 'experiment' (generally,
 # a mismatch between guide/target, but not always)
@@ -132,8 +136,8 @@ df <- melt(list(guide.target.expandpos=guide.target.expandpos,
 names(df)[names(df) == "L1"] <- "dataset"
 
 # Show a density plot for each dataset (all.data, guide.target.exp, etc.)
-# In particular, show density of the output variable (out.logk.median)
-p <- ggplot(df, aes(x=out.logk.median, fill=dataset, color=dataset))
+# In particular, show density of the output variable (out.logk.measurement)
+p <- ggplot(df, aes(x=out.logk.measurement, fill=dataset, color=dataset))
 # Use position='identity' to overlay plots
 p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
@@ -155,7 +159,7 @@ p.faceted + ggsave(OUT.DIST.BLOCKS.FACETS.PDF, width=16, height=16, useDingbats=
 # Make a plot showing the distribution of just exp-and-pos for each block,
 # all with a common x-axis
 guide.target.expandpos$crrna.block.factor <- factor(guide.target.expandpos$crrna.block)
-p <- ggplot(guide.target.expandpos, aes(x=out.logk.median, y=crrna.block.factor))
+p <- ggplot(guide.target.expandpos, aes(x=out.logk.measurement, y=crrna.block.factor))
 p <- p + geom_density_ridges()
 p <- p + xlab("Activity") + ylab("Block")
 p <- p + theme_bw()
@@ -165,7 +169,7 @@ p + ggsave(OUT.DIST.BLOCKS.RIDGES.PDF, width=8, height=48, useDingbats=FALSE)
 ##############################################################################
 # Plot a separate distribution of train data vs. test data
 # This is drawn from the exp-and-pos dataset
-p <- ggplot(guide.target.expandpos, aes(x=out.logk.median, fill=train.or.test, color=train.or.test))
+p <- ggplot(guide.target.expandpos, aes(x=out.logk.measurement, fill=train.or.test, color=train.or.test))
 p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
 p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
@@ -186,26 +190,26 @@ p + ggsave(OUT.DIST.TRAIN.AND.TEST.PDF, width=8, height=8, useDingbats=FALSE)
 
 # Summarize activity across targets for each guide (crRNA); use the
 # guide position (guide.pos.nt) as an identifier to group by
-guide.target.expandpos.summarized <- summarySE(guide.target.expandpos,
-                                               measurevar="out.logk.median",
-                                               groupvars=c("guide.pos.nt"))
+guide.expandpos.summarized <- summarySE(guide.target.expandpos,
+                                        measurevar="out.logk.measurement",
+                                        groupvars=c("guide.pos.nt"))
 
-guide.target.expandpos.summarized$out.logk.wildtype.mean <- with(mean.wildtype.activity,
-                                                                 out.logk.median[match(guide.target.expandpos.summarized$guide.pos.nt,
-                                                                                       guide.pos.nt)])
+guide.expandpos.summarized$out.logk.wildtype.mean <- with(mean.wildtype.activity,
+                                                          out.logk.measurement[match(guide.expandpos.summarized$guide.pos.nt,
+                                                                               guide.pos.nt)])
 
 # Add a column, order, giving the order of the guides (rows) sorted by mean
 # out.logk.median value (in the column by that name)
-guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.summarized,
-                                                       order=rank(median, ties.method="first"))
+guide.expandpos.summarized.ordered <- transform(guide.expandpos.summarized,
+                                                order=rank(median, ties.method="first"))
 
 # Add upper/lower bounds according to quantiles
-guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.summarized.ordered,
-                                                       lower=pctile.20,
-                                                       upper=pctile.80)
+guide.expandpos.summarized.ordered <- transform(guide.expandpos.summarized.ordered,
+                                                lower=pctile.20,
+                                                upper=pctile.80)
 
 # Produce an ordered dot plot
-p <- ggplot(guide.target.expandpos.summarized.ordered, aes(y=order))
+p <- ggplot(guide.expandpos.summarized.ordered, aes(y=order))
 p <- p + geom_errorbarh(aes(xmin=lower, xmax=upper), height=0, size=0.5, color="black", alpha=0.5)
 p <- p + geom_point(aes(x=median), size=1)
 p <- p + geom_point(aes(x=out.logk.wildtype.mean), color="blue", size=1)    # show a blue dot for mean wildtype activity of the guide
@@ -217,28 +221,59 @@ p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF, width=8, height=8, 
 ##############################################################################
 
 ##############################################################################
-# Plot GC content of each guide vs. its median activity (across targets)
+# Plot an ordered dot plot (Cleveland dot plot)-like representation of the
+# variation across technical replicates (measurements) for each guide-target pair
+# Each row corresponds to a guide-target pair: we show a dot for its mean
+# activity across measurements, and also error bars across (showing
+# 95% CI); the rows are sorted such that the smallest mean is on
+# the bottom and the largest median is on the top
 
-# Summarize activity across targets for each guide (crRNA); use the
-# guide sequence to group by (and guide.pos.nt, to keep that variable too)
+# Summarize activity across guide-target pairs
+# Include Hamming distance in the groupvars so that it remains in the
+# summarized df
 guide.target.expandpos.summarized <- summarySE(guide.target.expandpos,
-                                               measurevar="out.logk.median",
-                                               groupvars=c("guide.seq", "guide.pos.nt"))
+                                               measurevar="out.logk.measurement",
+                                               groupvars=c("guide.seq", "guide.pos.nt", "target.at.guide", "target.before", "target.after", "guide.target.hamming.dist"))
+
+
+# Add a column, order, giving the order of the guides (rows) sorted by mean
+# out.logk.measurement value (in the column by that name)
+guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.summarized,
+                                                       order=rank(mean, ties.method="first"))
+
+# Add upper/lower bounds according to quantiles
+guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.summarized.ordered,
+                                                       lower=mean-ci,
+                                                       upper=mean+ci)
+
+# Produce an ordered dot plot
+p <- ggplot(guide.target.expandpos.summarized.ordered, aes(y=order))
+p <- p + geom_errorbarh(aes(xmin=lower, xmax=upper), height=0, size=0.5, color="black", alpha=0.5)
+p <- p + geom_point(aes(x=mean), color="blue", size=1)
+p <- p + xlab("Activity (95% CI across measurements/replicates)") + ylab("Guide-target pair")
+p <- p + theme_bw()
+p <- p + theme(axis.text.y=element_blank(), # y-axis text/ticks are meaningless
+               axis.ticks.y=element_blank())
+p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDE.TARGET.PAIRS.PDF, width=8, height=8, useDingbats=FALSE)
+##############################################################################
+
+##############################################################################
+# Plot GC content of each guide vs. its mean activity across wildtype targets
 
 # Compute GC content of each guide
-guide.target.expandpos.summarized <- transform(guide.target.expandpos.summarized,
+mean.wildtype.activity <- transform(mean.wildtype.activity,
     gc.content=(str_count(guide.seq, "G") + str_count(guide.seq, "C")) / nchar(as.character(guide.seq)))
 
 # Compute Spearman's rho for the mean values
-spearman.rho <- cor(guide.target.expandpos.summarized$gc.content,
-           guide.target.expandpos.summarized$median,
+spearman.rho <- cor(mean.wildtype.activity$gc.content,
+           mean.wildtype.activity$mean,
            method="spearman")
 
 # Produce a scatter plot
-p <- ggplot(guide.target.expandpos.summarized, aes(x=gc.content, y=median))
+p <- ggplot(mean.wildtype.activity, aes(x=gc.content, y=mean))
 p <- p + geom_point(aes(color=guide.pos.nt))
 p <- p + scale_color_viridis() # adjust color gradient
-p <- p + xlab("GC content") + ylab("Median activity")
+p <- p + xlab("GC content") + ylab("Mean activity")
 p <- p + theme_bw()
 # Include text with the rho value
 p <- p + annotate(geom='text', x=Inf, y=Inf, hjust=1, vjust=1, size=5,
@@ -265,6 +300,24 @@ p <- p + xlab("Activity - (wildtype activity)") + ylab("Density")
 p <- p + theme_bw()
 p + ggsave(OUT.DIST.DIFF.FROM.WILDTYPE.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
+
+##############################################################################
+# Plot activity by guide-target Hamming distance
+# Only do this for the exp-and-pos (non-negative control) data points.
+
+# Only show up to 7 mismatches; beyond that there are few data points
+guide.target.expandpos.trimmed <- guide.target.expandpos[guide.target.expandpos$guide.target.hamming.dist <= 7, ]
+
+# Make factor out of Hamming distance
+guide.target.expandpos.trimmed$guide.target.hamming.dist.factor <- factor(guide.target.expandpos.trimmed$guide.target.hamming.dist)
+
+p <- ggplot(guide.target.expandpos.trimmed, aes(x=guide.target.hamming.dist.factor, y=out.logk.measurement))
+p <- p + geom_sina(aes(group=guide.target.hamming.dist.factor), size=0.1)
+p <- p + xlab("Guide-target Hamming distance") + ylab("Activity")
+p <- p + theme_bw()
+p + ggsave(OUT.DIST.HAMMING.DIST.PDF, width=8, height=8, useDingbats=FALSE)
+##############################################################################
+
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
