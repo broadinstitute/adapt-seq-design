@@ -2,6 +2,7 @@
 """
 
 from collections import defaultdict
+import gzip
 import os
 import random
 
@@ -40,7 +41,7 @@ class Cas13ActivityParser:
     The output is numeric values (for regression) rather than labels.
     """
     INPUT_TSV = os.path.join(SCRIPT_PATH,
-            'data/CCF005_pairs_annotated.curated.tsv')
+            'data/CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz')
 
     # Define crRNA (guide) length; used for determining range of crRNA
     # in nucleotide space
@@ -50,21 +51,6 @@ class Cas13ActivityParser:
     # on the distribution of the median output variable (out_logk_median)
     # across replicates
     ACTIVITY_THRESHOLD = -2.5
-
-    # Define the number of technical replicate measurements (each from a
-    # droplet) to sample
-    # Each guide-target pair has some number of technical replicates; most
-    # have >= 10
-    # We'll sample this number for each guide-target pair, randomly with
-    # replacement; if the number of guide-target pairs was N, then we'll wind
-    # up with N*NUM_REPLICATES_TO_SAMPLE data points (or 'samples') in our
-    # dataset
-    # Note that this is preferable to just using all technical
-    # replicates/measurements in the dataset, because the number of replicates
-    # varies per guide-target pair and this ensures that every guide-target
-    # pair is represented with the same number of samples in the dataset
-    NUM_REPLICATES_TO_SAMPLE = 10
-
 
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
             shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
@@ -174,11 +160,6 @@ class Cas13ActivityParser:
         is the same for 'G' in the target and 'A' in the guide) which might
         be important here.
 
-        This yields a single output value (1/0) if doing classification,
-        according to the median of the replicates ('out_logk_median').
-        Otherwise, this yields a list of NUM_REPLICATES_TO_SAMPLE output
-        values.
-
         Note that when self.make_feats_for_baseline is set, the input feature
         vector is simplified but contains the same information.
 
@@ -188,7 +169,7 @@ class Cas13ActivityParser:
 
         Returns:
             tuple (i, out) where i is a one-hot encoding of the input
-            and out is a list of the sampled output measurements
+            and out is an output value 
         """
         onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
         def onehot(b):
@@ -287,14 +268,12 @@ class Cas13ActivityParser:
         input_feats = np.array(input_feats)
 
         # Determine an output for this row
-        activity_median = float(row['out_logk_median'])
+        activity = float(row['out_logk_measurement'])
         if self.classify_activity:
             # Make the output be a 1/0 label
-            # TODO: return a list of values corresponding to samples, and let
-            # 1=active, 0=inactive if distribution in the newer dataset is more
-            # roughly even; this will also require updating the sampling
-            # procedure in read()
 
+            # TODO make 0 be inactive, 1 active if distribution in new dataset
+            # is more even
             # Since most labels will be active, let's make active be 0 and
             # inactive be 1 (i.e., predict the inactive ones)
             if activity_median < self.ACTIVITY_THRESHOLD:
@@ -302,17 +281,14 @@ class Cas13ActivityParser:
             else:
                 activity = 0
         else:
-            # Return a list of activity values
-            activity = row['out_logk_measurements_sampled']
-
             pos = int(row['guide_pos_nt'])
             if self.normalize_crrna_activity:
                 crrna_mean = self.crrna_activity_mean[pos]
                 crrna_stdev = self.crrna_activity_stdev[pos]
-                activity = [(a - crrna_mean) / crrna_stdev for a in activity]
+                activity = (activity - crrna_mean) / crrna_stdev
             if self.use_difference_from_wildtype_activity:
                 wildtype_mean = self.crrna_wildtype_activity_mean[pos]
-                activity = [a - wildtype_mean for a in activity]
+                activity = activity - wildtype_mean
 
         return (input_feats, activity)
 
@@ -322,7 +298,7 @@ class Cas13ActivityParser:
         # Read all rows
         header_idx = {}
         rows = []
-        with open(self.INPUT_TSV) as f:
+        with gzip.open(self.INPUT_TSV, 'rt') as f:
             for i, line in enumerate(f):
                 ls = line.rstrip().split('\t')
                 if i == 0:
@@ -364,60 +340,33 @@ class Cas13ActivityParser:
         # Remove the inactive points
         if self.regress_only_on_active:
             rows = [row for row in rows if
-                    float(row['out_logk_median']) >= self.ACTIVITY_THRESHOLD]
-
-        # Sample a list of activity values from the measurements
-        # Note that this is only used for regression, so only add it for the
-        # active guide-target pairs
-        # To make this cleaner, only sample from the active measurements;
-        # few active guide-target pairs (as identified according to the
-        # median) have inactive measurements, so this should remove few
-        # measurements
-        # TODO Sample as well for classification
-        for row in rows:
-            if float(row['out_logk_median']) < self.ACTIVITY_THRESHOLD:
-                # This row (guide-target pair) is inactive
-                continue
-            activity_measurements = [float(a) for a in
-                    row['out_logk_measurements'].split(',')]
-            activity_measurements = [a for a in activity_measurements if a >=
-                    self.ACTIVITY_THRESHOLD]
-            activity_sampled = random.choices(activity_measurements,
-                    k=self.NUM_REPLICATES_TO_SAMPLE)
-            row['out_logk_measurements_sampled'] = activity_sampled
+                    float(row['out_logk_measurement']) >= self.ACTIVITY_THRESHOLD]
 
         # Calculate the mean and stdev of activity for each crRNA (according
-        # to position); take this across the sampled measurements
+        # to position); note that the input includes multiple measurements
+        # (technical replicates) for each, so these statistics are taken across
+        # the sampled measurements
         # Note that this is only used for regression, so only add it for the
         # active guide-target pairs
         activity_by_pos = defaultdict(list)
         for row in rows:
-            if float(row['out_logk_median']) < self.ACTIVITY_THRESHOLD:
-                # This row (guide-target pair) is inactive
-                continue
             pos = int(row['guide_pos_nt'])
-            activity_sampled = row['out_logk_measurements_sampled']
-            activity_by_pos[pos].extend(activity_sampled)
+            activity = float(row['out_logk_measurement'])
+            activity_by_pos[pos].append(activity)
         self.crrna_activity_mean = {pos: np.mean(activity_by_pos[pos])
                 for pos in activity_by_pos.keys()}
         self.crrna_activity_stdev = {pos: np.std(activity_by_pos[pos])
                 for pos in activity_by_pos.keys()}
 
         # For each crRNA (according to positive), calculate the mean activity
-        # between it and the wildtype targets; take this across the sampled
-        # measurements
-        # Note that this is only used for regression, so only add it for the
-        # active guide-target pairs
+        # between it and the wildtype targets
         wildtype_activity_by_pos = defaultdict(list)
         for row in rows:
-            if float(row['out_logk_median']) < self.ACTIVITY_THRESHOLD:
-                # This row (guide-target pair) is inactive
-                continue
             if int(row['guide_target_hamming_dist']) == 0:
-                # This is a wildtype type
+                # This is a wildtype target
                 pos = int(row['guide_pos_nt'])
-                activity_sampled = row['out_logk_measurements_sampled']
-                wildtype_activity_by_pos[pos].extend(activity_sampled)
+                activity = float(row['out_logk_measurement'])
+                wildtype_activity_by_pos[pos].append(activity)
         self.crrna_wildtype_activity_mean = {pos: np.mean(wildtype_activity_by_pos[pos])
                 for pos in wildtype_activity_by_pos.keys()}
 
@@ -430,18 +379,8 @@ class Cas13ActivityParser:
 
             # Generate an input feature vector and a (list of) output(s)
             input_feats, output = self._gen_input_and_output(row)
-            if self.classify_activity:
-                # TODO follow below (`for o in output`) after using all
-                # activity values for classification
-                inputs_and_outputs += [(input_feats, output)]
-                row_idx_pos += [pos]
-            else:
-                # Add multiple data points ('samples') here; row represents one
-                # guide-target pair, but there are NUM_REPLICATES_TO_SAMPLE
-                # different output values
-                for o in output:
-                    inputs_and_outputs += [(input_feats, o)]
-                    row_idx_pos += [pos]
+            inputs_and_outputs += [(input_feats, output)]
+            row_idx_pos += [pos]
 
             # Store a mapping from the input feature vector to the guide
             # position in the library design
