@@ -213,7 +213,7 @@ def main():
     IN_DROPLETS = "CCF024_pairs_droplets.filtered.csv.gz"
     IN_TARGETS = "CCF024_targets.tsv"
     IN_CRRNA_INFO = "CCF024_crrnas.tsv"
-    OUT = "CCF024_pairs_annotated.curated.tsv"
+    OUT = "CCF-curated/CCF024_pairs_annotated.curated.tsv"
 
     rows = read_input(IN)
 

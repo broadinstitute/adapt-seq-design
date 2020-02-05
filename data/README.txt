@@ -21,3 +21,7 @@ I created the file CCF024_crrnas.tsv from CCF005_pairs_annotated.csv
 (since all crRNAs were the same in CCF024 as in CCF005), and verify
 some info in curate_ccf024_pairs.py; note that this file cannot contain
 the PFS because the PFS varies with the target (not fixed for a given crRNA).
+
+The CCF-curated/ directory contains files output by parsing the
+more 'raw' data (e.g., filtering or reformatting or merging) directly
+in data/.

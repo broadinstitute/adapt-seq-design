@@ -122,9 +122,9 @@ def write_merged_rows(cols, rows, out_fn):
 
 def main():
     # Paths to input/output files
-    IN_CCF005 = "CCF005_pairs_annotated.curated.tsv"
-    IN_CCF024 = "CCF024_pairs_annotated.curated.tsv"
-    OUT = "CCF_merged_pairs_annotated.curated.tsv"
+    IN_CCF005 = "CCF-curated/CCF005_pairs_annotated.curated.tsv"
+    IN_CCF024 = "CCF-curated/CCF024_pairs_annotated.curated.tsv"
+    OUT = "CCF-curated/CCF_merged_pairs_annotated.curated.tsv"
 
     ccf005_cols, ccf005_col_idx, ccf005_rows = read_curated_data(IN_CCF005)
     ccf024_cols, ccf024_col_idx, ccf024_rows = read_curated_data(IN_CCF024)

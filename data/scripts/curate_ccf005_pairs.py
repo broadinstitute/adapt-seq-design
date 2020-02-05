@@ -281,7 +281,7 @@ def main():
     # Paths to input/output files
     IN = "CCF005_pairs_annotated.csv"
     IN_DROPLETS = "CCF005_pairs_droplets.filtered.csv.gz"
-    OUT = "CCF005_pairs_annotated.curated.tsv"
+    OUT = "CCF-curated/CCF005_pairs_annotated.curated.tsv"
 
     rows = read_input(IN)
     rows = filter_controls(rows)
