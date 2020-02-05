@@ -41,7 +41,8 @@ class LSTM:
     # class as a scikit-learn estimator
     # (see https://scikit-learn.org/stable/developers/develop.html#rolling-your-own-estimator)
     def get_params(self, deep=True):
-        return {'units': self.units,
+        return {'context_nt': self.context_nt,
+                'units': self.units,
                 'bidirectional': self.bidirectional,
                 'embed_dim': self.embed_dim}
     def set_params(self, **parameters):
