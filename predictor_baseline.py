@@ -420,7 +420,7 @@ def regress(x_train, y_train, x_test, y_test,
             'bidirectional': [False, True],
             'embed_dim': [None, 1, 2, 4, 8]
     }
-    reg = rnn.LSTM(data_parser.context_nt)
+    reg = rnn.LSTM(parsers['onehot'].context_nt)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
             param_grid=params, cv=cv(k='onehot'), refit=True, scoring=scorer,
             verbose=1)
