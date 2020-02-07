@@ -276,7 +276,7 @@ class Cas13ActivityParser:
             # is more even
             # Since most labels will be active, let's make active be 0 and
             # inactive be 1 (i.e., predict the inactive ones)
-            if activity_median < self.ACTIVITY_THRESHOLD:
+            if activity < self.ACTIVITY_THRESHOLD:
                 activity = 1
             else:
                 activity = 0

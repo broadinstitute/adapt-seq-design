@@ -166,7 +166,7 @@ def classify(x_train, y_train, x_test, y_test,
     # function, passing in the 'labels' argument to it (one issue would be
     # having to also determine a 'sample_weight' argument to give the log_loss
     # function).
-    def cv(k):
+    def cv(k='baselinefeats'):
         assert k in ['baselinefeats', 'onehot']
         return parsers[k].split(x_train[k], y_train[k], num_inner_splits,
                 stratify_by_pos=True, yield_indices=True)
@@ -187,7 +187,7 @@ def classify(x_train, y_train, x_test, y_test,
         lr.fit(x_train['baselinefeats'], y_train['baselinefeats'])
 
         # Test model
-        y_pred = lr.predict(x_test)
+        y_pred = lr.predict(x_test['baselinefeats'])
 
         # Compute metrics
         # Include average precision score (ap), which is similar to area under
@@ -195,13 +195,13 @@ def classify(x_train, y_train, x_test, y_test,
         # might be more conservative
         score = lr.score(x_test['baselinefeats'], y_test['baselinefeats'])
         roc_fpr, roc_tpr, roc_thresholds = sklearn.metrics.roc_curve(
-                y_test['baselinefeats'], y_pred['baselinefeats'], pos_label=1)
+                y_test['baselinefeats'], y_pred, pos_label=1)
         pr_precision, pr_recall, pr_thresholds = sklearn.metrics.precision_recall_curve(
-                y_test['baselinefeats'], y_pred['baselinefeats'], pos_label=1)
+                y_test['baselinefeats'], y_pred, pos_label=1)
         roc_auc = sklearn.metrics.auc(roc_fpr, roc_tpr)
         pr_auc = sklearn.metrics.auc(pr_recall, pr_precision)
         ap = sklearn.metrics.average_precision_score(
-                y_test['baselinefeats'], y_pred['baselinefeats'], pos_label=1)
+                y_test['baselinefeats'], y_pred, pos_label=1)
 
         # Print metrics
         print('#'*20)
@@ -337,7 +337,7 @@ def regress(x_train, y_train, x_test, y_test,
 
     # L1 linear regression
     params = {
-            'alpha': np.logspace(-8, 8, num=10, base=10.0)
+            'alpha': np.logspace(-8, 8, num=5, base=10.0)
     }
     reg = sklearn.linear_model.Lasso(max_iter=100000, tol=0.001, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
@@ -348,7 +348,7 @@ def regress(x_train, y_train, x_test, y_test,
 
     # L2 linear regression
     params = {
-            'alpha': np.logspace(-8, 8, num=100, base=10.0)
+            'alpha': np.logspace(-8, 8, num=5, base=10.0)
     }
     reg = sklearn.linear_model.Ridge(max_iter=100000, tol=0.001, copy_X=True)
     reg_cv = sklearn.model_selection.GridSearchCV(reg,
@@ -372,7 +372,7 @@ def regress(x_train, y_train, x_test, y_test,
     }
     reg = sklearn.linear_model.ElasticNet(max_iter=100000, tol=0.001, copy_X=True)
     reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-            param_distributions=params, n_iter=100,
+            param_distributions=params, n_iter=5,
             cv=cv(), refit=True, scoring=scorer,
             verbose=1)
     metrics = fit_and_test_model(reg_cv, 'L1+L2 linear regression',
@@ -390,7 +390,7 @@ def regress(x_train, y_train, x_test, y_test,
     }
     reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.001)
     reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-            param_distributions=params, n_iter=100,
+            param_distributions=params, n_iter=5,
             cv=cv(), refit=True, scoring=scorer,
             verbose=1)
     metrics = fit_and_test_model(reg_cv, 'Gradient Boosting regression',
@@ -407,7 +407,7 @@ def regress(x_train, y_train, x_test, y_test,
     }
     reg = sklearn.ensemble.RandomForestRegressor(criterion='mse')
     reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-            param_distributions=params, n_iter=100,
+            param_distributions=params, n_iter=5,
             cv=cv(), refit=True, scoring=scorer,
             verbose=1)
     metrics = fit_and_test_model(reg_cv, 'Random forest regression',
