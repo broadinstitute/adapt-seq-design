@@ -864,6 +864,46 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
                 validate_pearson_corr_metric(y_true, y_pred)
                 validate_spearman_corr_metric(y_true, y_pred)
 
+        # A note on one easy source of confusion (written here for
+        # classification, but it may apply to weighted MSE with regression as
+        # well):
+        # We might think the prediction_loss as calculated by train_step() and
+        # validate_step() should be equal to the weighted BCE because the loss
+        # function is binary cross-entropy. However, it appears that the loss
+        # funcion calculation multiples the binary cross-entropy for each
+        # sample i by sample_weight[i], directly as it is given.  On the other
+        # hand, it seems that {train,validate}_bce_weighted_metric normalize
+        # the input sample weights (sample_weight) before the multiplication.
+        # As a result, the prediction_loss (and thus the train or validate loss
+        # value) can be quite different than weighted BCE; this might be
+        # especially true for validation, as the class weights are computed
+        # over the train data so, for validation, the sample weights might not
+        # have a mean of 1. One way to see this is that, when multiplying the
+        # sample_weight input to {train,validate}_step() by a scalar, the loss
+        # value is multipled by that scalar but the weighted BCE is unchanged.
+        # As a result, the loss value on different validation/test sets might
+        # not be comparable, but the weighted BCE might be. The normalization
+        # by {train,validate}_bce_weighted_metric seems to happen *per batch*
+        # (i.e., on the call to update state), rather than on the calculation
+        # at the end -- likely because it computes the updated mean every time
+        # the state is updated. One way to see this is to change, above:
+        # ```
+        #    y_true, y_pred = tf_train_step(seqs, outputs,
+        #            sample_weight=sample_weight)
+        # ```
+        # to
+        # ```
+        #    y_true, y_pred = tf_train_step(seqs, outputs,
+        #            sample_weight=(1.0/np.mean(sample_weight))*sample_weight)
+        # ```
+        # so that a normalized sample_weight is passed for each batch; the loss
+        # function value (namely, predicted_loss) should adjust whereas the
+        # weighted BCE metric should not change, and the two will now equal
+        # each other. As a result of this per batch normalization, I would lean
+        # toward ignoring the weighted BCE metric (and likely weighted MSE
+        # too); variation across batches will likely make it an unreliable
+        # metric.
+
         # Log the metrics from this epoch
         print('EPOCH {}'.format(epoch+1))
         print('  Train metrics:')
@@ -903,14 +943,20 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         val_loss = validate_loss_metric.result()
         if model.regression:
             train_mse = train_mse_metric.result()
+            train_pearson_corr = train_pearson_corr_metric.result()
             train_spearman_corr = train_spearman_corr_metric.result()
             val_mse = validate_mse_metric.result()
+            val_pearson_corr = validate_pearson_corr_metric.result()
             val_spearman_corr = validate_spearman_corr_metric.result()
         else:
             train_bce = train_bce_metric.result()
+            train_bce_weighted = train_bce_weighted_metric.result()
             train_auc_roc = train_auc_roc_metric.result()
+            train_auc_pr = train_auc_pr_metric.result()
             val_bce = validate_bce_metric.result()
+            val_bce_weighted = validate_bce_weighted_metric.result()
             val_auc_roc = validate_auc_roc_metric.result()
+            val_auc_pr = validate_auc_pr_metric.result()
 
         # Reset metric states so they are not cumulative over epochs
         train_loss_metric.reset_states()
@@ -955,14 +1001,20 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
 
     if model.regression:
         train_metrics = {'loss': train_loss.numpy(), 'mse': train_mse.numpy(),
+                'r-pearson': train_pearson_corr,
                 'r-spearman': train_spearman_corr}
         val_metrics = {'loss': val_loss.numpy(), 'mse': val_mse.numpy(),
+                'r-pearson': val_pearson_corr,
                 'r-spearman': val_spearman_corr}
     else:
         train_metrics = {'loss': train_loss.numpy(), 'bce': train_bce.numpy(),
-                'auc-roc': train_auc_roc}
+                'weighted-bce': train_bce_weighted.numpy(),
+                'auc-pr': train_auc_pr.numpy(),
+                'auc-roc': train_auc_roc.numpy()}
         val_metrics = {'loss': val_loss.numpy(), 'bce': val_bce.numpy(),
-                'auc-roc': val_auc_roc}
+                'weighted-bce': val_bce_weighted.numpy(),
+                'auc-pr': val_auc_pr.numpy(),
+                'auc-roc': val_auc_roc.numpy()}
     return train_metrics, val_metrics
 
 
@@ -1045,6 +1097,9 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
     # be flattened prior to comparison)
     assert np.allclose(y_test.flatten(), all_true)
 
+    # See note in train_and_validate() for discrepancy between loss and
+    # weighted metric values.
+
     print('TEST DONE')
     print('  Test metrics:')
     print('    Loss: {}'.format(test_loss_metric.result()))
@@ -1057,8 +1112,8 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
         print('    r-Pearson: {}'.format(test_pearson_corr_metric.result()))
         print('    r-Spearman: {}'.format(test_spearman_corr_metric.result()))
     else:
-        print('    BCE: {}'.format(test_bce_weighted_metric.result()))
-        print('    Weighted BCE: {}'.format(test_bce_metric.result()))
+        print('    BCE: {}'.format(test_bce_metric.result()))
+        print('    Weighted BCE: {}'.format(test_bce_weighted_metric.result()))
         print('    Accuracy: {}'.format(test_accuracy_metric.result()))
         print('    AUC-ROC: {}'.format(test_auc_roc_metric.result()))
         print('    AUC-PR: {}'.format(test_auc_pr_metric.result()))
@@ -1066,10 +1121,13 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
     test_loss = test_loss_metric.result()
     if model.regression:
         test_mse = test_mse_metric.result()
+        test_pearson_corr = test_pearson_corr_metric.result()
         test_spearman_corr = test_spearman_corr_metric.result()
     else:
         test_bce = test_bce_metric.result()
+        test_bce_weighted = test_bce_weighted_metric.result()
         test_auc_roc = test_auc_roc_metric.result()
+        test_auc_pr = test_auc_pr_metric.result()
 
     test_loss_metric.reset_states()
     test_mse_metric.reset_states()
@@ -1151,10 +1209,13 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
 
     if model.regression:
         test_metrics = {'loss': test_loss.numpy(), 'mse': test_mse.numpy(),
+                'r-pearson': test_pearson_corr,
                 'r-spearman': test_spearman_corr}
     else:
         test_metrics = {'loss': test_loss.numpy(), 'bce': test_bce.numpy(),
-                'auc-roc': test_auc_roc}
+                'weighted-bce': test_bce_weighted.numpy(),
+                'auc-pr': test_auc_pr.numpy(),
+                'auc-roc': test_auc_roc.numpy()}
     return test_metrics
 
 

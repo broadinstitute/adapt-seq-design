@@ -22,9 +22,9 @@ import scipy.stats
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-_regression_losses = ['mse', '1_minus_rho']
+_regression_losses = ['mse', '1_minus_r', '1_minus_rho']
 _default_regression_loss = 'mse'
-_classification_losses = ['bce', '1_minus_auc-roc']
+_classification_losses = ['bce', '1_minus_auc-roc', '1_minus_auc-pr']
 _default_classification_loss = '1_minus_auc-roc'
 def determine_val_loss(results):
     """Determine loss values on validation data.
@@ -56,19 +56,25 @@ def determine_val_loss(results):
     if 'bce' in results:
         # Classification results
         assert 'auc-roc' in results
+        assert 'auc-pr' in results
         assert 'mse' not in results
+        assert 'r-pearson' not in results
         assert 'r-spearman' not in results
 
         losses = {'bce': results['bce'],
-                  '1_minus_auc-roc': 1.0 - results['auc-roc']}
+                  '1_minus_auc-roc': 1.0 - results['auc-roc'],
+                  '1_minus_auc-pr': 1.0 - results['auc-pr']}
         default_loss = losses[_default_classification_loss]
     elif 'mse' in results:
         # Regression results
+        assert 'r-pearson' in results
         assert 'r-spearman' in results
         assert 'bce' not in results
         assert 'auc-roc' not in results
+        assert 'auc-pr' not in results
 
         losses = {'mse': results['mse'],
+                  '1_minus_r': 1.0 - results['r-pearson'],
                   '1_minus_rho': 1.0 - results['r-spearman']}
         default_loss = losses[_default_regression_loss]
     else:
