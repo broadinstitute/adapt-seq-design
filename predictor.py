@@ -791,6 +791,9 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
                     p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
         validate_weight_mean = np.mean(validate_weights)
+    else:
+        train_weight_mean = None
+        validate_weight_mean = None
 
     def determine_sample_weights(seqs, outputs, norm_factor=None):
         if not model.regression:
@@ -986,6 +989,8 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
                     p=model.sample_weight_scaling_factor)
                     for xi, yi in zip(seqs, outputs)]
         test_weight_mean = np.mean(test_weights)
+    else:
+        test_weight_mean = None
 
     def determine_sample_weights(seqs, outputs, norm_factor=None):
         if not model.regression:
