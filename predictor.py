@@ -626,9 +626,17 @@ test_auc_pr_metric = tf.keras.metrics.AUC(
         num_thresholds=200, curve='PR', name='test_auc_pr')
 
 
+# Store the model and optimizer as global (module-wide) variables
+# If passing them directly to train_step(), validate_step(), and test_step(),
+# TensorFlow complains about having to do tf.function retracing, which is
+# expensive and due to passing Python objects instead of tensors
+_model = None
+_optimizer = None
+
+
 # Train the model using GradientTape; this is called on each batch
-def train_step(model, seqs, outputs, optimizer, sample_weight=None):
-    if model.regression:
+def train_step(seqs, outputs, sample_weight=None):
+    if _model.regression:
         loss_fn = mse_per_sample
     else:
         loss_fn = bce_per_sample
@@ -638,19 +646,19 @@ def train_step(model, seqs, outputs, optimizer, sample_weight=None):
         # the batchnorm and dropout layers; an alternative to passing
         # it along would be to use `tf.keras.backend.set_learning_phase(1)`
         # to set the training phase
-        predictions = model(seqs, training=True)
+        predictions = _model(seqs, training=True)
         prediction_loss = loss_fn(outputs, predictions,
                 sample_weight=sample_weight)
         # Add the regularization losses
-        regularization_loss = tf.add_n(model.losses)
+        regularization_loss = tf.add_n(_model.losses)
         loss = prediction_loss + regularization_loss
     # Compute gradients and opitmize parameters
-    gradients = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    gradients = tape.gradient(loss, _model.trainable_variables)
+    _optimizer.apply_gradients(zip(gradients, _model.trainable_variables))
 
     # Record metrics
     train_loss_metric(loss)
-    if model.regression:
+    if _model.regression:
         train_mse_metric(outputs, predictions)
         train_mse_weighted_metric(outputs, predictions, sample_weight=sample_weight)
         train_mae_metric(outputs, predictions)
@@ -666,20 +674,20 @@ def train_step(model, seqs, outputs, optimizer, sample_weight=None):
 
 # Define functions for computing validation and test metrics; these are
 # called on each batch
-def validate_step(model, seqs, outputs, sample_weight=None):
+def validate_step(seqs, outputs, sample_weight=None):
     # Compute predictions and loss
-    predictions = model(seqs, training=False)
-    if model.regression:
+    predictions = _model(seqs, training=False)
+    if _model.regression:
         loss_fn = mse_per_sample
     else:
         loss_fn = bce_per_sample
     prediction_loss = loss_fn(outputs, predictions,
                 sample_weight=sample_weight)
-    regularization_loss = tf.add_n(model.losses)
+    regularization_loss = tf.add_n(_model.losses)
     loss = prediction_loss + regularization_loss
     # Record metrics
     validate_loss_metric(loss)
-    if model.regression:
+    if _model.regression:
         validate_mse_metric(outputs, predictions)
         validate_mse_weighted_metric(outputs, predictions, sample_weight=sample_weight)
         validate_mae_metric(outputs, predictions)
@@ -692,22 +700,22 @@ def validate_step(model, seqs, outputs, sample_weight=None):
         validate_auc_pr_metric(outputs, predictions)
     return outputs, predictions
 
-def test_step(model, seqs, outputs, sample_weight=None):
+def test_step(seqs, outputs, sample_weight=None):
     # Compute predictions
-    predictions = model(seqs, training=False)
+    predictions = _model(seqs, training=False)
 
-    if model.regression:
+    if _model.regression:
         loss_fn = mse_per_sample
     else:
         loss_fn = bce_per_sample
     prediction_loss = loss_fn(outputs, predictions,
                 sample_weight=sample_weight)
-    regularization_loss = tf.add_n(model.losses)
+    regularization_loss = tf.add_n(_model.losses)
     loss = prediction_loss + regularization_loss
 
     # Record metrics
     test_loss_metric(loss)
-    if model.regression:
+    if _model.regression:
         test_mse_metric(outputs, predictions)
         test_mse_weighted_metric(outputs, predictions, sample_weight=sample_weight)
         test_mae_metric(outputs, predictions)
@@ -754,7 +762,14 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     else:
         optimizer = tf.keras.optimizers.Adam(lr=model.learning_rate)
 
-    # model may be new, but calling train_step on a new model will yield
+    # Set the global module-level variables _model and _optimizer, needed by
+    # train_step() and validate_step()
+    global _model
+    global _optimizer
+    _model = model
+    _optimizer = optimizer
+
+    # model may be new, and calling train_step on a new model will yield
     # an error; tf.function was designed such that a new one is needed
     # whenever there is a new model
     # (see
@@ -828,8 +843,8 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
     for epoch in range(max_num_epochs):
         # Train on each batch
         for i, (seqs, outputs) in enumerate(train_ds):
-            sample_weight = train_ds_weights[i]
-            y_true, y_pred = tf_train_step(model, seqs, outputs, optimizer,
+            sample_weight = tf.constant(train_ds_weights[i])
+            y_true, y_pred = tf_train_step(seqs, outputs,
                     sample_weight=sample_weight)
             if model.regression:
                 train_r2_score_metric(y_true, y_pred)
@@ -841,8 +856,8 @@ def train_and_validate(model, x_train, y_train, x_validate, y_validate,
         # at once (not batched), but batching may help with memory usage by
         # reducing how much data is run through the network at once
         for i, (seqs, outputs) in enumerate(validate_ds):
-            sample_weight = validate_ds_weights[i]
-            y_true, y_pred = tf_validate_step(model, seqs, outputs,
+            sample_weight = tf.constant(validate_ds_weights[i])
+            y_true, y_pred = tf_validate_step(seqs, outputs,
                     sample_weight=sample_weight)
             if model.regression:
                 validate_r2_score_metric(y_true, y_pred)
@@ -975,6 +990,10 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
         dict with test metrics at the end (keys are 'loss'
         and ('bce' or 'mse') and ('auc-roc' or 'r-spearman'))
     """
+    # Set the global module-level variables _model, needed by test_step()
+    global _model
+    _model = model
+
     tf_test_step = tf.function(test_step)
 
     test_ds = make_dataset_and_batch(x_test, y_test,
@@ -1011,7 +1030,8 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
     for seqs, outputs in test_ds:
         sample_weight = determine_sample_weights(seqs, outputs,
                 norm_factor=test_weight_mean)
-        y_true, y_pred = tf_test_step(model, seqs, outputs,
+        sample_weight = tf.constant(sample_weight)
+        y_true, y_pred = tf_test_step(seqs, outputs,
                 sample_weight=sample_weight)
         if model.regression:
             test_r2_score_metric(y_true, y_pred)
