@@ -23,6 +23,7 @@ class CasCNNWithParallelFilters(tf.keras.Model):
         self.add_gc_content = params['add_gc_content']
         self.context_nt = params['context_nt']
 
+        # Note that this is only used for regression
         if params['sample_weight_scaling_factor'] < 0:
             raise ValueError(("Parameter 'sample_weight_scaling_factor' "
                 "must be >=0"))
