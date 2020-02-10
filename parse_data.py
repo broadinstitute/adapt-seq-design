@@ -47,10 +47,8 @@ class Cas13ActivityParser:
     # in nucleotide space
     CRRNA_LEN = 28
 
-    # A threshold is of 1.0 for negative/positive points is reasonable based
-    # on the distribution of the median output variable (out_logk_median)
-    # across replicates
-    ACTIVITY_THRESHOLD = -2.5
+    # Define threshold on activity for inactive/active data points
+    ACTIVITY_THRESHOLD = -4.0
 
     def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
             shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
@@ -272,14 +270,11 @@ class Cas13ActivityParser:
         if self.classify_activity:
             # Make the output be a 1/0 label
 
-            # TODO make 0 be inactive, 1 active if distribution in new dataset
-            # is more even
-            # Since most labels will be active, let's make active be 0 and
-            # inactive be 1 (i.e., predict the inactive ones)
-            if activity < self.ACTIVITY_THRESHOLD:
-                activity = 1
-            else:
+            # Let 0 be inactive labels, and 1 be active ones
+            if activity <= self.ACTIVITY_THRESHOLD:
                 activity = 0
+            else:
+                activity = 1
         else:
             pos = int(row['guide_pos_nt'])
             if self.normalize_crrna_activity:
