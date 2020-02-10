@@ -75,6 +75,9 @@ def parse_args():
             default=0.3,
             help=("Fraction of the dataset to use for testing the final "
                   "model"))
+    parser.add_argument('--models-to-use',
+            nargs='+',
+            help=("List of model names to use. If not set, use all."))
     parser.add_argument('--nested-cross-val',
             action='store_true',
             help=("If set, perform nested cross-validation to evaluate "
@@ -222,7 +225,8 @@ def classify(x_train, y_train, x_test, y_test,
 def regress(x_train, y_train, x_test, y_test,
         parsers,
         num_inner_splits=5,
-        scoring_method='mse'):
+        scoring_method='mse',
+        models_to_use=None):
     """Perform regression.
 
     Test data is used for evaluating the model with the best choice of
@@ -235,18 +239,24 @@ def regress(x_train, y_train, x_test, y_test,
         parsers: parse_data parsers to use for splitting data
         scoring_method: method to use for scoring test results; 'mse' (mean
             squared error) or 'rho' (Spearman's rank correlation)
+        models_to_use: list of models to test; if None, test all
 
     Returns:
         dict {model: metrics on test data for best choice of hyperparameters
         for model}
     """
+    # Check models_to_use
+    all_models = ['lr', 'l1_lr', 'l2_lr', 'l1l2_lr', 'gbrt', 'rfr', 'lstm']
+    if models_to_use is None:
+        models_to_use = all_models
+    assert set(models_to_use).issubset(all_models)
+
     # With models, perform cross-validation to determine hyperparameters
     # Most of the built-in cross-validators find the best choice based on
     # R^2; some of them do not support a custom scoring function via a
     # `scoring=...` argument. So instead wrap the regression with a
     # GridSearchCV object, which does support a custom scoring metric. Use
     # spearman rank correlation coefficient for this.
-
     def cv(k='baselinefeats'):
         assert k in ['baselinefeats', 'onehot']
         return parsers[k].split(x_train[k], y_train[k], num_inner_splits,
@@ -324,38 +334,36 @@ def regress(x_train, y_train, x_test, y_test,
         return {'mse': mse, 'mae': mae, 'r2': R2, 'r': r, 'rho': rho,
                 '1_minus_rho': 1.0-rho}
 
-    metrics_for_models = {}
-
     # Linear regression (no regularization)
-    reg = sklearn.linear_model.LinearRegression(copy_X=True)    # no CV because there are no hyperparameters
-    metrics = fit_and_test_model(reg, 'Linear regression', [])
-    metrics_for_models['lr'] = metrics
+    def lr():
+        reg = sklearn.linear_model.LinearRegression(copy_X=True)    # no CV because there are no hyperparameters
+        return fit_and_test_model(reg, 'Linear regression', [])
 
     # Note:
     #  For below models, increasing `max_iter` or increasing `tol` can reduce
     #  the warning 'ConvergenceWarning: Objective did not converge.'
 
     # L1 linear regression
-    params = {
-            'alpha': np.logspace(-8, 8, num=5, base=10.0)
-    }
-    reg = sklearn.linear_model.Lasso(max_iter=100000, tol=0.001, copy_X=True)
-    reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, scoring=scorer,
-            verbose=1)
-    metrics = fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
-    metrics_for_models['l1_lr'] = metrics
+    def l1_lr():
+        params = {
+                'alpha': np.logspace(-8, 8, num=5, base=10.0)
+        }
+        reg = sklearn.linear_model.Lasso(max_iter=100000, tol=0.001, copy_X=True)
+        reg_cv = sklearn.model_selection.GridSearchCV(reg,
+                param_grid=params, cv=cv(), refit=True, scoring=scorer,
+                verbose=1)
+        return fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
 
     # L2 linear regression
-    params = {
-            'alpha': np.logspace(-8, 8, num=5, base=10.0)
-    }
-    reg = sklearn.linear_model.Ridge(max_iter=100000, tol=0.001, copy_X=True)
-    reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(), refit=True, scoring=scorer,
-            verbose=1)
-    metrics = fit_and_test_model(reg_cv, 'L2 linear regression', hyperparams=reg_cv)
-    metrics_for_models['l2_lr'] = metrics
+    def l2_lr():
+        params = {
+                'alpha': np.logspace(-8, 8, num=5, base=10.0)
+        }
+        reg = sklearn.linear_model.Ridge(max_iter=100000, tol=0.001, copy_X=True)
+        reg_cv = sklearn.model_selection.GridSearchCV(reg,
+                param_grid=params, cv=cv(), refit=True, scoring=scorer,
+                verbose=1)
+        return fit_and_test_model(reg_cv, 'L2 linear regression', hyperparams=reg_cv)
 
     # Elastic net (L1+L2 linear regression)
     # Recommendation for l1_ratio is to place more values close to 1 (lasso)
@@ -366,73 +374,80 @@ def regress(x_train, y_train, x_test, y_test,
     #  especially if Lasso/Ridge are close; in part, this could be because
     #  fit_and_test_model() prints values on a hold-out set, but chooses
     #  hyperparameters on splits of the train set
-    params = {
-            'l1_ratio': 1.0 - np.logspace(-5, 0, num=100, base=2.0)[::-1] + 2.0**(-5),
-            'alpha': np.logspace(-8, 8, num=100, base=10.0)
-    }
-    reg = sklearn.linear_model.ElasticNet(max_iter=100000, tol=0.001, copy_X=True)
-    reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-            param_distributions=params, n_iter=5,
-            cv=cv(), refit=True, scoring=scorer,
-            verbose=1)
-    metrics = fit_and_test_model(reg_cv, 'L1+L2 linear regression',
-            hyperparams=reg_cv)
-    metrics_for_models['l1l2_lr'] = metrics
+    def l1l2_lr():
+        params = {
+                'l1_ratio': 1.0 - np.logspace(-5, 0, num=100, base=2.0)[::-1] + 2.0**(-5),
+                'alpha': np.logspace(-8, 8, num=100, base=10.0)
+        }
+        reg = sklearn.linear_model.ElasticNet(max_iter=100000, tol=0.001, copy_X=True)
+        reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
+                param_distributions=params, n_iter=5,
+                cv=cv(), refit=True, scoring=scorer,
+                verbose=1)
+        return fit_and_test_model(reg_cv, 'L1+L2 linear regression',
+                hyperparams=reg_cv)
 
     # Gradient-boosted regression trees
-    params = {
-            'learning_rate': np.logspace(-2, 0, num=5, base=10.0),
-            'n_estimators': [2**k for k in range(0, 9)],
-            'min_samples_split': [2**k for k in range(1, 4)],
-            'min_samples_leaf': [2**k for k in range(0, 3)],
-            'max_depth': [2**k for k in range(1, 4)],
-            'max_features': [None, 0.1, 'sqrt', 'log2']
-    }
-    reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.001)
-    reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-            param_distributions=params, n_iter=5,
-            cv=cv(), refit=True, scoring=scorer,
-            verbose=1)
-    metrics = fit_and_test_model(reg_cv, 'Gradient Boosting regression',
-            hyperparams=reg_cv)
-    metrics_for_models['gbrt'] = metrics
+    def gbrt():
+        params = {
+                'learning_rate': np.logspace(-2, 0, num=5, base=10.0),
+                'n_estimators': [2**k for k in range(0, 9)],
+                'min_samples_split': [2**k for k in range(1, 4)],
+                'min_samples_leaf': [2**k for k in range(0, 3)],
+                'max_depth': [2**k for k in range(1, 4)],
+                'max_features': [None, 0.1, 'sqrt', 'log2']
+        }
+        reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.001)
+        reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
+                param_distributions=params, n_iter=5,
+                cv=cv(), refit=True, scoring=scorer,
+                verbose=1)
+        return fit_and_test_model(reg_cv, 'Gradient Boosting regression',
+                hyperparams=reg_cv)
 
     # Random forest regression
-    params = {
-            'n_estimators': [2**k for k in range(0, 9)],
-            'min_samples_split': [2**k for k in range(1, 4)],
-            'min_samples_leaf': [2**k for k in range(0, 3)],
-            'max_depth': [None] + [2**k for k in range(1, 5)],
-            'max_features': [None, 0.1, 'sqrt', 'log2']
-    }
-    reg = sklearn.ensemble.RandomForestRegressor(criterion='mse')
-    reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-            param_distributions=params, n_iter=5,
-            cv=cv(), refit=True, scoring=scorer,
-            verbose=1)
-    metrics = fit_and_test_model(reg_cv, 'Random forest regression',
-            hyperparams=reg_cv)
-    metrics_for_models['rfr'] = metrics
+    def rfr():
+        params = {
+                'n_estimators': [2**k for k in range(0, 9)],
+                'min_samples_split': [2**k for k in range(1, 4)],
+                'min_samples_leaf': [2**k for k in range(0, 3)],
+                'max_depth': [None] + [2**k for k in range(1, 5)],
+                'max_features': [None, 0.1, 'sqrt', 'log2']
+        }
+        reg = sklearn.ensemble.RandomForestRegressor(criterion='mse')
+        reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
+                param_distributions=params, n_iter=5,
+                cv=cv(), refit=True, scoring=scorer,
+                verbose=1)
+        return fit_and_test_model(reg_cv, 'Random forest regression',
+                hyperparams=reg_cv)
 
     # LSTM
-    params = {
-            'units': [4, 16, 64, 256],
-            'bidirectional': [False, True],
-            'embed_dim': [None, 1, 2, 4, 8]
-    }
-    reg = rnn.LSTM(parsers['onehot'].context_nt)
-    reg_cv = sklearn.model_selection.GridSearchCV(reg,
-            param_grid=params, cv=cv(k='onehot'), refit=True, scoring=scorer,
-            verbose=1)
-    metrics = fit_and_test_model(reg_cv, 'LSTM', hyperparams=reg_cv,
-            k='onehot')
-    metrics_for_models['lstm'] = metrics
+    def lstm():
+        params = {
+                'units': [4, 16, 64, 256],
+                'bidirectional': [False, True],
+                'embed_dim': [None, 1, 2, 4, 8]
+        }
+        reg = rnn.LSTM(parsers['onehot'].context_nt)
+        reg_cv = sklearn.model_selection.GridSearchCV(reg,
+                param_grid=params, cv=cv(k='onehot'), refit=True, scoring=scorer,
+                verbose=1)
+        return fit_and_test_model(reg_cv, 'LSTM', hyperparams=reg_cv,
+                k='onehot')
+
+    metrics_for_models = {}
+    for model_name in models_to_use:
+        print("Running and evaluating model: '%s'" % model_name)
+        model_fn = locals()[model_name]
+        metrics_for_models[model_name] = model_fn()
 
     return metrics_for_models
 
 
 def nested_cross_validate(x, y, num_outer_splits,
-        regression, parsers, regression_scoring_method=None):
+        regression, parsers, regression_scoring_method=None,
+        models_to_use=None):
     """Perform nested cross-validation to validate model and search.
 
     Args:
@@ -444,6 +459,7 @@ def nested_cross_validate(x, y, num_outer_splits,
         parsers: parse_data parsers to use for splitting data
         regression_scoring_method: if regression, method to use for 
             evaluating a model ('mse' or 'rho')
+        models_to_use: list of models to test; if None, test all
 
     Returns:
         list x where each x[i] is an output of regress() or classify() on
@@ -481,7 +497,8 @@ def nested_cross_validate(x, y, num_outer_splits,
             metrics_for_models = regress(x_train, y_train,
                     x_validate, y_validate,
                     parsers,
-                    scoring_method=regression_scoring_method)
+                    scoring_method=regression_scoring_method,
+                    models_to_use=models_to_use)
         else:
             metrics_for_models = classify(x_train, y_train,
                     x_validate, y_validate, parsers)
@@ -559,7 +576,8 @@ def main():
                 args.nested_cross_val_outer_num_splits,
                 regression,
                 parsers,
-                regression_scoring_method=args.regression_scoring_method)
+                regression_scoring_method=args.regression_scoring_method,
+                models_to_use=args.models_to_use)
 
         if args.nested_cross_val_out_tsv:
             # Write fold results to a tsv file
@@ -582,7 +600,8 @@ def main():
         if regression:
             regress(x_train, y_train, x_test, y_test,
                     parsers,
-                    scoring_method=args.regression_scoring_method)
+                    scoring_method=args.regression_scoring_method,
+                    models_to_use=args.models_to_use)
         else:
             classify(x_train, y_train, x_test, y_test, parsers)
 
