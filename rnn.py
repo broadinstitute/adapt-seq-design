@@ -19,7 +19,7 @@ class LSTM:
     TODO: multiplicative LSTMs.
     """
     def __init__(self, context_nt, units=64, bidirectional=False,
-            embed_dim=None, regression=True):
+            embed_dim=None, dropout_rate=0.5, regression=True):
         """
         Args:
             context_nt: amount of context to use in target
@@ -28,6 +28,7 @@ class LSTM:
             embed_dim: if set, embed sequences with embedding layer and use
                 this as the dimensionality; otherwise, use one-hot
                 encoded sequence as input
+            dropout_rate: dropout rate before final layer
             regression: if True, perform regression; else, classification
 
         """
@@ -35,6 +36,7 @@ class LSTM:
         self.units = units
         self.bidirectional = bidirectional
         self.embed_dim = embed_dim
+        self.dropout_rate = dropout_rate
         self.regression = regression
 
     # get_params() and set_params() are needed if we which to use this
@@ -44,7 +46,8 @@ class LSTM:
         return {'context_nt': self.context_nt,
                 'units': self.units,
                 'bidirectional': self.bidirectional,
-                'embed_dim': self.embed_dim}
+                'embed_dim': self.embed_dim,
+                'dropout_rate': self.dropout_rate}
     def set_params(self, **parameters):
         for parameter, value in parameters.items():
             setattr(self, parameter, value)
@@ -76,12 +79,19 @@ class LSTM:
             # when reshaping
             self.model.add(tf.keras.layers.Reshape(
                 (seq_len, 2*self.embed_dim)))
-        lstm = tf.keras.layers.LSTM(self.units)
+            # The input has seq_len timesteps and each step has
+            # 2*self.embed_dim features
+            lstm_input_shape = (seq_len, 2*self.embed_dim)
+        else:
+            # The input has seq_len timesteps and each step has 8 features (4
+            # for the target and 4 for the guide)
+            lstm_input_shape = (seq_len, 8)
+        lstm = tf.keras.layers.LSTM(self.units, input_shape=lstm_input_shape)
         if self.bidirectional:
             self.model.add(tf.keras.layers.Bidirectional(lstm))
         else:
             self.model.add(lstm)
-        self.model.add(tf.keras.layers.Dropout(0.5))
+        self.model.add(tf.keras.layers.Dropout(self.dropout_rate))
         self.model.add(tf.keras.layers.Dense(1, activation=final_activation))
 
         if self.regression:
@@ -106,7 +116,7 @@ class LSTM:
         if self.embed_dim is not None:
             x_train = np.array([parse_data.input_vec_for_embedding(x,
                 self.context_nt) for x in x_train])
-        self.model.fit(x_train, y_train)
+        self.model.fit(x_train, y_train, verbose=2)
 
     def predict(self, x_test):
         """Make predictions:
