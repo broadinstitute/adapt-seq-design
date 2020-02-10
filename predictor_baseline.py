@@ -117,6 +117,72 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
+def random_search_cv(model_name, model_obj, cv, scorer, n_iter=5):
+    """Construct a RandomizedSearchCV object.
+
+    Args:
+        model_name: name of model
+        model_obj: model object; either a scikit-learn estimator or one that
+            follows its interface
+        cv: cross-validation splitting iterator
+        scorer: scoring function to use
+        n_iter: number of samples for random search
+
+    Returns:
+        sklearn.model_selection.RandomizedSearchCV object
+    """
+    # To easily pull from distributions whose log is uniform, we'll want to
+    # just draw many samples; set how many to draw
+    space_size = 1000
+
+    # Set params
+    if model_name == 'l1_lr':
+        params = {
+            'alpha': np.logspace(-8, 8, base=10.0, num=space_size)
+        }
+    elif model_name == 'l2_lr':
+        params = {
+            'alpha': np.logspace(-8, 8, base=10.0, num=space_size)
+        }
+    elif model_name == 'l1l2_lr':
+        params = {
+            'l1_ratio': 1.0 - np.logspace(-5, 0, base=2.0, num=space_size)[::-1] + 2.0**(-5),
+            'alpha': np.logspace(-8, 8, base=10.0, num=space_size)
+        }
+    elif model_name == 'gbt':
+        params = {
+            'learning_rate': np.logspace(-2, 0, base=10.0, num=space_size),
+            'n_estimators': np.logspace(0, 8, base=2, num=space_size).astype(int),
+            'min_samples_split': np.logspace(1, 3, base=2, num=space_size).astype(int),
+            'min_samples_leaf': np.logspace(0, 2, base=2, num=space_size).astype(int),
+            'max_depth': np.logspace(1, 3, base=2, num=space_size).astype(int),
+            'max_features': [None, 0.1, 'sqrt', 'log2']
+        }
+    elif model_name == 'rf':
+        # For max_depth, set 'None' 1/2 of the time
+        params = {
+            'n_estimators': np.logspace(0, 8, base=2, num=space_size).astype(int),
+            'min_samples_split': np.logspace(1, 3, base=2, num=space_size).astype(int),
+            'min_samples_leaf': np.logspace(0, 2, base=2, num=space_size).astype(int),
+            'max_depth': [None]*space_size + np.logspace(1, 4, base=2, num=space_size).astype(int),
+            'max_features': [None, 0.1, 'sqrt', 'log2']
+        }
+    elif model_name == 'lstm':
+        params = {
+            'units': np.logspace(1, 8, base=2, num=space_size).astype(int),
+            'bidirectional': [False, True],
+            'embed_dim': [None]*4 + list(range(1, 9)),
+            'dropout_rate': scipy.stats.uniform(0, 1)
+        }
+    else:
+        raise Exception("Unknown model: '%s'" % model_name)
+
+    rs_cv = sklearn.model_selection.RandomizedSearchCV(model_obj,
+                params, cv=cv, refit=True,
+                scoring=scorer, n_iter=n_iter)
+    return rs_cv
+
+
 def classify(x_train, y_train, x_test, y_test,
         parsers,
         num_inner_splits=2):
@@ -246,7 +312,7 @@ def regress(x_train, y_train, x_test, y_test,
         for model}
     """
     # Check models_to_use
-    all_models = ['lr', 'l1_lr', 'l2_lr', 'l1l2_lr', 'gbrt', 'rfr', 'lstm']
+    all_models = ['lr', 'l1_lr', 'l2_lr', 'l1l2_lr', 'gbt', 'rf', 'lstm']
     if models_to_use is None:
         models_to_use = all_models
     assert set(models_to_use).issubset(all_models)
@@ -345,24 +411,15 @@ def regress(x_train, y_train, x_test, y_test,
 
     # L1 linear regression
     def l1_lr():
-        params = {
-                'alpha': np.logspace(-8, 8, num=5, base=10.0)
-        }
         reg = sklearn.linear_model.Lasso(max_iter=100000, tol=0.001, copy_X=True)
-        reg_cv = sklearn.model_selection.GridSearchCV(reg,
-                param_grid=params, cv=cv(), refit=True, scoring=scorer,
-                verbose=1)
-        return fit_and_test_model(reg_cv, 'L1 linear regression', hyperparams=reg_cv)
+        reg_cv = random_search_cv('l1_lr', reg, cv(), scorer)
+        return fit_and_test_model(reg_cv, 'L1 linear regression',
+                hyperparams=reg_cv)
 
     # L2 linear regression
     def l2_lr():
-        params = {
-                'alpha': np.logspace(-8, 8, num=5, base=10.0)
-        }
         reg = sklearn.linear_model.Ridge(max_iter=100000, tol=0.001, copy_X=True)
-        reg_cv = sklearn.model_selection.GridSearchCV(reg,
-                param_grid=params, cv=cv(), refit=True, scoring=scorer,
-                verbose=1)
+        reg_cv = random_search_cv('l2_lr', reg, cv(), scorer)
         return fit_and_test_model(reg_cv, 'L2 linear regression', hyperparams=reg_cv)
 
     # Elastic net (L1+L2 linear regression)
@@ -375,64 +432,29 @@ def regress(x_train, y_train, x_test, y_test,
     #  fit_and_test_model() prints values on a hold-out set, but chooses
     #  hyperparameters on splits of the train set
     def l1l2_lr():
-        params = {
-                'l1_ratio': 1.0 - np.logspace(-5, 0, num=100, base=2.0)[::-1] + 2.0**(-5),
-                'alpha': np.logspace(-8, 8, num=100, base=10.0)
-        }
         reg = sklearn.linear_model.ElasticNet(max_iter=100000, tol=0.001, copy_X=True)
-        reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-                param_distributions=params, n_iter=5,
-                cv=cv(), refit=True, scoring=scorer,
-                verbose=1)
+        reg_cv = random_search_cv('l1l2_lr', reg, cv(), scorer)
         return fit_and_test_model(reg_cv, 'L1+L2 linear regression',
                 hyperparams=reg_cv)
 
     # Gradient-boosted regression trees
-    def gbrt():
-        params = {
-                'learning_rate': np.logspace(-2, 0, num=5, base=10.0),
-                'n_estimators': [2**k for k in range(0, 9)],
-                'min_samples_split': [2**k for k in range(1, 4)],
-                'min_samples_leaf': [2**k for k in range(0, 3)],
-                'max_depth': [2**k for k in range(1, 4)],
-                'max_features': [None, 0.1, 'sqrt', 'log2']
-        }
+    def gbt():
         reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.001)
-        reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-                param_distributions=params, n_iter=5,
-                cv=cv(), refit=True, scoring=scorer,
-                verbose=1)
+        reg_cv = random_search_cv('gbt', reg, cv(), scorer)
         return fit_and_test_model(reg_cv, 'Gradient Boosting regression',
                 hyperparams=reg_cv)
 
     # Random forest regression
-    def rfr():
-        params = {
-                'n_estimators': [2**k for k in range(0, 9)],
-                'min_samples_split': [2**k for k in range(1, 4)],
-                'min_samples_leaf': [2**k for k in range(0, 3)],
-                'max_depth': [None] + [2**k for k in range(1, 5)],
-                'max_features': [None, 0.1, 'sqrt', 'log2']
-        }
+    def rf():
         reg = sklearn.ensemble.RandomForestRegressor(criterion='mse')
-        reg_cv = sklearn.model_selection.RandomizedSearchCV(reg,
-                param_distributions=params, n_iter=5,
-                cv=cv(), refit=True, scoring=scorer,
-                verbose=1)
+        reg_cv = random_search_cv('rf', reg, cv(), scorer)
         return fit_and_test_model(reg_cv, 'Random forest regression',
                 hyperparams=reg_cv)
 
     # LSTM
     def lstm():
-        params = {
-                'units': [4, 16, 64, 256],
-                'bidirectional': [False, True],
-                'embed_dim': [None, 1, 2, 4, 8]
-        }
         reg = rnn.LSTM(parsers['onehot'].context_nt)
-        reg_cv = sklearn.model_selection.GridSearchCV(reg,
-                param_grid=params, cv=cv(k='onehot'), refit=True, scoring=scorer,
-                verbose=1)
+        reg_cv = random_search_cv('lstm', reg, cv(k='onehot'), scorer)
         return fit_and_test_model(reg_cv, 'LSTM', hyperparams=reg_cv,
                 k='onehot')
 
