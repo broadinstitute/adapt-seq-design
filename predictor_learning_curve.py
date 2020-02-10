@@ -30,7 +30,7 @@ def construct_model(params, regression, x):
         x: train data (only needed for shape)
 
     Returns:..
-        cnn.CasCNNWithParallelFilters object
+        fnn.CasCNNWithParallelFilters object
     """
     # Construct the model
     model = predictor.construct_model(params, x.shape,

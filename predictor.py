@@ -7,7 +7,7 @@ import gzip
 import os
 import pickle
 
-import cnn
+import fnn
 import parse_data
 
 import numpy as np
@@ -307,7 +307,7 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
         data_parser: data parser object from parse_data
 
     Returns:..
-        cnn.CasCNNWithParallelFilters object
+        fnn.CasCNNWithParallelFilters object
     """
     # First construct the model
     model = construct_model(params, x_train.shape,
@@ -371,7 +371,7 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
 def construct_model(params, shape, regression=False):
     """Construct model.
 
-    This uses the cnn module.
+    This uses the fnn module.
 
     Args:
         params: dict of hyperparameters
@@ -379,9 +379,9 @@ def construct_model(params, shape, regression=False):
         regression: if True, perform regression; if False, classification
 
     Returns:
-        cnn.CasCNNWithParallelFilters object
+        fnn.CasCNNWithParallelFilters object
     """
-    return cnn.construct_model(params, shape, regression=regression)
+    return fnn.construct_model(params, shape, regression=regression)
 
 
 def pred_from_nt(model, pairs):
@@ -458,7 +458,7 @@ def load_model_for_cas13_regression_on_active(load_path):
         load_path: path containing model weights
 
     Returns:..
-        cnn.CasCNNWithParallelFilters object
+        fnn.CasCNNWithParallelFilters object
     """
     # Load parameters
     load_path_params = os.path.join(load_path,
