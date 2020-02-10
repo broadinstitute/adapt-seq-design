@@ -3,6 +3,7 @@
 
 import argparse
 
+import fnn
 import parse_data
 import predictor
 import rnn
@@ -167,6 +168,21 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=5):
             'max_depth': [None]*space_size + np.logspace(1, 4, base=2, num=space_size).astype(int),
             'max_features': [None, 0.1, 'sqrt', 'log2']
         }
+    elif model_name == 'mlp':
+        # Constructing a space of layer_dims requires choosing the number of
+        # layers and the dimensions of each; note that layer_dims does NOT
+        # include the output layer of the MLP (which has dimension=1)
+        layer_dims = []
+        for i in range(space_size):
+            num_layers = np.random.randint(1, 4)
+            dims = [np.random.randint(4, 128) for _ in range(num_layers)]
+            layer_dims += [dims]
+
+        params = {
+            'layer_dims': layer_dims,
+            'dropout_rate': scipy.stats.uniform(0, 1),
+            'activation_fn': ['relu', 'elu']
+        }
     elif model_name == 'lstm':
         params = {
             'units': np.logspace(1, 8, base=2, num=space_size).astype(int),
@@ -312,7 +328,7 @@ def regress(x_train, y_train, x_test, y_test,
         for model}
     """
     # Check models_to_use
-    all_models = ['lr', 'l1_lr', 'l2_lr', 'l1l2_lr', 'gbt', 'rf', 'lstm']
+    all_models = ['lr', 'l1_lr', 'l2_lr', 'l1l2_lr', 'gbt', 'rf', 'mlp', 'lstm']
     if models_to_use is None:
         models_to_use = all_models
     assert set(models_to_use).issubset(all_models)
@@ -449,6 +465,13 @@ def regress(x_train, y_train, x_test, y_test,
         reg = sklearn.ensemble.RandomForestRegressor(criterion='mse')
         reg_cv = random_search_cv('rf', reg, cv(), scorer)
         return fit_and_test_model(reg_cv, 'Random forest regression',
+                hyperparams=reg_cv)
+
+    # MLP
+    def mlp():
+        reg = fnn.MultilayerPerceptron(parsers['baselinefeats'].context_nt)
+        reg_cv = random_search_cv('mlp', reg, cv(), scorer)
+        return fit_and_test_model(reg_cv, 'Multilayer perceptron',
                 hyperparams=reg_cv)
 
     # LSTM

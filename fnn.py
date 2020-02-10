@@ -1,4 +1,7 @@
-"""CNN for predicting activity of a guide sequence.
+"""Feed forward neural networks for predicting activity of a guide sequence.
+
+This is focused primarily on CNNs, but includes a simple multilayer perceptron
+as well.
 
 Can be used with classification and regression.
 """
@@ -336,4 +339,110 @@ def construct_model(params, shape, regression=False):
     print(model.summary())
 
     return model
+
+
+class MultilayerPerceptron:
+    """Multilayer perceptron (MLP) using Keras.
+
+    This should be similar (if not identical) to the CasCNNWithParallelFilters,
+    without convolutional or locally connected layers.
+    """
+    def __init__(self, context_nt, layer_dims=[64, 64],
+            dropout_rate=0.5, activation_fn='relu', regression=True):
+        """
+        Args:
+            context_nt: amount of context to use in target
+            layer_dims: list of the dimensionality of each layer;
+                len(layer_dims) specifies how many layers (this does NOT
+                include the last layer)
+            dropout_rate: dropout rate before each layer
+            activation_fn: activation function to use for the hidden layers
+                (everything but the final layer)
+            regression: if True, perform regression; else, classification
+
+        """
+        self.context_nt = context_nt
+        self.layer_dims = layer_dims
+        self.dropout_rate = dropout_rate
+        self.activation_fn = activation_fn
+        self.regression = regression
+
+    # get_params() and set_params() are needed if we which to use this
+    # class as a scikit-learn estimator
+    # (see https://scikit-learn.org/stable/developers/develop.html#rolling-your-own-estimator)
+    def get_params(self, deep=True):
+        return {'context_nt': self.context_nt,
+                'layer_dims': self.layer_dims,
+                'dropout_rate': self.dropout_rate,
+                'activation_fn': self.activation_fn}
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        return self
+
+    def setup(self, seq_len):
+        """Setup the model.
+
+        Args:
+            seq_len: length of each sequence; only used to specify input shape
+                to first layer
+        """
+        final_activation = 'linear' if self.regression else 'sigmoid'
+
+        self.model = tf.keras.Sequential()
+
+        # Flatten input
+        self.model.add(tf.keras.layers.Flatten())
+
+        # At each position of the input there are 8 bits for the one-hot
+        # encoding (4 for the target, 4 for the guide); the total input size is
+        # thus 8*seq_len
+        input_dim = 8*seq_len
+
+        # Add middle layers
+        for i, dim in enumerate(self.layer_dims):
+            self.model.add(tf.keras.layers.Dropout(self.dropout_rate))
+            if i == 0:
+                self.model.add(tf.keras.layers.Dense(dim,
+                    activation=self.activation_fn,
+                    input_dim=input_dim))
+            else:
+                self.model.add(tf.keras.layers.Dense(dim,
+                    activation=self.activation_fn))
+
+        # Add a final layer
+        self.model.add(tf.keras.layers.Dropout(self.dropout_rate))
+        self.model.add(tf.keras.layers.Dense(1, activation=final_activation))
+
+        if self.regression:
+            self.model.compile('adam', 'mse', metrics=[
+                tf.keras.metrics.MeanSquaredError(),
+                tf.keras.metrics.MeanAbsoluteError()])
+        else:
+            self.model.compile('adam', 'binary_crossentropy', metrics=[
+                tf.keras.metrics.AUC(),
+                tf.keras.metrics.Accuracy()])
+
+    def fit(self, x_train, y_train):
+        """Fit the model.
+
+        Args:
+            x_train/y_train: training data
+        """
+        # Setup model; do this again in case parameters changed
+        seq_len = len(x_train[0])
+        self.setup(seq_len)
+
+        self.model.fit(x_train, y_train)
+
+    def predict(self, x_test):
+        """Make predictions:
+
+        Args:
+            x_test: input data for predictions
+
+        Returns:
+            predictions
+        """
+        return self.model.predict(x_test).ravel()
 
