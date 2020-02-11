@@ -328,8 +328,8 @@ def regress(x_train, y_train, x_test, y_test,
         models_to_use: list of models to test; if None, test all
 
     Returns:
-        dict {model: metrics on test data for best choice of hyperparameters
-        for model}
+        dict {model: {input feats: metrics on test data for best choice of
+            hyperparameters for model}}
     """
     # Check models_to_use
     all_models = ['lr', 'l1_lr', 'l2_lr', 'l1l2_lr', 'gbt', 'rf', 'mlp', 'lstm']
@@ -337,16 +337,26 @@ def regress(x_train, y_train, x_test, y_test,
         models_to_use = all_models
     assert set(models_to_use).issubset(all_models)
 
+    # Set the input feats to use for different models
+    # Use the same choice for all models *except* lstm, which should be in a
+    # series form where each time step corresponds to a position
+    input_feats = {}
+    for m in all_models:
+        if m == 'lstm':
+            input_feats[m] = ['onehot']
+        else:
+            input_feats[m] = ['onehot-flat', 'onehot-simple', 'handcrafted',
+                    'combined']
+
     # With models, perform cross-validation to determine hyperparameters
     # Most of the built-in cross-validators find the best choice based on
     # R^2; some of them do not support a custom scoring function via a
     # `scoring=...` argument. So instead wrap the regression with a
     # GridSearchCV object, which does support a custom scoring metric. Use
     # spearman rank correlation coefficient for this.
-    def cv(k='baselinefeats'):
-        assert k in ['baselinefeats', 'onehot']
-        return parsers[k].split(x_train[k], y_train[k], num_inner_splits,
-                stratify_by_pos=True, yield_indices=True)
+    def cv(feats):
+        return parsers[feats].split(x_train[feats], y_train[feats],
+                num_inner_splits, stratify_by_pos=True, yield_indices=True)
 
     def rho_f(y, y_pred):
         rho, _ = scipy.stats.spearmanr(y, y_pred)
@@ -363,7 +373,7 @@ def regress(x_train, y_train, x_test, y_test,
     else:
         raise ValueError("Unknown scoring method %s" % scoring_method)
 
-    def fit_and_test_model(reg, model_desc, hyperparams, k='baselinefeats'):
+    def fit_and_test_model(reg, model_desc, hyperparams, feats):
         """Fit and test model.
 
         Args:
@@ -371,24 +381,23 @@ def regress(x_train, y_train, x_test, y_test,
             model_desc: string describing model
             hyperparams: list [p] of hyperparameters where each p is a string
                 and reg.p gives the value chosen by the hyperparameter search
-            k: whether to use baseline features ('baselinefeats') or
-                one-hot encoded input ('onehot')
+            feats: input features type
 
         Returns:
             dict giving metrics for the best choice of model hyperparameters
         """
         # Fit model
-        reg.fit(x_train[k], y_train[k])
+        reg.fit(x_train[feats], y_train[feats])
 
         # Test model
-        y_pred = reg.predict(x_test[k])
+        y_pred = reg.predict(x_test[feats])
 
         # Compute metrics
-        mse = sklearn.metrics.mean_squared_error(y_test[k], y_pred)
-        mae = sklearn.metrics.mean_absolute_error(y_test[k], y_pred)
-        R2 = sklearn.metrics.r2_score(y_test[k], y_pred)
-        r, _ = scipy.stats.pearsonr(y_test[k], y_pred)
-        rho, _ = scipy.stats.spearmanr(y_test[k], y_pred)
+        mse = sklearn.metrics.mean_squared_error(y_test[feats], y_pred)
+        mae = sklearn.metrics.mean_absolute_error(y_test[feats], y_pred)
+        R2 = sklearn.metrics.r2_score(y_test[feats], y_pred)
+        r, _ = scipy.stats.pearsonr(y_test[feats], y_pred)
+        rho, _ = scipy.stats.spearmanr(y_test[feats], y_pred)
 
         # Note that R2 does not necessarily equal r^2 here. The value R2
         # is computed by definition of R^2 (1 minus (residual sum of
@@ -421,26 +430,28 @@ def regress(x_train, y_train, x_test, y_test,
                 '1_minus_rho': 1.0-rho}
 
     # Linear regression (no regularization)
-    def lr():
+    def lr(feats):
         reg = sklearn.linear_model.LinearRegression(copy_X=True)    # no CV because there are no hyperparameters
-        return fit_and_test_model(reg, 'Linear regression', [])
+        return fit_and_test_model(reg, 'Linear regression',
+                hyperparams=[], feats=feats)
 
     # Note:
     #  For below models, increasing `max_iter` or increasing `tol` can reduce
     #  the warning 'ConvergenceWarning: Objective did not converge.'
 
     # L1 linear regression
-    def l1_lr():
+    def l1_lr(feats):
         reg = sklearn.linear_model.Lasso(max_iter=100000, tol=0.001, copy_X=True)
-        reg_cv = random_search_cv('l1_lr', reg, cv(), scorer)
+        reg_cv = random_search_cv('l1_lr', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'L1 linear regression',
-                hyperparams=reg_cv)
+                hyperparams=reg_cv, feats=feats)
 
     # L2 linear regression
-    def l2_lr():
+    def l2_lr(feats):
         reg = sklearn.linear_model.Ridge(max_iter=100000, tol=0.001, copy_X=True)
-        reg_cv = random_search_cv('l2_lr', reg, cv(), scorer)
-        return fit_and_test_model(reg_cv, 'L2 linear regression', hyperparams=reg_cv)
+        reg_cv = random_search_cv('l2_lr', reg, cv(feats), scorer)
+        return fit_and_test_model(reg_cv, 'L2 linear regression',
+                hyperparams=reg_cv, feats=feats)
 
     # Elastic net (L1+L2 linear regression)
     # Recommendation for l1_ratio is to place more values close to 1 (lasso)
@@ -451,45 +462,48 @@ def regress(x_train, y_train, x_test, y_test,
     #  especially if Lasso/Ridge are close; in part, this could be because
     #  fit_and_test_model() prints values on a hold-out set, but chooses
     #  hyperparameters on splits of the train set
-    def l1l2_lr():
+    def l1l2_lr(feats):
         reg = sklearn.linear_model.ElasticNet(max_iter=100000, tol=0.001, copy_X=True)
-        reg_cv = random_search_cv('l1l2_lr', reg, cv(), scorer)
+        reg_cv = random_search_cv('l1l2_lr', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'L1+L2 linear regression',
-                hyperparams=reg_cv)
+                hyperparams=reg_cv, feats=feats)
 
     # Gradient-boosted regression trees
-    def gbt():
+    def gbt(feats):
         reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.001)
-        reg_cv = random_search_cv('gbt', reg, cv(), scorer)
+        reg_cv = random_search_cv('gbt', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'Gradient Boosting regression',
-                hyperparams=reg_cv)
+                hyperparams=reg_cv, feats=feats)
 
     # Random forest regression
-    def rf():
+    def rf(feats):
         reg = sklearn.ensemble.RandomForestRegressor(criterion='mse')
-        reg_cv = random_search_cv('rf', reg, cv(), scorer)
+        reg_cv = random_search_cv('rf', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'Random forest regression',
-                hyperparams=reg_cv)
+                hyperparams=reg_cv, feats=feats)
 
     # MLP
-    def mlp():
-        reg = fnn.MultilayerPerceptron(parsers['baselinefeats'].context_nt)
-        reg_cv = random_search_cv('mlp', reg, cv(), scorer)
+    def mlp(feats):
+        reg = fnn.MultilayerPerceptron(parsers[feats].context_nt)
+        reg_cv = random_search_cv('mlp', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'Multilayer perceptron',
-                hyperparams=reg_cv)
+                hyperparams=reg_cv, feats=feats)
 
     # LSTM
-    def lstm():
-        reg = rnn.LSTM(parsers['onehot'].context_nt)
-        reg_cv = random_search_cv('lstm', reg, cv(k='onehot'), scorer)
-        return fit_and_test_model(reg_cv, 'LSTM', hyperparams=reg_cv,
-                k='onehot')
+    def lstm(feats):
+        reg = rnn.LSTM(parsers[feats].context_nt)
+        reg_cv = random_search_cv('lstm', reg, cv(feats), scorer)
+        return fit_and_test_model(reg_cv, 'LSTM',
+                hyperparams=reg_cv, feats=feats)
 
     metrics_for_models = {}
     for model_name in models_to_use:
-        print("Running and evaluating model: '%s'" % model_name)
-        model_fn = locals()[model_name]
-        metrics_for_models[model_name] = model_fn()
+        metrics_for_models[model_name] = {}
+        for feats in input_feats[model_name]:
+            print(("Running and evaluating model '%s' with input feature '%s'") %
+                    (model_name, feats))
+            model_fn = locals()[model_name]
+            metrics_for_models[model_name][feats] = model_fn(feats)
 
     return metrics_for_models
 
@@ -516,30 +530,26 @@ def nested_cross_validate(x, y, num_outer_splits,
     """
     fold_results = []
     i = 0
-    outer_split_iter_bf = parsers['baselinefeats'].split(x['baselinefeats'],
-            y['baselinefeats'], num_splits=num_outer_splits,
-            stratify_by_pos=True)
-    outer_split_iter_oh = parsers['onehot'].split(x['onehot'],
-            y['onehot'], num_splits=num_outer_splits,
-            stratify_by_pos=True)
-    outer_split_iter = zip(outer_split_iter_bf, outer_split_iter_oh)
-    for (x_train_bf, y_train_bf, x_validate_bf, y_validate_bf), (x_train_oh,
-            y_train_oh, x_validate_oh, y_validate_oh) in outer_split_iter:
-        assert len(x_train_bf) == len(y_train_bf)
-        assert len(x_train_bf) == len(x_train_oh)
-        assert len(x_train_oh) == len(y_train_oh)
+    outer_split_iters = []
+    outer_split_iters_feats = []
+    for k in parsers.keys():
+        outer_split_iters += [parsers[k].split(x[k], y[k],
+            num_splits=num_outer_splits, stratify_by_pos=True)]
+        outer_split_iters_feats += [k]
+    for xy in zip(*outer_split_iters):
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
-        print('There are n={} train points and n={} validation points'.format(
-            len(x_train_bf), len(x_validate_bf)))
 
-        x_train = {'baselinefeats': x_train_bf,
-                   'onehot': x_train_oh}
-        y_train = {'baselinefeats': y_train_bf,
-                   'onehot': y_train_oh}
-        x_validate = {'baselinefeats': x_validate_bf,
-                      'onehot': x_validate_oh}
-        y_validate = {'baselinefeats': y_validate_bf,
-                      'onehot': y_validate_oh}
+        x_train = {}
+        y_train = {}
+        x_validate = {}
+        y_validate = {}
+        for k, xy_k in zip(outer_split_iters_feats, xy):
+            x_train[k], y_train[k], x_validate[k], y_validate[k] = xy_k
+            assert len(x_train[k]) == len(y_train[k])
+            assert len(x_validate[k]) == len(y_validate[k])
+            print(('Input feats {}: There are n={} train points and n={} '
+                'validation points').format(
+                k, len(x_train[k]), len(x_validate[k])))
 
         # Search for hyperparameters on this outer fold of the data
         if regression:
@@ -558,9 +568,11 @@ def nested_cross_validate(x, y, num_outer_splits,
         print('  Metrics on validation data')
         for model in metrics_for_models.keys():
             print('    Model: {}'.format(model))
-            for metric in metrics_for_models[model].keys():
-                print('      {} = {}'.format(metric,
-                    metrics_for_models[model][metric]))
+            for feats in metrics_for_models[model].keys():
+                print('        Input feats: {}'.format(feats))
+                for metric in metrics_for_models[model][feats].keys():
+                    print('          {} = {}'.format(metric,
+                        metrics_for_models[model][feats][metric]))
 
         print(('FINISHED OUTER FOLD {} of {}').format(i+1, num_outer_splits))
         i += 1
@@ -569,41 +581,42 @@ def nested_cross_validate(x, y, num_outer_splits,
 
 
 def main():
-    # Read arguments and data
+    # Read arguments
     args = parse_args()
+
+    # Set seed
     set_seed(args.seed)
+
+    # Read data multiple times, each with different types of features
+    x_train = {}
+    y_train = {}
+    x_validate = {}
+    y_validate = {}
+    x_test = {}
+    y_test = {}
+    parsers = {}
     split_frac = (1.0 - args.test_split_frac, 0.0, args.test_split_frac)
-    data_parser_bf = predictor.read_data(args,
-            split_frac=split_frac, make_feats_for_baseline=True)
-    x_train_bf, y_train_bf = data_parser_bf.train_set()
-    x_validate_bf, y_validate_bf = data_parser_bf.validate_set()
-    x_test_bf, y_test_bf = data_parser_bf.test_set()
-    parsers = {'baselinefeats': data_parser_bf}
-    data_parser_oh = predictor.read_data(args,
-            split_frac=split_frac, make_feats_for_baseline=False)
-    x_train_oh, y_train_oh = data_parser_oh.train_set()
-    x_validate_oh, y_validate_oh = data_parser_oh.validate_set()
-    x_test_oh, y_test_oh = data_parser_oh.test_set()
-    parsers['onehot'] = data_parser_oh
-    x_train = {'baselinefeats': x_train_bf,
-               'onehot': x_train_oh}
-    y_train = {'baselinefeats': y_train_bf,
-               'onehot': y_train_oh}
-    x_validate = {'baselinefeats': x_validate_bf,
-                  'onehot': x_validate_oh}
-    y_validate = {'baselinefeats': y_validate_bf,
-                  'onehot': y_validate_oh}
-    x_test = {'baselinefeats': x_test_bf,
-              'onehot': x_test_oh}
-    y_test = {'baselinefeats': y_test_bf,
-              'onehot': y_test_oh}
+    for feats in ['onehot', 'onehot-flat', 'onehot-simple', 'handcrafted',
+            'combined']:
+        if feats == 'onehot':
+            # For parse_data, treat this as not constructing features for
+            # baseline
+            make_feats_for_baseline = None
+        else:
+            make_feats_for_baseline = feats
 
+        data_parser = predictor.read_data(args,
+                split_frac=split_frac,
+                make_feats_for_baseline=make_feats_for_baseline)
+        x_train[feats], y_train[feats] = data_parser.train_set()
+        x_validate[feats], y_validate[feats] = data_parser.validate_set()
+        x_test[feats], y_test[feats] = data_parser.test_set()
+        parsers[feats] = data_parser
 
-    # Convert column to 1D array
-    for k in ['baselinefeats', 'onehot']:
-        y_train[k] = y_train[k].ravel()
-        y_validate[k] = y_validate[k].ravel()
-        y_test[k] = y_test[k].ravel()
+        # Convert column to 1D array
+        y_train[feats] = y_train[feats].ravel()
+        y_validate[feats] = y_validate[feats].ravel()
+        y_test[feats] = y_test[feats].ravel()
 
     # Determine, based on the dataset, whether to do regression or
     # classification
@@ -640,10 +653,11 @@ def main():
                 for fold in range(len(fold_results)):
                     metrics_for_models = fold_results[fold]
                     for model in metrics_for_models.keys():
-                        row = [fold, model]
-                        for metric in metrics:
-                            row += [metrics_for_models[model][metric]]
-                        fw.write('\t'.join(str(r) for r in row) + '\n')
+                        for feats in metrics_for_models[model].keys():
+                            row = [fold, model, feats]
+                            for metric in metrics:
+                                row += [metrics_for_models[model][feats][metric]]
+                            fw.write('\t'.join(str(r) for r in row) + '\n')
     else:
         # Simply perform a hyperparameter search for each model
         if regression:

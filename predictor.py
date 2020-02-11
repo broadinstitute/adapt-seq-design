@@ -188,7 +188,7 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-def read_data(args, split_frac=None, make_feats_for_baseline=False):
+def read_data(args, split_frac=None, make_feats_for_baseline=None):
     """Read input/output data.
 
     Args:
@@ -199,13 +199,13 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
         use_validation: if True, have the validation set be 1/3 of what would
             be the training set (and the training set be the other 2/3); if
             False, do not have a validation set
-        make_feats_for_baseline: if True, make feature vector for baseline
-            models (only applies to Cas13)
+        make_feats_for_baseline: if set, make feature vector for baseline
+            models; see parse_data module for description of values
 
     Returns:
         data parser object from parse_data
     """
-    if make_feats_for_baseline and args.dataset != 'cas13':
+    if make_feats_for_baseline is not None and args.dataset != 'cas13':
         raise Exception("make_feats_for_baseline only works with Cas13 data")
 
     # Read data
@@ -234,8 +234,8 @@ def read_data(args, split_frac=None, make_feats_for_baseline=False):
         regress_only_on_active = args.cas13_regress_only_on_active
         data_parser.set_activity_mode(
                 classify_activity, regress_on_all, regress_only_on_active)
-        if make_feats_for_baseline:
-            data_parser.set_make_feats_for_baseline()
+        if make_feats_for_baseline is not None:
+            data_parser.set_make_feats_for_baseline(make_feats_for_baseline)
         if args.cas13_normalize_crrna_activity:
             data_parser.set_normalize_crrna_activity()
         if args.cas13_use_difference_from_wildtype_activity:

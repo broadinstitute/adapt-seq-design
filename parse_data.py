@@ -89,7 +89,7 @@ class Cas13ActivityParser:
         self.regress_on_all = False
         self.regress_only_on_active = False
 
-        self.make_feats_for_baseline = False
+        self.make_feats_for_baseline = None
 
         self.normalize_crrna_activity = False
         self.use_difference_from_wildtype_activity = False
@@ -116,10 +116,18 @@ class Cas13ActivityParser:
         self.regress_on_all = regress_on_all
         self.regress_only_on_active = regress_only_on_active
 
-    def set_make_feats_for_baseline(self):
+    def set_make_feats_for_baseline(self, feats):
         """Generate input features specifically for the baseline model.
+
+        Args:
+            feats: one of 'onehot-flat' (one-hot encoding, flattened to 1D);
+                'onehot-simple' (one-hot encoding that encodes the target
+                sequence and mismatches between the guide and it, leaving the
+                guide encoding as all 0 when matching); 'handcrafted'
+                (nucleotide frequency, dinucleotide frequency, etc.); or
+                'combined' (concatenated 'onehot-simple' and 'handcrafted')
         """
-        self.make_feats_for_baseline = True
+        self.make_feats_for_baseline = feats
 
     def set_normalize_crrna_activity(self):
         """Normalize activity of each crRNA, across targets, to have mean 0 and
@@ -159,7 +167,7 @@ class Cas13ActivityParser:
         be important here.
 
         Note that when self.make_feats_for_baseline is set, the input feature
-        vector is simplified but contains the same information.
+        vector is different, depending on its value.
 
         Args:
             row: dict representing row of data (key'd by column
@@ -167,8 +175,13 @@ class Cas13ActivityParser:
 
         Returns:
             tuple (i, out) where i is a one-hot encoding of the input
-            and out is an output value 
+            and out is an output value (or out is in the format specified by
+            self.make_feats_for_baseline)
         """
+        # Check self.make_feats_for_baseline
+        assert self.make_feats_for_baseline in [None, 'onehot-flat',
+            'onehot-simple', 'handcrafted', 'combined']
+
         onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
         def onehot(b):
             # One-hot encoding of base b
@@ -186,15 +199,21 @@ class Cas13ActivityParser:
         for pos in range(start, len(context_before)):
             # Make a one-hot encoding for this position of the target sequence
             v = onehot(context_before[pos])
-            if self.make_feats_for_baseline:
-                # For the baseline, only use a one-hot encoding of the
-                # target (and in a 1D array)
-                input_feats_context_before += v
-            else:
+            if self.make_feats_for_baseline is None:
                 # For the 4 bits of guide sequence, use [0,0,0,0] (there is
                 # no guide at this position)
                 v += [0, 0, 0, 0]
                 input_feats_context_before += [v]
+            elif self.make_feats_for_baseline in ['onehot-flat',
+                    'onehot-simple', 'combined']:
+                # For the baseline, only use a one-hot encoding of the
+                # target (and in a 1D array)
+                input_feats_context_before += v
+            elif self.make_feats_for_baseline == 'handcrafted':
+                # No feature for the baseline here
+                pass
+            else:
+                raise ValueError("Unknown choice of make_feats_for_baseline")
 
         # Create the input features for target and guide sequence
         input_feats_guide = []
@@ -207,7 +226,16 @@ class Cas13ActivityParser:
             # and the guide
             v_target = onehot(target[pos])
             v_guide = onehot(guide[pos])
-            if self.make_feats_for_baseline:
+            if self.make_feats_for_baseline is None:
+                # Combine them into an 8-bit vector
+                v = v_target + v_guide
+                input_feats_guide += [v]
+            elif self.make_feats_for_baseline == 'onehot-flat':
+                # For the baseline, use an 8-bit vector (flattened - i.e.,
+                # concatenated with the other positions)
+                v = v_target + v_guide
+                input_feats_guide += v
+            elif self.make_feats_for_baseline in ['onehot-simple', 'combined']:
                 # For the baseline, use a one-hot encoding of the target
                 # (in a 1D array) and then use a one-hot encoding that gives
                 # whether there is a mismatch and, if so, what the guide
@@ -219,10 +247,12 @@ class Cas13ActivityParser:
                     # Mismatch; have the guide indicate which base there is
                     input_feats_guide += v_target + v_guide
                     baseline_num_mismatches += 1
+            elif self.make_feats_for_baseline == 'handcrafted':
+                # Mark number of mismatches, but do not use input_feats_guide
+                if target[pos] != guide[pos]:
+                    baseline_num_mismatches += 1
             else:
-                # Combine them into an 8-bit vector
-                v = v_target + v_guide
-                input_feats_guide += [v]
+                raise ValueError("Unknown choice of make_feats_for_baseline")
 
         # Create the input features for target sequence context on
         # the end after the guide
@@ -232,19 +262,28 @@ class Cas13ActivityParser:
         for pos in range(self.context_nt):
             # Make a one-hot encoding for this position of the target sequence
             v = onehot(context_after[pos])
-            if self.make_feats_for_baseline:
-                # For the baseline, only use a one-hot encoding of the
-                # target (and in a 1D array)
-                input_feats_context_after += v
-            else:
+            if self.make_feats_for_baseline is None:
                 # For the 4 bits of guide sequence, use [0,0,0,0] (there is
                 # no guide at this position)
                 v += [0, 0, 0, 0]
                 input_feats_context_after += [v]
+            elif self.make_feats_for_baseline in ['onehot-flat',
+                    'onehot-simple', 'combined']:
+                # For the baseline, only use a one-hot encoding of the
+                # target (and in a 1D array)
+                input_feats_context_after += v
+            elif self.make_feats_for_baseline == 'handcrafted':
+                # No feature for the baseline here
+                pass
+            else:
+                raise ValueError("Unknown choice of make_feats_for_baseline")
 
         # Combine the input features
         input_feats = input_feats_context_before + input_feats_guide + input_feats_context_after
-        if self.make_feats_for_baseline:
+        if self.make_feats_for_baseline == 'handcrafted':
+            # The features directly from sequence should not have been set
+            assert len(input_feats) == 0
+        if self.make_feats_for_baseline in ['handcrafted', 'combined']:
             # Have the feature vector for the baseline include additional
             # features: position-independent nucleotide frequency, dinucleotide
             # frequency, and GC content (all in the guide); and number of
