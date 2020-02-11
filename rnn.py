@@ -116,7 +116,17 @@ class LSTM:
         if self.embed_dim is not None:
             x_train = np.array([parse_data.input_vec_for_embedding(x,
                 self.context_nt) for x in x_train])
-        self.model.fit(x_train, y_train, verbose=2)
+
+        # Setup early stopping
+        # The validation data is only used for early stopping
+        # Note that this uses a random train/val split to decide when to stop
+        # early; this may not be ideal due to crRNA overlap between the
+        # train/val sets (will likely stop too late and overfit)
+        es = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                mode='min', patience=2)
+
+        self.model.fit(x_train, y_train, validation_split=0.25,
+                callbacks=[es], verbose=2)
 
     def predict(self, x_test):
         """Make predictions:
