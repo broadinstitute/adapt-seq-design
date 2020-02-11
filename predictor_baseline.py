@@ -119,7 +119,7 @@ def set_seed(seed):
 
 
 # TODO increase n_iter
-def random_search_cv(model_name, model_obj, cv, scorer, n_iter=5):
+def random_search_cv(model_name, model_obj, cv, scorer, n_iter=2):
     """Construct a RandomizedSearchCV object.
 
     Args:
@@ -184,7 +184,7 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=5):
 
         params = {
             'layer_dims': layer_dims,
-            'dropout_rate': scipy.stats.uniform(0, 1),
+            'dropout_rate': scipy.stats.uniform(0, 0.5),
             'activation_fn': ['relu', 'elu']
         }
     elif model_name == 'lstm':
@@ -192,7 +192,7 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=5):
             'units': np.logspace(1, 8, base=2, num=space_size).astype(int),
             'bidirectional': [False, True],
             'embed_dim': [None]*4 + list(range(1, 9)),
-            'dropout_rate': scipy.stats.uniform(0, 1)
+            'dropout_rate': scipy.stats.uniform(0, 0.5)
         }
     else:
         raise Exception("Unknown model: '%s'" % model_name)
