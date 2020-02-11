@@ -129,6 +129,5 @@ dmypy.json
 # Models during hyperparameter search, but allow
 # selected models
 models/predictor_exp-and-pos_regress-on-active/*
-!models/predictor_exp-and-pos_regress-on-active/model-8f534a8c
 models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/*
 !models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/model-f08075e6
