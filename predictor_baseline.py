@@ -118,6 +118,7 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
+# TODO increase n_iter
 def random_search_cv(model_name, model_obj, cv, scorer, n_iter=5):
     """Construct a RandomizedSearchCV object.
 
@@ -132,8 +133,10 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=5):
     Returns:
         sklearn.model_selection.RandomizedSearchCV object
     """
-    # To easily pull from distributions whose log is uniform, we'll want to
-    # just draw many samples; set how many to draw
+    # In some cases (e.g., pulling from distributions whose log is uniform),
+    # we'll want to just draw many samples and have RandomizedSearchCV draw
+    # from these; specify how many samples we draw and provide as
+    # representative of the space
     space_size = 1000
 
     # Set params
@@ -165,7 +168,8 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=5):
             'n_estimators': np.logspace(0, 8, base=2, num=space_size).astype(int),
             'min_samples_split': np.logspace(1, 3, base=2, num=space_size).astype(int),
             'min_samples_leaf': np.logspace(0, 2, base=2, num=space_size).astype(int),
-            'max_depth': [None]*space_size + np.logspace(1, 4, base=2, num=space_size).astype(int),
+            'max_depth': [None]*space_size + list(np.logspace(1, 4, base=2,
+                num=space_size).astype(int)),
             'max_features': [None, 0.1, 'sqrt', 'log2']
         }
     elif model_name == 'mlp':
