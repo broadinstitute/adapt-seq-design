@@ -19,7 +19,8 @@ class LSTM:
     TODO: multiplicative LSTMs.
     """
     def __init__(self, context_nt, units=64, bidirectional=False,
-            embed_dim=None, dropout_rate=0.5, regression=True):
+            embed_dim=None, dropout_rate=0.5, regression=True,
+            class_weight=None):
         """
         Args:
             context_nt: amount of context to use in target
@@ -30,7 +31,8 @@ class LSTM:
                 encoded sequence as input
             dropout_rate: dropout rate before final layer
             regression: if True, perform regression; else, classification
-
+            class_weight: class weight for training; only application for
+                classification
         """
         self.context_nt = context_nt
         self.units = units
@@ -38,6 +40,7 @@ class LSTM:
         self.embed_dim = embed_dim
         self.dropout_rate = dropout_rate
         self.regression = regression
+        self.class_weight=class_weight
 
     # get_params() and set_params() are needed if we which to use this
     # class as a scikit-learn estimator
@@ -47,7 +50,9 @@ class LSTM:
                 'units': self.units,
                 'bidirectional': self.bidirectional,
                 'embed_dim': self.embed_dim,
-                'dropout_rate': self.dropout_rate}
+                'dropout_rate': self.dropout_rate,
+                'regression': self.regression,
+                'class_weight': self.class_weight}
     def set_params(self, **parameters):
         for parameter, value in parameters.items():
             setattr(self, parameter, value)
@@ -126,7 +131,7 @@ class LSTM:
                 mode='min', patience=2)
 
         self.model.fit(x_train, y_train, validation_split=0.25,
-                callbacks=[es], verbose=2)
+                callbacks=[es], class_weight=self.class_weight, verbose=2)
 
     def predict(self, x_test):
         """Make predictions:

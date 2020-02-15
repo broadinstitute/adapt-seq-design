@@ -348,7 +348,8 @@ class MultilayerPerceptron:
     without convolutional or locally connected layers.
     """
     def __init__(self, context_nt, layer_dims=[64, 64],
-            dropout_rate=0.5, activation_fn='relu', regression=True):
+            dropout_rate=0.5, activation_fn='relu', regression=True,
+            class_weight=None):
         """
         Args:
             context_nt: amount of context to use in target
@@ -359,6 +360,8 @@ class MultilayerPerceptron:
             activation_fn: activation function to use for the hidden layers
                 (everything but the final layer)
             regression: if True, perform regression; else, classification
+            class_weight: class weight for training; only application for
+                classification
 
         """
         self.context_nt = context_nt
@@ -366,6 +369,7 @@ class MultilayerPerceptron:
         self.dropout_rate = dropout_rate
         self.activation_fn = activation_fn
         self.regression = regression
+        self.class_weight=class_weight
 
     # get_params() and set_params() are needed if we which to use this
     # class as a scikit-learn estimator
@@ -374,7 +378,9 @@ class MultilayerPerceptron:
         return {'context_nt': self.context_nt,
                 'layer_dims': self.layer_dims,
                 'dropout_rate': self.dropout_rate,
-                'activation_fn': self.activation_fn}
+                'activation_fn': self.activation_fn,
+                'regression': self.regression,
+                'class_weight': self.class_weight}
     def set_params(self, **parameters):
         for parameter, value in parameters.items():
             setattr(self, parameter, value)
@@ -442,7 +448,8 @@ class MultilayerPerceptron:
                 mode='min', patience=2)
 
         self.model.fit(x_train, y_train, validation_split=0.25,
-                callbacks=[es], verbose=2)
+                callbacks=[es], class_weight=self.class_weight,
+                verbose=2)
 
     def predict(self, x_test):
         """Make predictions:

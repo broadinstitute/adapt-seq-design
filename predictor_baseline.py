@@ -118,8 +118,7 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-# TODO increase n_iter
-def random_search_cv(model_name, model_obj, cv, scorer, n_iter=2):
+def random_search_cv(model_name, model_obj, cv, scorer, n_iter=50):
     """Construct a RandomizedSearchCV object.
 
     Args:
@@ -152,6 +151,19 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=2):
         params = {
             'l1_ratio': 1.0 - np.logspace(-5, 0, base=2.0, num=space_size)[::-1] + 2.0**(-5),
             'alpha': np.logspace(-8, 8, base=10.0, num=space_size)
+        }
+    elif model_name == 'l1_logit':
+        params = {
+            'C': np.logspace(-8, 8, base=10.0, num=space_size)
+        }
+    elif model_name == 'l2_logit':
+        params = {
+            'C': np.logspace(-8, 8, base=10.0, num=space_size)
+        }
+    elif model_name == 'l1l2_logit':
+        params = {
+            'l1_ratio': 1.0 - np.logspace(-5, 0, base=2.0, num=space_size)[::-1] + 2.0**(-5),
+            'C': np.logspace(-8, 8, base=10.0, num=space_size)
         }
     elif model_name == 'gbt':
         params = {
@@ -194,6 +206,11 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=2):
             'embed_dim': [None]*4 + list(range(1, 9)),
             'dropout_rate': scipy.stats.uniform(0, 0.5)
         }
+    elif model_name == 'svm':
+        params = {
+            'C': np.logspace(-8, 8, base=10.0, num=space_size),
+            'kernel': ['linear', 'rbf']
+        }
     else:
         raise Exception("Unknown model: '%s'" % model_name)
 
@@ -205,7 +222,9 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=2):
 
 def classify(x_train, y_train, x_test, y_test,
         parsers,
-        num_inner_splits=2):
+        num_inner_splits=5,
+        scoring_method='auc-roc',
+        models_to_use=None):
     """Perform classification.
 
     Test data is used for evaluating the model with the best choice of
@@ -214,96 +233,207 @@ def classify(x_train, y_train, x_test, y_test,
     Args:
         x_{train,test}: input data for train/test
         y_{train,test}: output labels for train/test
-        parsers: parse_data parsers to use for splitting data
         num_inner_splits: number of splits for cross-validation
+        parsers: parse_data parsers to use for splitting data
+        scoring_method: method to use for scoring test results; 'auc-roc'
+            (auROC) or 'auc-pr' (auPR)
+        models_to_use: list of models to test; if None, test all
 
     Returns:
-        dict {'l1_logistic_regression': metrics on test data for best choice of
-        hyperparameters with L1 logistic regression, 'l2_logistic_regression':
-        metrics on test data for best choice of hyperparameters with L2
-        logistic regression}
+        dict {model: {input feats: metrics on test data for best choice of
+            hyperparameters for model}}
     """
-    # TODO implement other models, e.g., SVM
-    # TODO as done in regress() below, optimize hyperparameters for a
-    # custom scoring function (e.g., AUC)
+    # Check models_to_use
+    all_models = ['logit', 'l1_logit', 'l2_logit', 'l1l2_logit', 'gbt',
+            'rf', 'svm', 'mlp', 'lstm']
+    if models_to_use is None:
+        models_to_use = all_models
+    assert set(models_to_use).issubset(all_models)
+
+    # Set the input feats to use for different models
+    # Use the same choice for all models *except* lstm, which should be in a
+    # series form where each time step corresponds to a position
+    input_feats = {}
+    for m in all_models:
+        if m == 'lstm':
+            input_feats[m] = ['onehot']
+        else:
+            input_feats[m] = ['onehot-flat', 'onehot-simple', 'handcrafted',
+                    'combined']
 
     # Determine class weights
-    y_train_labels = list(y_train)
+    # For this, just use the 'onehot' input features; class weights should be
+    # the same across all
+    y_train_labels = list(y_train['onehot'])
     class_weight = sklearn.utils.class_weight.compute_class_weight(
             'balanced', sorted(np.unique(y_train_labels)), y_train_labels)
     class_weight = list(class_weight)
     class_weight = {i: weight for i, weight in enumerate(class_weight)}
 
-    # Construct models for L1 and L2 logistic regression
-    # Perform built-in cross-validation to determine regularization strength
+    # With models, perform cross-validation to determine hyperparameters
+    # Most of the built-in cross-validators find the best choice based on
+    # R^2; some of them do not support a custom scoring function via a
+    # `scoring=...` argument. So instead wrap the regression with a
+    # GridSearchCV object, which does support a custom scoring metric. Use
+    # spearman rank correlation coefficient for this.
+    def cv(feats):
+        return parsers[feats].split(x_train[feats], y_train[feats],
+                num_inner_splits, stratify_by_pos=True, yield_indices=True)
 
-    # Set space for determining regularization strength: 10^-5 to 10^5 on a
-    # log scale
-    Cs = np.logspace(-5, 5, num=100, base=10.0)
+    def auc_roc_f(y, y_pred):
+        m = tf.keras.metrics.AUC(curve='ROC')
+        m.update_state(y, y_pred)
+        return m.result().numpy()
+    def auc_pr_f(y, y_pred):
+        m = tf.keras.metrics.AUC(curve='PR')
+        m.update_state(y, y_pred)
+        return m.result().numpy()
+    auc_roc_scorer = sklearn.metrics.make_scorer(auc_roc_f,
+            greater_is_better=True)
+    auc_pr_scorer = sklearn.metrics.make_scorer(auc_pr_f,
+            greater_is_better=True)
+    if scoring_method == 'auc-roc':
+        scorer = auc_roc_scorer
+    elif scoring_method == 'auc-pr':
+        scorer = auc_pr_scorer
+    else:
+        raise ValueError("Unknown scoring method %s" % scoring_method)
 
-    # TODO when there is more negative data, increase num_splits to 3 or 5
-    # Note that, currently, there is so little negative data that when
-    # num_splits=3, one split will have no negative data points in the test
-    # set so all labels are from the same class. sklearn's log_loss
-    # function complains about this, saying that all y_true are the same
-    # and therefore the 'labels' argument must be provided to log_loss. One
-    # way around this might be to follow
-    # https://github.com/scikit-learn/scikit-learn/issues/9144#issuecomment-411347697
-    # and specify a function/callable for the 'scoring' argument of
-    # LogisticRegressionCV, which would be the output of
-    # sklearn.metrics.make_scorer and wraps around sklearn's log_loss
-    # function, passing in the 'labels' argument to it (one issue would be
-    # having to also determine a 'sample_weight' argument to give the log_loss
-    # function).
-    def cv(k='baselinefeats'):
-        assert k in ['baselinefeats', 'onehot']
-        return parsers[k].split(x_train[k], y_train[k], num_inner_splits,
-                stratify_by_pos=True, yield_indices=True)
+    def fit_and_test_model(clf, model_desc, hyperparams, feats):
+        """Fit and test model.
 
-    # It helps to provide an explicit function/callable as the scorer;
-    # when using 'neg_log_loss' for 'scoring', it crashes because the
-    # log_loss function expects a 'labels' argument when y_true contains
-    # only one label
+        Args:
+            clf: classifier model object
+            model_desc: string describing model
+            hyperparams: list [p] of hyperparameters where each p is a string
+                and clf.p gives the value chosen by the hyperparameter search
+            feats: input features type
 
-    metrics_for_models = {}
-    for penalty in ['l1', 'l2']:
-        # Build and fit model
-        scoring = 'neg_log_loss'
-        solver = 'saga' if penalty == 'l1' else 'lbfgs'
-        lr = sklearn.linear_model.LogisticRegressionCV(
-                Cs=Cs, cv=cv(), penalty=penalty, class_weight=class_weight,
-                solver=solver, scoring=scoring, refit=True)
-        lr.fit(x_train['baselinefeats'], y_train['baselinefeats'])
+        Returns:
+            dict giving metrics for the best choice of model hyperparameters
+        """
+        # Fit model
+        clf.fit(x_train[feats], y_train[feats])
 
         # Test model
-        y_pred = lr.predict(x_test['baselinefeats'])
+        y_pred = clf.predict(x_test[feats])
+        y_pred_class = [0 if y < 0.5 else 1 for y in y_pred]
 
-        # Compute metrics
-        # Include average precision score (ap), which is similar to area under
-        # precision-recall (pr_auc), but not interpolated; this implementation
-        # might be more conservative
-        score = lr.score(x_test['baselinefeats'], y_test['baselinefeats'])
-        roc_fpr, roc_tpr, roc_thresholds = sklearn.metrics.roc_curve(
-                y_test['baselinefeats'], y_pred, pos_label=1)
+        # Compute metrics (for auROC and auPR, check calculation via
+        # TensorFlow and scikit-learn)
+        auc_roc_tf = auc_roc_f(y_test[feats], y_pred)
+        auc_roc_sk = sklearn.metrics.roc_auc_score(y_test[feats], y_pred)
+        auc_pr_tf = auc_pr_f(y_test[feats], y_pred)
         pr_precision, pr_recall, pr_thresholds = sklearn.metrics.precision_recall_curve(
-                y_test['baselinefeats'], y_pred, pos_label=1)
-        roc_auc = sklearn.metrics.auc(roc_fpr, roc_tpr)
-        pr_auc = sklearn.metrics.auc(pr_recall, pr_precision)
-        ap = sklearn.metrics.average_precision_score(
-                y_test['baselinefeats'], y_pred, pos_label=1)
+                y_test[feats], y_pred, pos_label=1)
+        auc_pr_sk = sklearn.metrics.auc(pr_recall, pr_precision)
+        avg_prec = sklearn.metrics.average_precision_score(y_test[feats],
+                y_pred)
+        accuracy = sklearn.metrics.accuracy_score(y_test[feats], y_pred_class)
 
         # Print metrics
         print('#'*20)
-        print("Classification with {} logistic regression:".format(penalty))
-        print("    best C_    = {}".format(lr.C_))
-        print("    AUC-ROC    = {}".format(roc_auc))
-        print("    AUC-PR     = {}".format(pr_auc))
-        print("    Avg. prec. = {}".format(ap))
-        print("    Score ({}) = {}".format(scoring, score))
+        print("Classification with {}".format(model_desc))
+        if type(hyperparams) is list:
+            for p in hyperparams:
+                print("    best {}    = {}".format(p, getattr(clf, p)))
+        else:
+            print("    best params = {}".format(hyperparams.best_params_))
+        print("    auROC (TF) = {}".format(auc_roc_tf))
+        print("    auROC (SK) = {}".format(auc_roc_sk))
+        print("    auPR (TF)  = {}".format(auc_pr_tf))
+        print("    auPR (SK)  = {}".format(auc_pr_sk))
+        print("    Avg. prec  = {}".format(avg_prec))
+        print("    Accuracy   = {}".format(accuracy))
         print('#'*20)
 
-        metrics = {'roc_auc': roc_auc, 'pr_auc': pr_auc, 'ap': ap}
-        metrics_for_models[penalty + '_logistic_regression'] = metrics
+        return {'auc-roc': auc_roc_tf, 'auc-pr': auc_pr_tf,
+                'avg-prec': avg_prec, 'accuracy': accuracy,
+                '1_minus_auc-roc': 1.0-auc_roc_tf}
+
+    # Logistic regression (no regularization)
+    def logit(feats):
+        clf = sklearn.linear_model.LogisticRegression(penalty='none',
+                class_weight=class_weight, solver='lbfgs',
+                max_iter=1000)    # no CV because there are no hyperparameters
+        return fit_and_test_model(clf, 'Logisitic regression',
+                hyperparams=[], feats=feats)
+
+    # L1 logistic regression
+    def l1_logit(feats):
+        clf = sklearn.linear_model.LogisticRegression(penalty='l1',
+                class_weight=class_weight, solver='saga',
+                max_iter=1000, tol=0.0001)
+        clf_cv = random_search_cv('l1_logit', clf, cv(feats), scorer)
+        return fit_and_test_model(clf_cv, 'L1 logistic regression',
+                hyperparams=clf_cv, feats=feats)
+
+    # L2 logistic regression
+    def l2_logit(feats):
+        clf = sklearn.linear_model.LogisticRegression(penalty='l2',
+                class_weight=class_weight, solver='lbfgs',
+                max_iter=1000, tol=0.0001)
+        clf_cv = random_search_cv('l2_logit', clf, cv(feats), scorer)
+        return fit_and_test_model(clf_cv, 'L2 logistic regression',
+                hyperparams=clf_cv, feats=feats)
+
+    # Elastic net (L1+L2 logistic regression)
+    def l1l2_logit(feats):
+        clf = sklearn.linear_model.LogisticRegression(penalty='elasticnet',
+                class_weight=class_weight, solver='saga',
+                max_iter=1000, tol=0.0001)
+        clf_cv = random_search_cv('l1l2_logit', clf, cv(feats), scorer)
+        return fit_and_test_model(clf_cv, 'L1+L2 logistic regression',
+                hyperparams=clf_cv, feats=feats)
+
+    # Gradient-boosted classification trees
+    def gbt(feats):
+        # It seems this does not support class_weight
+        clf = sklearn.ensemble.GradientBoostingClassifier(loss='deviance',
+                tol=0.001)
+        clf_cv = random_search_cv('gbt', clf, cv(feats), scorer)
+        return fit_and_test_model(clf_cv, 'Gradient boosting classification',
+                hyperparams=clf_cv, feats=feats)
+
+    # Random forest classification
+    def rf(feats):
+        clf = sklearn.ensemble.RandomForestClassifier(criterion='gini',
+                class_weight=class_weight)
+        clf_cv = random_search_cv('rf', clf, cv(feats), scorer)
+        return fit_and_test_model(clf_cv, 'Random forest classification',
+                hyperparams=clf_cv, feats=feats)
+
+    # SVM
+    def svm(feats):
+        clf = sklearn.svm.SVC(class_weight=class_weight, tol=0.001)
+        clf_cv = random_search_cv('svm', clf, cv(feats), scorer)
+        return fit_and_test_model(clf_cv, 'SVM',
+                hyperparams=clf_cv, feats=feats)
+
+    # MLP
+    def mlp(feats):
+        clf = fnn.MultilayerPerceptron(parsers[feats].context_nt,
+                regression=False, class_weight=class_weight)
+        clf_cv = random_search_cv('mlp', clf, cv(feats), scorer)
+        return fit_and_test_model(clf_cv, 'Multilayer perceptron',
+                hyperparams=clf_cv, feats=feats)
+
+    # LSTM
+    def lstm(feats):
+        clf = rnn.LSTM(parsers[feats].context_nt,
+                regression=False, class_weight=class_weight)
+        clf_cv = random_search_cv('lstm', clf, cv(feats), scorer)
+        return fit_and_test_model(clf_cv, 'LSTM',
+                hyperparams=clf_cv, feats=feats)
+
+    metrics_for_models = {}
+    for model_name in models_to_use:
+        metrics_for_models[model_name] = {}
+        for feats in input_feats[model_name]:
+            print(("Running and evaluating model '%s' with input feature '%s'") %
+                    (model_name, feats))
+            model_fn = locals()[model_name]
+            metrics_for_models[model_name][feats] = model_fn(feats)
 
     return metrics_for_models
 
@@ -319,8 +449,8 @@ def regress(x_train, y_train, x_test, y_test,
     hyperparameters, after refitting across *all* the train data.
 
     Args:
-        x_{train,validate,test}: input data for train/validate/test
-        y_{train,validate,test}: output labels for train/validate/test
+        x_{train,test}: input data for train/test
+        y_{train,test}: output labels for train/test
         num_inner_splits: number of splits for cross-validation
         parsers: parse_data parsers to use for splitting data
         scoring_method: method to use for scoring test results; 'mse' (mean
@@ -377,7 +507,7 @@ def regress(x_train, y_train, x_test, y_test,
         """Fit and test model.
 
         Args:
-            reg: built regression model
+            reg: regression model object
             model_desc: string describing model
             hyperparams: list [p] of hyperparameters where each p is a string
                 and reg.p gives the value chosen by the hyperparameter search
@@ -441,14 +571,14 @@ def regress(x_train, y_train, x_test, y_test,
 
     # L1 linear regression
     def l1_lr(feats):
-        reg = sklearn.linear_model.Lasso(max_iter=100000, tol=0.001, copy_X=True)
+        reg = sklearn.linear_model.Lasso(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l1_lr', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'L1 linear regression',
                 hyperparams=reg_cv, feats=feats)
 
     # L2 linear regression
     def l2_lr(feats):
-        reg = sklearn.linear_model.Ridge(max_iter=100000, tol=0.001, copy_X=True)
+        reg = sklearn.linear_model.Ridge(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l2_lr', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'L2 linear regression',
                 hyperparams=reg_cv, feats=feats)
@@ -463,14 +593,14 @@ def regress(x_train, y_train, x_test, y_test,
     #  fit_and_test_model() prints values on a hold-out set, but chooses
     #  hyperparameters on splits of the train set
     def l1l2_lr(feats):
-        reg = sklearn.linear_model.ElasticNet(max_iter=100000, tol=0.001, copy_X=True)
+        reg = sklearn.linear_model.ElasticNet(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l1l2_lr', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'L1+L2 linear regression',
                 hyperparams=reg_cv, feats=feats)
 
     # Gradient-boosted regression trees
     def gbt(feats):
-        reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.001)
+        reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.0001)
         reg_cv = random_search_cv('gbt', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'Gradient Boosting regression',
                 hyperparams=reg_cv, feats=feats)
@@ -484,14 +614,16 @@ def regress(x_train, y_train, x_test, y_test,
 
     # MLP
     def mlp(feats):
-        reg = fnn.MultilayerPerceptron(parsers[feats].context_nt)
+        reg = fnn.MultilayerPerceptron(parsers[feats].context_nt,
+                regression=True)
         reg_cv = random_search_cv('mlp', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'Multilayer perceptron',
                 hyperparams=reg_cv, feats=feats)
 
     # LSTM
     def lstm(feats):
-        reg = rnn.LSTM(parsers[feats].context_nt)
+        reg = rnn.LSTM(parsers[feats].context_nt,
+                regression=True)
         reg_cv = random_search_cv('lstm', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'LSTM',
                 hyperparams=reg_cv, feats=feats)
@@ -666,7 +798,8 @@ def main():
                     scoring_method=args.regression_scoring_method,
                     models_to_use=args.models_to_use)
         else:
-            classify(x_train, y_train, x_test, y_test, parsers)
+            classify(x_train, y_train, x_test, y_test, parsers,
+                    models_to_use=args.models_to_use)
 
 
 if __name__ == "__main__":
