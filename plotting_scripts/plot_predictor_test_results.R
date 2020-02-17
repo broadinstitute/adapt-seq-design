@@ -113,6 +113,25 @@ p.true.vs.predicted <- p
 #####################################################################
 
 #####################################################################
+# Plot true activity value vs. predicted activity value
+# This is a scatter plot, where each dot represents a target/crRNA
+# pair (test data point)
+# The points are colored by guide-target Hamming distance
+
+p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(aes(color=hamming.dist))
+p <- p + scale_color_viridis() # adjust color gradient
+#p <- p + xlim(-2.5, 0) + ylim(-2.5, 0)  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + theme_bw(base_size=18) # bw & larger font sizes
+p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=10),
+               legend.title=element_text(size=10))
+p.true.vs.predicted.colored.by.hamming.dist <- p
+#####################################################################
+
+#####################################################################
 # Plot true activity value for different predicted quantile groupings
 # y-axis shows the quantile (grouped) for the predicted activity and
 # x-axis shows the distribution of true activity values in that
@@ -260,6 +279,7 @@ p.true.vs.predicted.summarized <- p
 # Produce PDF
 g <- arrangeGrob(p.output.dist,
                  p.true.vs.predicted,
+                 p.true.vs.predicted.colored.by.hamming.dist,
                  p.by.predicted.quantile.group,
                  p.by.predicted.quantile.group.boxplot,
                  p.true.vs.predicted.quantiles,
