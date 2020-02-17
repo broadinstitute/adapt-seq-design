@@ -333,6 +333,14 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
         mean_loss = np.mean(val_losses_default)
         sem_loss = scipy.stats.sem(val_losses_default)
 
+        if models_out is not None:
+            # Train a model across all data, and save hyperparameters and
+            # weights
+            model_out_path = os.path.join(models_out,
+                    'model-' + params_hash(params))
+            train_and_save_model(params, x, y, regression, context_nt,
+                    num_splits, model_out_path)
+
         # Decide whether to update the current best choice of hyperparameters
         if mean_loss is np.nan:
             # mean_loss can be nan, e.g., for Spearman's rho if all predicted
@@ -368,14 +376,6 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
                 row += [scipy.stats.sem(losses)]
                 row += [','.join(str(l) for l in losses)]
             loss_out.write('\t'.join(str(x) for x in row) + '\n')
-
-        if models_out is not None:
-            # Train a model across all data, and save hyperparameters and
-            # weights
-            model_out_path = os.path.join(models_out,
-                    'model-' + params_hash(params))
-            train_and_save_model(params, x, y, regression, context_nt,
-                    num_splits, model_out_path)
 
     if best_params is None:
         raise Exception(("Could not find best choice of hyperparameters "
