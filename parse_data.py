@@ -755,7 +755,7 @@ class Cas13ActivityParser:
         # Verify the context of the guide is all '-' (all 0s), and extract just
         # the guide
         guide_start = self.context_nt
-        guide_end = target_len - context_nt
+        guide_end = target_len - self.context_nt
         assert guide_with_context[:guide_start] == '-'*self.context_nt
         assert guide_with_context[guide_end:] == '-'*self.context_nt
         guide = guide_with_context[guide_start:guide_end]
