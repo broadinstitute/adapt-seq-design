@@ -47,6 +47,10 @@ class Cas13ActivityParser:
     # in nucleotide space
     CRRNA_LEN = 28
 
+    # Define the seed region; for Cas13a, the middle ~third of the spacer
+    SEED_START = int(CRRNA_LEN * 1/3) # 0-based, inclusive
+    SEED_END = int(CRRNA_LEN * 2/3) + 1 # 0-based, exclusive
+
     # Define threshold on activity for inactive/active data points
     ACTIVITY_THRESHOLD = -4.0
 
@@ -219,7 +223,7 @@ class Cas13ActivityParser:
         input_feats_guide = []
         target = row['target_at_guide']
         guide = row['guide_seq']
-        baseline_num_mismatches = 0
+        baseline_mismatches_pos = []
         assert len(target) == len(guide)
         for pos in range(len(guide)):
             # Make a one-hot encoding (4 bits) for each of the target
@@ -246,11 +250,11 @@ class Cas13ActivityParser:
                 else:
                     # Mismatch; have the guide indicate which base there is
                     input_feats_guide += v_target + v_guide
-                    baseline_num_mismatches += 1
+                    baseline_mismatches_pos += [pos]
             elif self.make_feats_for_baseline == 'handcrafted':
                 # Mark number of mismatches, but do not use input_feats_guide
                 if target[pos] != guide[pos]:
-                    baseline_num_mismatches += 1
+                    baseline_mismatches_pos += [pos]
             else:
                 raise ValueError("Unknown choice of make_feats_for_baseline")
 
@@ -300,8 +304,14 @@ class Cas13ActivityParser:
                     input_feats += [guide.count(b1 + b2)]
             # Add a feature giving GC count in the guide
             input_feats += [guide.count('G') + guide.count('C')]
-            # Add a feature giving number of mismatches
-            input_feats += [baseline_num_mismatches]
+            # Add a feature giving number of mismatches outside the seed region
+            # and in the seed
+            seed_num_mismatches = len([p for p in baseline_mismatches_pos
+                if p >= self.SEED_START and p < self.SEED_END])
+            nonseed_num_mismatches = (len(baseline_mismatches_pos) -
+                seed_num_mismatches)
+            input_feats += [seed_num_mismatches]
+            input_feats += [nonseed_num_mismatches]
         input_feats = np.array(input_feats)
 
         # Determine an output for this row
