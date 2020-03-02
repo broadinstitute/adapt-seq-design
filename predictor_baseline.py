@@ -118,7 +118,7 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-def random_search_cv(model_name, model_obj, cv, scorer, n_iter=50):
+def random_search_cv(model_name, model_obj, cv, scorer, n_iter=25):
     """Construct a RandomizedSearchCV object.
 
     Args:
@@ -209,7 +209,7 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=50):
     elif model_name == 'svm':
         params = {
             'C': np.logspace(-8, 8, base=10.0, num=space_size),
-            'kernel': ['linear', 'rbf']
+            'penalty': ['l1', 'l2']
         }
     else:
         raise Exception("Unknown model: '%s'" % model_name)
@@ -355,7 +355,7 @@ def classify(x_train, y_train, x_test, y_test,
     def logit(feats):
         clf = sklearn.linear_model.LogisticRegression(penalty='none',
                 class_weight=class_weight, solver='lbfgs',
-                max_iter=1000)    # no CV because there are no hyperparameters
+                max_iter=100)    # no CV because there are no hyperparameters
         return fit_and_test_model(clf, 'Logisitic regression',
                 hyperparams=[], feats=feats)
 
@@ -363,7 +363,7 @@ def classify(x_train, y_train, x_test, y_test,
     def l1_logit(feats):
         clf = sklearn.linear_model.LogisticRegression(penalty='l1',
                 class_weight=class_weight, solver='saga',
-                max_iter=1000, tol=0.0001)
+                max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l1_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'L1 logistic regression',
                 hyperparams=clf_cv, feats=feats)
@@ -372,7 +372,7 @@ def classify(x_train, y_train, x_test, y_test,
     def l2_logit(feats):
         clf = sklearn.linear_model.LogisticRegression(penalty='l2',
                 class_weight=class_weight, solver='lbfgs',
-                max_iter=1000, tol=0.0001)
+                max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l2_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'L2 logistic regression',
                 hyperparams=clf_cv, feats=feats)
@@ -381,7 +381,7 @@ def classify(x_train, y_train, x_test, y_test,
     def l1l2_logit(feats):
         clf = sklearn.linear_model.LogisticRegression(penalty='elasticnet',
                 class_weight=class_weight, solver='saga',
-                max_iter=1000, tol=0.0001)
+                max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l1l2_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'L1+L2 logistic regression',
                 hyperparams=clf_cv, feats=feats)
@@ -405,7 +405,10 @@ def classify(x_train, y_train, x_test, y_test,
 
     # SVM
     def svm(feats):
-        clf = sklearn.svm.SVC(class_weight=class_weight, tol=0.001)
+        # sklearn's SVC has a fit time that is quadratic in the number of
+        # samples; to be faster, this uses LinearSVC (with the downside being
+        # that it does not support higher-dimensional kernels)
+        clf = sklearn.svm.LinearSVC(class_weight=class_weight, tol=0.0001)
         clf_cv = random_search_cv('svm', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'SVM',
                 hyperparams=clf_cv, feats=feats)
