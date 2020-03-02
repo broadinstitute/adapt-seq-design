@@ -132,3 +132,4 @@ models/predictor_exp-and-pos_regress-on-active/*
 models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/*
 !models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/model-f08075e6
 !models/predictor_exp-and-pos_regress-on-active/model-c15f787d
+models/predictor_exp-and-pos_classify/*
