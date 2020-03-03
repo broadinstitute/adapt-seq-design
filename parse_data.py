@@ -187,12 +187,24 @@ class Cas13ActivityParser:
             'onehot-simple', 'handcrafted', 'combined']
 
         onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
+        onehot_order = ('A', 'C', 'G', 'T')
         def onehot(b):
             # One-hot encoding of base b
             assert b in onehot_idx.keys()
             v = [0, 0, 0, 0]
             v[onehot_idx[b]] = 1
             return v
+
+        # For the baseline, keep a short string description of the
+        # feature at each index
+        if self.make_feats_for_baseline in ['onehot-flat', 'onehot-simple',
+                'handcrafted', 'combined']:
+            self.baseline_descriptions = []
+        else:
+            self.baseline_descriptions = None
+        def descriptions_for_onehot(s):
+            # List of descriptions for each base
+            return [s + '-' + b for b in onehot_order]
 
         # Create the input features for target sequence context on
         # the end before the guide
@@ -213,6 +225,8 @@ class Cas13ActivityParser:
                 # For the baseline, only use a one-hot encoding of the
                 # target (and in a 1D array)
                 input_feats_context_before += v
+                self.baseline_descriptions += descriptions_for_onehot(
+                        'target-before-'+str(pos))
             elif self.make_feats_for_baseline == 'handcrafted':
                 # No feature for the baseline here
                 pass
@@ -239,6 +253,10 @@ class Cas13ActivityParser:
                 # concatenated with the other positions)
                 v = v_target + v_guide
                 input_feats_guide += v
+                self.baseline_descriptions += descriptions_for_onehot(
+                        'target-at-guide-'+str(pos))
+                self.baseline_descriptions += descriptions_for_onehot(
+                        'guide-seq-'+str(pos))
             elif self.make_feats_for_baseline in ['onehot-simple', 'combined']:
                 # For the baseline, use a one-hot encoding of the target
                 # (in a 1D array) and then use a one-hot encoding that gives
@@ -251,6 +269,10 @@ class Cas13ActivityParser:
                     # Mismatch; have the guide indicate which base there is
                     input_feats_guide += v_target + v_guide
                     baseline_mismatches_pos += [pos]
+                self.baseline_descriptions += descriptions_for_onehot(
+                        'target-at-guide-'+str(pos))
+                self.baseline_descriptions += descriptions_for_onehot(
+                        'guide-mismatch-allele-'+str(pos))
             elif self.make_feats_for_baseline == 'handcrafted':
                 # Mark number of mismatches, but do not use input_feats_guide
                 if target[pos] != guide[pos]:
@@ -276,6 +298,8 @@ class Cas13ActivityParser:
                 # For the baseline, only use a one-hot encoding of the
                 # target (and in a 1D array)
                 input_feats_context_after += v
+                self.baseline_descriptions += descriptions_for_onehot(
+                        'target-after-'+str(pos))
             elif self.make_feats_for_baseline == 'handcrafted':
                 # No feature for the baseline here
                 pass
@@ -297,13 +321,16 @@ class Cas13ActivityParser:
                 # Add a feature giving nucleotide frequency (count) of b in
                 # the guide
                 input_feats += [guide.count(b)]
+                self.baseline_descriptions += ['nucleotide-count-'+b]
             for b1 in bases:
                 for b2 in bases:
                     # Add a feature giving dinucleotide frequency (count) of
                     # b1+b2 in the guide
                     input_feats += [guide.count(b1 + b2)]
+                    self.baseline_descriptions += ['dinucleotide-count-'+b1+b2]
             # Add a feature giving GC count in the guide
             input_feats += [guide.count('G') + guide.count('C')]
+            self.baseline_descriptions += ['gc-count']
             # Add a feature giving number of mismatches outside the seed region
             # and in the seed
             seed_num_mismatches = len([p for p in baseline_mismatches_pos
@@ -311,8 +338,14 @@ class Cas13ActivityParser:
             nonseed_num_mismatches = (len(baseline_mismatches_pos) -
                 seed_num_mismatches)
             input_feats += [seed_num_mismatches]
+            self.baseline_descriptions += ['num-mismatches-seed']
             input_feats += [nonseed_num_mismatches]
+            self.baseline_descriptions += ['num-mismatches-nonseed']
         input_feats = np.array(input_feats)
+
+        # If baseline_descriptions is being set, check its length
+        if self.baseline_descriptions is not None:
+            assert len(self.baseline_descriptions) == len(input_feats)
 
         # Determine an output for this row
         activity = float(row['out_logk_measurement'])

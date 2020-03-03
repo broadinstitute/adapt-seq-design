@@ -299,7 +299,8 @@ def classify(x_train, y_train, x_test, y_test,
     else:
         raise ValueError("Unknown scoring method %s" % scoring_method)
 
-    def fit_and_test_model(clf, model_desc, hyperparams, feats):
+    def fit_and_test_model(clf, model_desc, hyperparams, feats,
+            print_top_coeffs=False):
         """Fit and test model.
 
         Args:
@@ -308,12 +309,34 @@ def classify(x_train, y_train, x_test, y_test,
             hyperparams: list [p] of hyperparameters where each p is a string
                 and clf.p gives the value chosen by the hyperparameter search
             feats: input features type
+            print_top_coeffs: print the top coefficients with their
+                descriptions (by absolute value)
 
         Returns:
             dict giving metrics for the best choice of model hyperparameters
         """
         # Fit model
         clf.fit(x_train[feats], y_train[feats])
+
+        if print_top_coeffs:
+            # Combine coefficients with their descriptions
+            if hasattr(clf, 'coef_'):
+                coeffs = clf.coef_
+            else:
+                # clf is likely a CV (e.g., RandomizedSearchCV) object
+                coeffs = clf.best_estimator_.coef_
+            if len(coeffs) == 1:
+                coeffs = coeffs[0]
+            coef_descriptions = parsers[feats].baseline_descriptions
+            assert len(coeffs) == len(coef_descriptions)
+            cd = zip(coeffs, coef_descriptions)
+
+            # Sort (reverse) by absolute value of coefficient
+            cd_sorted = sorted(cd, key=lambda x: abs(x[0]), reverse=True)
+
+            # Print top 10 coefficients with descriptions
+            for coeff, description in cd_sorted[:10]:
+                print(description, ':', coeff)
 
         # Test model
         y_pred = clf.predict(x_test[feats])
@@ -357,7 +380,8 @@ def classify(x_train, y_train, x_test, y_test,
                 class_weight=class_weight, solver='lbfgs',
                 max_iter=100)    # no CV because there are no hyperparameters
         return fit_and_test_model(clf, 'Logisitic regression',
-                hyperparams=[], feats=feats)
+                hyperparams=[], feats=feats,
+                print_top_coeffs=True)
 
     # L1 logistic regression
     def l1_logit(feats):
@@ -366,7 +390,8 @@ def classify(x_train, y_train, x_test, y_test,
                 max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l1_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'L1 logistic regression',
-                hyperparams=clf_cv, feats=feats)
+                hyperparams=clf_cv, feats=feats,
+                print_top_coeffs=True)
 
     # L2 logistic regression
     def l2_logit(feats):
@@ -375,7 +400,8 @@ def classify(x_train, y_train, x_test, y_test,
                 max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l2_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'L2 logistic regression',
-                hyperparams=clf_cv, feats=feats)
+                hyperparams=clf_cv, feats=feats,
+                print_top_coeffs=True)
 
     # Elastic net (L1+L2 logistic regression)
     def l1l2_logit(feats):
@@ -384,7 +410,8 @@ def classify(x_train, y_train, x_test, y_test,
                 max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l1l2_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'L1+L2 logistic regression',
-                hyperparams=clf_cv, feats=feats)
+                hyperparams=clf_cv, feats=feats,
+                print_top_coeffs=True)
 
     # Gradient-boosted classification trees
     def gbt(feats):
@@ -506,7 +533,8 @@ def regress(x_train, y_train, x_test, y_test,
     else:
         raise ValueError("Unknown scoring method %s" % scoring_method)
 
-    def fit_and_test_model(reg, model_desc, hyperparams, feats):
+    def fit_and_test_model(reg, model_desc, hyperparams, feats,
+            print_top_coeffs=False):
         """Fit and test model.
 
         Args:
@@ -515,12 +543,34 @@ def regress(x_train, y_train, x_test, y_test,
             hyperparams: list [p] of hyperparameters where each p is a string
                 and reg.p gives the value chosen by the hyperparameter search
             feats: input features type
+            print_top_coeffs: print the top coefficients with their
+                descriptions (by absolute value)
 
         Returns:
             dict giving metrics for the best choice of model hyperparameters
         """
         # Fit model
         reg.fit(x_train[feats], y_train[feats])
+
+        if print_top_coeffs:
+            # Combine coefficients with their descriptions
+            if hasattr(reg, 'coef_'):
+                coeffs = reg.coef_
+            else:
+                # ref is likely a CV (e.g., RandomizedSearchCV) object
+                coeffs = reg.best_estimator_.coef_
+            if len(coeffs) == 1:
+                coeffs = coeffs[0]
+            coef_descriptions = parsers[feats].baseline_descriptions
+            assert len(coeffs) == len(coef_descriptions)
+            cd = zip(coeffs, coef_descriptions)
+
+            # Sort (reverse) by absolute value of coefficient
+            cd_sorted = sorted(cd, key=lambda x: abs(x[0]), reverse=True)
+
+            # Print top 10 coefficients with descriptions
+            for coeff, description in cd_sorted[:10]:
+                print(description, ':', coeff)
 
         # Test model
         y_pred = reg.predict(x_test[feats])
@@ -566,7 +616,8 @@ def regress(x_train, y_train, x_test, y_test,
     def lr(feats):
         reg = sklearn.linear_model.LinearRegression(copy_X=True)    # no CV because there are no hyperparameters
         return fit_and_test_model(reg, 'Linear regression',
-                hyperparams=[], feats=feats)
+                hyperparams=[], feats=feats,
+                print_top_coeffs=True)
 
     # Note:
     #  For below models, increasing `max_iter` or increasing `tol` can reduce
@@ -577,14 +628,16 @@ def regress(x_train, y_train, x_test, y_test,
         reg = sklearn.linear_model.Lasso(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l1_lr', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'L1 linear regression',
-                hyperparams=reg_cv, feats=feats)
+                hyperparams=reg_cv, feats=feats,
+                print_top_coeffs=True)
 
     # L2 linear regression
     def l2_lr(feats):
         reg = sklearn.linear_model.Ridge(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l2_lr', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'L2 linear regression',
-                hyperparams=reg_cv, feats=feats)
+                hyperparams=reg_cv, feats=feats,
+                print_top_coeffs=True)
 
     # Elastic net (L1+L2 linear regression)
     # Recommendation for l1_ratio is to place more values close to 1 (lasso)
@@ -599,7 +652,8 @@ def regress(x_train, y_train, x_test, y_test,
         reg = sklearn.linear_model.ElasticNet(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l1l2_lr', reg, cv(feats), scorer)
         return fit_and_test_model(reg_cv, 'L1+L2 linear regression',
-                hyperparams=reg_cv, feats=feats)
+                hyperparams=reg_cv, feats=feats,
+                print_top_coeffs=True)
 
     # Gradient-boosted regression trees
     def gbt(feats):
