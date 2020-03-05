@@ -93,6 +93,10 @@ def parse_args():
                   "validation data for each outer fold of nested "
                   "cross-validation (one row per outer fold; each column "
                   "gives a metric)"))
+    parser.add_argument('--nested-cross-val-feat-coeffs-out-tsv',
+            help=("Path to output TSV at which to write a coefficient for "
+                  "each feature (only linear models) for each outer fold "
+                  "of nested cross-validation"))
     parser.add_argument('--seed',
             type=int,
             default=1,
@@ -224,7 +228,8 @@ def classify(x_train, y_train, x_test, y_test,
         parsers,
         num_inner_splits=5,
         scoring_method='auc-roc',
-        models_to_use=None):
+        models_to_use=None,
+        feat_coeffs_out_tsv_f=None):
     """Perform classification.
 
     Test data is used for evaluating the model with the best choice of
@@ -238,6 +243,9 @@ def classify(x_train, y_train, x_test, y_test,
         scoring_method: method to use for scoring test results; 'auc-roc'
             (auROC) or 'auc-pr' (auPR)
         models_to_use: list of models to test; if None, test all
+        feat_coeffs_out_tsv_f: if set, file handler to which to write
+            coefficients for each feature (linear models only; only for
+            the best estimator after hyperparameter search)
 
     Returns:
         dict {model: {input feats: metrics on test data for best choice of
@@ -299,18 +307,19 @@ def classify(x_train, y_train, x_test, y_test,
     else:
         raise ValueError("Unknown scoring method %s" % scoring_method)
 
-    def fit_and_test_model(clf, model_desc, hyperparams, feats,
-            print_top_coeffs=False):
+    def fit_and_test_model(clf, model_name, model_desc, hyperparams, feats,
+            inspect_feat_coeffs=False):
         """Fit and test model.
 
         Args:
             clf: classifier model object
+            model_name: short string naming model
             model_desc: string describing model
             hyperparams: list [p] of hyperparameters where each p is a string
                 and clf.p gives the value chosen by the hyperparameter search
             feats: input features type
-            print_top_coeffs: print the top coefficients with their
-                descriptions (by absolute value)
+            inspect_feat_coeffs: if set, save the feature coefficients with
+                their descriptions and print the top ones (by absolute value)
 
         Returns:
             dict giving metrics for the best choice of model hyperparameters
@@ -318,7 +327,7 @@ def classify(x_train, y_train, x_test, y_test,
         # Fit model
         clf.fit(x_train[feats], y_train[feats])
 
-        if print_top_coeffs:
+        if inspect_feat_coeffs:
             # Combine coefficients with their descriptions
             if hasattr(clf, 'coef_'):
                 coeffs = clf.coef_
@@ -335,8 +344,16 @@ def classify(x_train, y_train, x_test, y_test,
             cd_sorted = sorted(cd, key=lambda x: abs(x[0]), reverse=True)
 
             # Print top 10 coefficients with descriptions
+            print('Top feature coefficients:')
             for coeff, description in cd_sorted[:10]:
-                print(description, ':', coeff)
+                print('   ', description, ':', coeff)
+
+            # Save all feature coefficients to a file, if set
+            if feat_coeffs_out_tsv_f is not None:
+                for coeff, description in cd_sorted:
+                    row = [model_name, feats, description, coeff]
+                    line = '\t'.join(str(c) for c in row)
+                    feat_coeffs_out_tsv_f.write(line + '\n')
 
         # Test model
         y_pred = clf.predict(x_test[feats])
@@ -379,9 +396,9 @@ def classify(x_train, y_train, x_test, y_test,
         clf = sklearn.linear_model.LogisticRegression(penalty='none',
                 class_weight=class_weight, solver='lbfgs',
                 max_iter=100)    # no CV because there are no hyperparameters
-        return fit_and_test_model(clf, 'Logisitic regression',
+        return fit_and_test_model(clf, 'logit', 'Logisitic regression',
                 hyperparams=[], feats=feats,
-                print_top_coeffs=True)
+                inspect_feat_coeffs=True)
 
     # L1 logistic regression
     def l1_logit(feats):
@@ -389,9 +406,9 @@ def classify(x_train, y_train, x_test, y_test,
                 class_weight=class_weight, solver='saga',
                 max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l1_logit', clf, cv(feats), scorer)
-        return fit_and_test_model(clf_cv, 'L1 logistic regression',
+        return fit_and_test_model(clf_cv, 'l1_logit', 'L1 logistic regression',
                 hyperparams=clf_cv, feats=feats,
-                print_top_coeffs=True)
+                inspect_feat_coeffs=True)
 
     # L2 logistic regression
     def l2_logit(feats):
@@ -399,9 +416,9 @@ def classify(x_train, y_train, x_test, y_test,
                 class_weight=class_weight, solver='lbfgs',
                 max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l2_logit', clf, cv(feats), scorer)
-        return fit_and_test_model(clf_cv, 'L2 logistic regression',
+        return fit_and_test_model(clf_cv, 'l2_logit', 'L2 logistic regression',
                 hyperparams=clf_cv, feats=feats,
-                print_top_coeffs=True)
+                inspect_feat_coeffs=True)
 
     # Elastic net (L1+L2 logistic regression)
     def l1l2_logit(feats):
@@ -409,9 +426,9 @@ def classify(x_train, y_train, x_test, y_test,
                 class_weight=class_weight, solver='saga',
                 max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l1l2_logit', clf, cv(feats), scorer)
-        return fit_and_test_model(clf_cv, 'L1+L2 logistic regression',
+        return fit_and_test_model(clf_cv, 'l1l2_logit', 'L1+L2 logistic regression',
                 hyperparams=clf_cv, feats=feats,
-                print_top_coeffs=True)
+                inspect_feat_coeffs=True)
 
     # Gradient-boosted classification trees
     def gbt(feats):
@@ -419,7 +436,7 @@ def classify(x_train, y_train, x_test, y_test,
         clf = sklearn.ensemble.GradientBoostingClassifier(loss='deviance',
                 tol=0.001)
         clf_cv = random_search_cv('gbt', clf, cv(feats), scorer)
-        return fit_and_test_model(clf_cv, 'Gradient boosting classification',
+        return fit_and_test_model(clf_cv, 'gbt', 'Gradient boosting classification',
                 hyperparams=clf_cv, feats=feats)
 
     # Random forest classification
@@ -427,7 +444,7 @@ def classify(x_train, y_train, x_test, y_test,
         clf = sklearn.ensemble.RandomForestClassifier(criterion='gini',
                 class_weight=class_weight)
         clf_cv = random_search_cv('rf', clf, cv(feats), scorer)
-        return fit_and_test_model(clf_cv, 'Random forest classification',
+        return fit_and_test_model(clf_cv, 'rf', 'Random forest classification',
                 hyperparams=clf_cv, feats=feats)
 
     # SVM
@@ -437,7 +454,7 @@ def classify(x_train, y_train, x_test, y_test,
         # that it does not support higher-dimensional kernels)
         clf = sklearn.svm.LinearSVC(class_weight=class_weight, tol=0.0001)
         clf_cv = random_search_cv('svm', clf, cv(feats), scorer)
-        return fit_and_test_model(clf_cv, 'SVM',
+        return fit_and_test_model(clf_cv, 'svm', 'SVM',
                 hyperparams=clf_cv, feats=feats)
 
     # MLP
@@ -445,7 +462,7 @@ def classify(x_train, y_train, x_test, y_test,
         clf = fnn.MultilayerPerceptron(parsers[feats].context_nt,
                 regression=False, class_weight=class_weight)
         clf_cv = random_search_cv('mlp', clf, cv(feats), scorer)
-        return fit_and_test_model(clf_cv, 'Multilayer perceptron',
+        return fit_and_test_model(clf_cv, 'mlp', 'Multilayer perceptron',
                 hyperparams=clf_cv, feats=feats)
 
     # LSTM
@@ -453,7 +470,7 @@ def classify(x_train, y_train, x_test, y_test,
         clf = rnn.LSTM(parsers[feats].context_nt,
                 regression=False, class_weight=class_weight)
         clf_cv = random_search_cv('lstm', clf, cv(feats), scorer)
-        return fit_and_test_model(clf_cv, 'LSTM',
+        return fit_and_test_model(clf_cv, 'lstm', 'LSTM',
                 hyperparams=clf_cv, feats=feats)
 
     metrics_for_models = {}
@@ -472,7 +489,8 @@ def regress(x_train, y_train, x_test, y_test,
         parsers,
         num_inner_splits=5,
         scoring_method='mse',
-        models_to_use=None):
+        models_to_use=None,
+        feat_coeffs_out_tsv_f=None):
     """Perform regression.
 
     Test data is used for evaluating the model with the best choice of
@@ -486,6 +504,9 @@ def regress(x_train, y_train, x_test, y_test,
         scoring_method: method to use for scoring test results; 'mse' (mean
             squared error) or 'rho' (Spearman's rank correlation)
         models_to_use: list of models to test; if None, test all
+        feat_coeffs_out_tsv_f: if set, file handler to which to write
+            coefficients for each feature (linear models only; only for
+            the best estimator after hyperparameter search)
 
     Returns:
         dict {model: {input feats: metrics on test data for best choice of
@@ -533,18 +554,19 @@ def regress(x_train, y_train, x_test, y_test,
     else:
         raise ValueError("Unknown scoring method %s" % scoring_method)
 
-    def fit_and_test_model(reg, model_desc, hyperparams, feats,
-            print_top_coeffs=False):
+    def fit_and_test_model(reg, model_name, model_desc, hyperparams, feats,
+            inspect_feat_coeffs=False):
         """Fit and test model.
 
         Args:
             reg: regression model object
+            model_name: short string naming model
             model_desc: string describing model
             hyperparams: list [p] of hyperparameters where each p is a string
                 and reg.p gives the value chosen by the hyperparameter search
             feats: input features type
-            print_top_coeffs: print the top coefficients with their
-                descriptions (by absolute value)
+            inspect_feat_coeffs: if set, save the feature coefficients with
+                their descriptions and print the top ones (by absolute value)
 
         Returns:
             dict giving metrics for the best choice of model hyperparameters
@@ -552,7 +574,7 @@ def regress(x_train, y_train, x_test, y_test,
         # Fit model
         reg.fit(x_train[feats], y_train[feats])
 
-        if print_top_coeffs:
+        if inspect_feat_coeffs:
             # Combine coefficients with their descriptions
             if hasattr(reg, 'coef_'):
                 coeffs = reg.coef_
@@ -569,8 +591,16 @@ def regress(x_train, y_train, x_test, y_test,
             cd_sorted = sorted(cd, key=lambda x: abs(x[0]), reverse=True)
 
             # Print top 10 coefficients with descriptions
+            print('Top feature coefficients:')
             for coeff, description in cd_sorted[:10]:
-                print(description, ':', coeff)
+                print('   ', description, ':', coeff)
+
+            # Save all feature coefficients to a file, if set
+            if feat_coeffs_out_tsv_f is not None:
+                for coeff, description in cd_sorted:
+                    row = [model_name, feats, description, coeff]
+                    line = '\t'.join(str(c) for c in row)
+                    feat_coeffs_out_tsv_f.write(line + '\n')
 
         # Test model
         y_pred = reg.predict(x_test[feats])
@@ -615,9 +645,9 @@ def regress(x_train, y_train, x_test, y_test,
     # Linear regression (no regularization)
     def lr(feats):
         reg = sklearn.linear_model.LinearRegression(copy_X=True)    # no CV because there are no hyperparameters
-        return fit_and_test_model(reg, 'Linear regression',
+        return fit_and_test_model(reg, 'lr', 'Linear regression',
                 hyperparams=[], feats=feats,
-                print_top_coeffs=True)
+                inspect_feat_coeffs=True)
 
     # Note:
     #  For below models, increasing `max_iter` or increasing `tol` can reduce
@@ -627,17 +657,17 @@ def regress(x_train, y_train, x_test, y_test,
     def l1_lr(feats):
         reg = sklearn.linear_model.Lasso(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l1_lr', reg, cv(feats), scorer)
-        return fit_and_test_model(reg_cv, 'L1 linear regression',
+        return fit_and_test_model(reg_cv, 'l1_lr', 'L1 linear regression',
                 hyperparams=reg_cv, feats=feats,
-                print_top_coeffs=True)
+                inspect_feat_coeffs=True)
 
     # L2 linear regression
     def l2_lr(feats):
         reg = sklearn.linear_model.Ridge(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l2_lr', reg, cv(feats), scorer)
-        return fit_and_test_model(reg_cv, 'L2 linear regression',
+        return fit_and_test_model(reg_cv, 'l2_lr', 'L2 linear regression',
                 hyperparams=reg_cv, feats=feats,
-                print_top_coeffs=True)
+                inspect_feat_coeffs=True)
 
     # Elastic net (L1+L2 linear regression)
     # Recommendation for l1_ratio is to place more values close to 1 (lasso)
@@ -651,22 +681,22 @@ def regress(x_train, y_train, x_test, y_test,
     def l1l2_lr(feats):
         reg = sklearn.linear_model.ElasticNet(max_iter=1000, tol=0.0001, copy_X=True)
         reg_cv = random_search_cv('l1l2_lr', reg, cv(feats), scorer)
-        return fit_and_test_model(reg_cv, 'L1+L2 linear regression',
+        return fit_and_test_model(reg_cv, 'l1l2_lr', 'L1+L2 linear regression',
                 hyperparams=reg_cv, feats=feats,
-                print_top_coeffs=True)
+                inspect_feat_coeffs=True)
 
     # Gradient-boosted regression trees
     def gbt(feats):
         reg = sklearn.ensemble.GradientBoostingRegressor(loss='ls', tol=0.0001)
         reg_cv = random_search_cv('gbt', reg, cv(feats), scorer)
-        return fit_and_test_model(reg_cv, 'Gradient Boosting regression',
+        return fit_and_test_model(reg_cv, 'gbt', 'Gradient Boosting regression',
                 hyperparams=reg_cv, feats=feats)
 
     # Random forest regression
     def rf(feats):
         reg = sklearn.ensemble.RandomForestRegressor(criterion='mse')
         reg_cv = random_search_cv('rf', reg, cv(feats), scorer)
-        return fit_and_test_model(reg_cv, 'Random forest regression',
+        return fit_and_test_model(reg_cv, 'rf', 'Random forest regression',
                 hyperparams=reg_cv, feats=feats)
 
     # MLP
@@ -674,7 +704,7 @@ def regress(x_train, y_train, x_test, y_test,
         reg = fnn.MultilayerPerceptron(parsers[feats].context_nt,
                 regression=True)
         reg_cv = random_search_cv('mlp', reg, cv(feats), scorer)
-        return fit_and_test_model(reg_cv, 'Multilayer perceptron',
+        return fit_and_test_model(reg_cv, 'mlp', 'Multilayer perceptron',
                 hyperparams=reg_cv, feats=feats)
 
     # LSTM
@@ -682,7 +712,7 @@ def regress(x_train, y_train, x_test, y_test,
         reg = rnn.LSTM(parsers[feats].context_nt,
                 regression=True)
         reg_cv = random_search_cv('lstm', reg, cv(feats), scorer)
-        return fit_and_test_model(reg_cv, 'LSTM',
+        return fit_and_test_model(reg_cv, 'lstm', 'LSTM',
                 hyperparams=reg_cv, feats=feats)
 
     metrics_for_models = {}
@@ -699,7 +729,7 @@ def regress(x_train, y_train, x_test, y_test,
 
 def nested_cross_validate(x, y, num_outer_splits,
         regression, parsers, regression_scoring_method=None,
-        models_to_use=None):
+        models_to_use=None, feat_coeffs_out_tsv_f=None):
     """Perform nested cross-validation to validate model and search.
 
     Args:
@@ -712,6 +742,9 @@ def nested_cross_validate(x, y, num_outer_splits,
         regression_scoring_method: if regression, method to use for 
             evaluating a model ('mse' or 'rho')
         models_to_use: list of models to test; if None, test all
+        feat_coeffs_out_tsv_f: if set, file handler to which to write
+            coefficients for each feature (linear models only; only for
+            the best estimator after hyperparameter search)
 
     Returns:
         list x where each x[i] is an output of regress() or classify() on
@@ -746,10 +779,13 @@ def nested_cross_validate(x, y, num_outer_splits,
                     x_validate, y_validate,
                     parsers,
                     scoring_method=regression_scoring_method,
-                    models_to_use=models_to_use)
+                    models_to_use=models_to_use,
+                    feat_coeffs_out_tsv_f=feat_coeffs_out_tsv_f)
         else:
             metrics_for_models = classify(x_train, y_train,
-                    x_validate, y_validate, parsers)
+                    x_validate, y_validate, parsers,
+                    models_to_use=models_to_use,
+                    feat_coeffs_out_tsv_f=feat_coeffs_out_tsv_f)
         fold_results += [metrics_for_models]
 
         # Print metrics on this fold
@@ -823,21 +859,34 @@ def main():
                    'unused test data; it may make sense to set '
                    '--test-split-frac to 0'))
 
+        if args.nested_cross_val_feat_coeffs_out_tsv:
+            feat_coeffs_out_tsv_f = open(
+                    args.nested_cross_val_feat_coeffs_out_tsv,
+                    'w')
+            header = ['model', 'feats_type', 'feat_description', 'coeff']
+            feat_coeffs_out_tsv_f.write('\t'.join(header) + '\n')
+        else:
+            feat_coeffs_out_tsv_f = None
+
         fold_results = nested_cross_validate(x_train, y_train,
                 args.nested_cross_val_outer_num_splits,
                 regression,
                 parsers,
                 regression_scoring_method=args.regression_scoring_method,
-                models_to_use=args.models_to_use)
+                models_to_use=args.models_to_use,
+                feat_coeffs_out_tsv_f=feat_coeffs_out_tsv_f)
+
+        if feat_coeffs_out_tsv_f is not None:
+            feat_coeffs_out_tsv_f.close()
 
         if args.nested_cross_val_out_tsv:
             # Write fold results to a tsv file
             if regression:
-                metrics = ['mse', '1_minus_rho']
+                metrics = ['mse', 'mae', 'r', 'r2', 'rho']
             else:
-                metrics = ['roc_auc', 'pr_auc']
+                metrics = ['auc-roc', 'auc-pr', 'avg-prec', 'accuracy']
             with open(args.nested_cross_val_out_tsv, 'w') as fw:
-                header = ['fold', 'model'] + metrics
+                header = ['fold', 'model', 'feats_type'] + metrics
                 fw.write('\t'.join(header) + '\n')
                 for fold in range(len(fold_results)):
                     metrics_for_models = fold_results[fold]
