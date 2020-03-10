@@ -16,7 +16,7 @@ IN.TSV <- args[1]
 OUT.PDF <- args[2]
 
 # Read hyperparameter results and replace '_' with '.' in column names
-hyperparams <- read.table(IN.TSV, header=TRUE, sep="\t")
+hyperparams <- read.table(gzfile(IN.TSV), header=TRUE, sep="\t")
 names(hyperparams) <- gsub("_", ".", names(hyperparams))
 
 # R renames the column '1.minus.rho.mean' to 'X1.minus.rho.mean' when reading; rename it back
@@ -52,7 +52,7 @@ hyperparams$rho.mean <- 1.0 - hyperparams$`1.minus.rho.mean`
 # Produce plot of MSE
 p.mse <- ggplot(hyperparams, aes(x=has.lc.layer, y=mse.mean))
 p.mse <- p.mse + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2)
-p.mse <- p.mse + ylim(0, 0.75)   # ignore the outliers >1.0
+p.mse <- p.mse + ylim(0, 2.0)   # ignore the outliers >2.0
 p.mse <- p.mse + ylab("Mean validation MSE")
 p.mse <- p.mse + xlab("Uses LC layer")
 p.mse <- p.mse + theme_bw()
