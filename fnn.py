@@ -349,7 +349,7 @@ class MultilayerPerceptron:
     """
     def __init__(self, context_nt, layer_dims=[64, 64],
             dropout_rate=0.5, activation_fn='relu', regression=True,
-            class_weight=None):
+            class_weight=None, batch_size=32):
         """
         Args:
             context_nt: amount of context to use in target
@@ -360,9 +360,9 @@ class MultilayerPerceptron:
             activation_fn: activation function to use for the hidden layers
                 (everything but the final layer)
             regression: if True, perform regression; else, classification
-            class_weight: class weight for training; only application for
+            class_weight: class weight for training; only applicable for
                 classification
-
+            batch_size: batch size
         """
         self.context_nt = context_nt
         self.layer_dims = layer_dims
@@ -370,6 +370,7 @@ class MultilayerPerceptron:
         self.activation_fn = activation_fn
         self.regression = regression
         self.class_weight=class_weight
+        self.batch_size = batch_size
 
     # get_params() and set_params() are needed if we which to use this
     # class as a scikit-learn estimator
@@ -380,7 +381,8 @@ class MultilayerPerceptron:
                 'dropout_rate': self.dropout_rate,
                 'activation_fn': self.activation_fn,
                 'regression': self.regression,
-                'class_weight': self.class_weight}
+                'class_weight': self.class_weight,
+                'batch_size': self.batch_size}
     def set_params(self, **parameters):
         for parameter, value in parameters.items():
             setattr(self, parameter, value)
@@ -448,6 +450,7 @@ class MultilayerPerceptron:
                 mode='min', patience=2)
 
         self.model.fit(x_train, y_train, validation_split=0.25,
+                batch_size=self.batch_size,
                 callbacks=[es], class_weight=self.class_weight,
                 verbose=2)
 

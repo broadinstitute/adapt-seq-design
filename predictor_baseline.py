@@ -122,7 +122,7 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-def random_search_cv(model_name, model_obj, cv, scorer, n_iter=25):
+def random_search_cv(model_name, model_obj, cv, scorer, n_iter=50):
     """Construct a RandomizedSearchCV object.
 
     Args:
@@ -201,14 +201,16 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=25):
         params = {
             'layer_dims': layer_dims,
             'dropout_rate': scipy.stats.uniform(0, 0.5),
-            'activation_fn': ['relu', 'elu']
+            'activation_fn': ['relu', 'elu'],
+            'batch_size': [16]
         }
     elif model_name == 'lstm':
         params = {
             'units': np.logspace(1, 8, base=2, num=space_size).astype(int),
             'bidirectional': [False, True],
             'embed_dim': [None]*4 + list(range(1, 9)),
-            'dropout_rate': scipy.stats.uniform(0, 0.5)
+            'dropout_rate': scipy.stats.uniform(0, 0.5),
+            'batch_size': [16]
         }
     elif model_name == 'svm':
         params = {
@@ -218,9 +220,19 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=25):
     else:
         raise Exception("Unknown model: '%s'" % model_name)
 
+    if model_name == 'mlp' or model_name == 'lstm':
+        # Do not parallelize (to avoid memory issues); TensorFlow will already
+        # take advantage of multiple GPUs if available
+        n_jobs = 1
+        # Use a smaller search space; this is slow to train
+        n_iter = 25
+    else:
+        # Use all but 1 CPU (n_jobs=-2)
+        n_jobs = -2
     rs_cv = sklearn.model_selection.RandomizedSearchCV(model_obj,
                 params, cv=cv, refit=True,
-                scoring=scorer, n_iter=n_iter)
+                scoring=scorer, n_iter=n_iter,
+                n_jobs=n_jobs)
     return rs_cv
 
 
