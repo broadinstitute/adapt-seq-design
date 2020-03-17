@@ -301,13 +301,12 @@ def classify(x_train, y_train, x_test, y_test,
                 num_inner_splits, stratify_by_pos=True, yield_indices=True)
 
     def auc_roc_f(y, y_pred):
-        m = tf.keras.metrics.AUC(curve='ROC')
-        m.update_state(y, y_pred)
-        return m.result().numpy()
+        return sklearn.metrics.roc_auc_score(y, y_pred)
     def auc_pr_f(y, y_pred):
-        m = tf.keras.metrics.AUC(curve='PR')
-        m.update_state(y, y_pred)
-        return m.result().numpy()
+        pr_precision, pr_recall, pr_thresholds = sklearn.metrics.precision_recall_curve(
+                y, y_pred, pos_label=1)
+        return sklearn.metrics.auc(pr_recall, pr_precision)
+
     auc_roc_scorer = sklearn.metrics.make_scorer(auc_roc_f,
             greater_is_better=True)
     auc_pr_scorer = sklearn.metrics.make_scorer(auc_pr_f,
@@ -371,14 +370,18 @@ def classify(x_train, y_train, x_test, y_test,
         y_pred = clf.predict(x_test[feats])
         y_pred_class = [0 if y < 0.5 else 1 for y in y_pred]
 
-        # Compute metrics (for auROC and auPR, check calculation via
-        # TensorFlow and scikit-learn)
-        auc_roc_tf = auc_roc_f(y_test[feats], y_pred)
-        auc_roc_sk = sklearn.metrics.roc_auc_score(y_test[feats], y_pred)
-        auc_pr_tf = auc_pr_f(y_test[feats], y_pred)
-        pr_precision, pr_recall, pr_thresholds = sklearn.metrics.precision_recall_curve(
-                y_test[feats], y_pred, pos_label=1)
-        auc_pr_sk = sklearn.metrics.auc(pr_recall, pr_precision)
+        # Compute metrics (for auROC and auPR)
+        # This initially performed this calculation with *both* TensorFlow
+        # and scikit-learn to report both results. However, it seems that
+        # using TensorFlow for this calculation sometimes leads to a strange
+        # crash caused by the GPU running out of memory (possibly because
+        # there are multiple processes (jobs) for the hyperparameter search and
+        # TensorFlow tries to use all of the GPU's memory). The results between
+        # scikit-learn and TensorFlow were virtually identical for auROC, and
+        # where very close for auPR (reporting avg. precision along with auPR
+        # should alleviate calculation concerns).
+        auc_roc_sk = auc_roc_f(y_test[feats], y_pred)
+        auc_pr_sk = auc_pr_f(y_test[feats], y_pred)
         avg_prec = sklearn.metrics.average_precision_score(y_test[feats],
                 y_pred)
         accuracy = sklearn.metrics.accuracy_score(y_test[feats], y_pred_class)
@@ -391,17 +394,15 @@ def classify(x_train, y_train, x_test, y_test,
                 print("    best {}    = {}".format(p, getattr(clf, p)))
         else:
             print("    best params = {}".format(hyperparams.best_params_))
-        print("    auROC (TF) = {}".format(auc_roc_tf))
         print("    auROC (SK) = {}".format(auc_roc_sk))
-        print("    auPR (TF)  = {}".format(auc_pr_tf))
         print("    auPR (SK)  = {}".format(auc_pr_sk))
         print("    Avg. prec  = {}".format(avg_prec))
         print("    Accuracy   = {}".format(accuracy))
         print('#'*20)
 
-        return {'auc-roc': auc_roc_tf, 'auc-pr': auc_pr_tf,
+        return {'auc-roc': auc_roc_sk, 'auc-pr': auc_pr_sk,
                 'avg-prec': avg_prec, 'accuracy': accuracy,
-                '1_minus_auc-roc': 1.0-auc_roc_tf}
+                '1_minus_auc-roc': 1.0-auc_roc_sk}
 
     # Logistic regression (no regularization)
     def logit(feats):
