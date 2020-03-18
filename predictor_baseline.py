@@ -97,6 +97,11 @@ def parse_args():
             help=("Path to output TSV at which to write a coefficient for "
                   "each feature (only linear models) for each outer fold "
                   "of nested cross-validation"))
+    parser.add_argument('--nested-cross-val-run-for',
+            nargs='+',
+            type=int,
+            help=("If set, only run the given outer splits (0-based). If "
+                  "not set, run for all."))
     parser.add_argument('--seed',
             type=int,
             default=1,
@@ -742,7 +747,8 @@ def regress(x_train, y_train, x_test, y_test,
 
 def nested_cross_validate(x, y, num_outer_splits,
         regression, parsers, regression_scoring_method=None,
-        models_to_use=None, feat_coeffs_out_tsv_f=None):
+        models_to_use=None, feat_coeffs_out_tsv_f=None,
+        outer_splits_to_run=None):
     """Perform nested cross-validation to validate model and search.
 
     Args:
@@ -758,6 +764,8 @@ def nested_cross_validate(x, y, num_outer_splits,
         feat_coeffs_out_tsv_f: if set, file handler to which to write
             coefficients for each feature (linear models only; only for
             the best estimator after hyperparameter search)
+        outer_splits_to_run: if set, a list of outer splits to run (0-based);
+            if not set, run all
 
     Returns:
         list x where each x[i] is an output of regress() or classify() on
@@ -773,6 +781,19 @@ def nested_cross_validate(x, y, num_outer_splits,
         outer_split_iters_feats += [k]
     for xy in zip(*outer_split_iters):
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
+
+        if outer_splits_to_run is not None:
+            if i not in outer_splits_to_run:
+                print('  Skipping this outer split')
+                fold_results += [None]
+                i += 1
+
+                # Advance random number generator
+                random.random()
+                np.random.random()
+                tf.random.uniform([1])
+
+                continue
 
         x_train = {}
         y_train = {}
@@ -903,6 +924,8 @@ def main():
                 fw.write('\t'.join(header) + '\n')
                 for fold in range(len(fold_results)):
                     metrics_for_models = fold_results[fold]
+                    if metrics_for_models is None:
+                        continue
                     for model in metrics_for_models.keys():
                         for feats in metrics_for_models[model].keys():
                             row = [fold, model, feats]
