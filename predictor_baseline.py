@@ -6,6 +6,7 @@ import argparse
 import fnn
 import parse_data
 import predictor
+import random
 import rnn
 
 import numpy as np
@@ -908,7 +909,8 @@ def main():
                 parsers,
                 regression_scoring_method=args.regression_scoring_method,
                 models_to_use=args.models_to_use,
-                feat_coeffs_out_tsv_f=feat_coeffs_out_tsv_f)
+                feat_coeffs_out_tsv_f=feat_coeffs_out_tsv_f,
+                outer_splits_to_run=args.nested_cross_val_run_for)
 
         if feat_coeffs_out_tsv_f is not None:
             feat_coeffs_out_tsv_f.close()
