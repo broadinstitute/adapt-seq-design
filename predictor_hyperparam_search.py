@@ -388,7 +388,8 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
 def nested_cross_validate(x, y, search_type, regression, context_nt,
         num_outer_splits=5, num_inner_splits=5, loss_out=None,
         num_random_samples=None,
-        max_sem=None):
+        max_sem=None,
+        outer_splits_to_run=None):
     """Perform nested cross-validation to validate model and search.
 
     This is useful to verify the overall model and model fitting approach
@@ -419,13 +420,16 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
         max_sem: maximum standard error of the mean (SEM) on the loss to allow
             the hyperparameters with that loss to be chosen as the 'best'
             choice of hyperparameters (if None, no limit)
+        outer_splits_to_run: if set, a list of outer splits to run (0-based);
+            if not set, run all
 
     Returns:
         list x where x[i] is a tuple (params, loss, metrics) where params is an
         optimal choice of parameters (a dict), loss is the (default) loss for
         that choice on the outer validation data, and metrics gives loss values
         for different metrics on the outer validation data; each x[i]
-        corresponds to an outer fold of the data
+        corresponds to an outer fold of the data. If outer_splits_to_run is
+        set, then x[i] is None if i is not in outer_splits_to_run
     """
     optimal_choices = []
     i = 0
@@ -437,6 +441,13 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
                 np.mean(np.square(np.mean(y_train) - np.array(y_train))))
         print('  MSE on validate data if predicting mean of train data:',
                 np.mean(np.square(np.mean(y_train) - np.array(y_validate))))
+
+        if outer_splits_to_run is not None:
+            if not (i in outer_splits_to_run):
+                print('  Skipping this outer split')
+                optimal_choices += [None]
+                i += 1
+                continue
 
         # Search for hyperparameters on this outer fold of the data
 
@@ -458,7 +469,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
         #       y_validate), effectively treating this outer validation data
         #       as a test set for best_params
         best_model = predictor.construct_model(best_params, x_train.shape,
-                regression, compile_with_keras=True, y_train=y_train)
+                regression, compile_for_keras=True, y_train=y_train)
         # Split x_train,y_train into train/validate sets and the validation
         # data is used only for early stopping during training
         train_split_iter = data_parser.split(x_train, y_train,
@@ -703,7 +714,8 @@ def main(args):
                 num_inner_splits=args.hyperparam_search_cross_val_num_splits,
                 loss_out=params_mean_val_loss_out_tsv_f,
                 num_random_samples=args.num_random_samples,
-                max_sem=args.max_sem)
+                max_sem=args.max_sem,
+                outer_splits_to_run=args.nested_cross_val_run_for)
 
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
@@ -715,6 +727,8 @@ def main(args):
                 header += metrics
                 fw.write('\t'.join(header) + '\n')
                 for fold in range(len(fold_results)):
+                    if fold_results[fold] is None:
+                        continue
                     fold_params, fold_loss, fold_metrics = fold_results[fold]
                     row = [fold, params_hash(fold_params), fold_params]
                     for metric in metrics:
@@ -725,6 +739,8 @@ def main(args):
         print('***')
         for fold in range(len(fold_results)):
             print('Outer fold {} results:'.format(fold+1))
+            if fold_results[fold] is None:
+                continue
             fold_params, fold_loss, fold_metrics = fold_results[fold]
             print('  Parameters: {}'.format(fold_params))
             print('  Loss of parameters on outer validation data: {}'.format(fold_loss))
@@ -827,6 +843,11 @@ if __name__ == "__main__":
                   "the validation data for each outer fold of nested "
                   "cross-validation (one row per outer fold; each column "
                   "gives a metric)"))
+    parser.add_argument('--nested-cross-val-run-for',
+            nargs='+',
+            type=int,
+            help=("If set, only run the given outer splits (0-based). If "
+                  "not set, run for all."))
     parser.add_argument('--save-models',
             help=("If set, path to directory in which to save parameters and "
                   "model weights for each model validated (each is in a "
