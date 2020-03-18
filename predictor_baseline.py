@@ -158,16 +158,16 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=50):
         }
     elif model_name == 'l1_logit':
         params = {
-            'C': np.logspace(-8, 8, base=10.0, num=space_size)
+            'C': np.logspace(-4, 4, base=10.0, num=space_size)
         }
     elif model_name == 'l2_logit':
         params = {
-            'C': np.logspace(-8, 8, base=10.0, num=space_size)
+            'C': np.logspace(-4, 4, base=10.0, num=space_size)
         }
     elif model_name == 'l1l2_logit':
         params = {
             'l1_ratio': 1.0 - np.logspace(-5, 0, base=2.0, num=space_size)[::-1] + 2.0**(-5),
-            'C': np.logspace(-8, 8, base=10.0, num=space_size)
+            'C': np.logspace(-4, 4, base=10.0, num=space_size)
         }
     elif model_name == 'gbt':
         params = {
@@ -408,7 +408,7 @@ def classify(x_train, y_train, x_test, y_test,
     def logit(feats):
         clf = sklearn.linear_model.LogisticRegression(penalty='none',
                 class_weight=class_weight, solver='lbfgs',
-                max_iter=1000)    # no CV because there are no hyperparameters
+                max_iter=100)    # no CV because there are no hyperparameters
         return fit_and_test_model(clf, 'logit', 'Logisitic regression',
                 hyperparams=[], feats=feats,
                 inspect_feat_coeffs=True)
@@ -417,7 +417,7 @@ def classify(x_train, y_train, x_test, y_test,
     def l1_logit(feats):
         clf = sklearn.linear_model.LogisticRegression(penalty='l1',
                 class_weight=class_weight, solver='saga',
-                max_iter=1000, tol=0.0001)
+                max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l1_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'l1_logit', 'L1 logistic regression',
                 hyperparams=clf_cv, feats=feats,
@@ -427,7 +427,7 @@ def classify(x_train, y_train, x_test, y_test,
     def l2_logit(feats):
         clf = sklearn.linear_model.LogisticRegression(penalty='l2',
                 class_weight=class_weight, solver='lbfgs',
-                max_iter=1000, tol=0.0001)
+                max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l2_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'l2_logit', 'L2 logistic regression',
                 hyperparams=clf_cv, feats=feats,
@@ -437,7 +437,7 @@ def classify(x_train, y_train, x_test, y_test,
     def l1l2_logit(feats):
         clf = sklearn.linear_model.LogisticRegression(penalty='elasticnet',
                 class_weight=class_weight, solver='saga',
-                max_iter=1000, tol=0.0001)
+                max_iter=100, tol=0.0001)
         clf_cv = random_search_cv('l1l2_logit', clf, cv(feats), scorer)
         return fit_and_test_model(clf_cv, 'l1l2_logit', 'L1+L2 logistic regression',
                 hyperparams=clf_cv, feats=feats,
