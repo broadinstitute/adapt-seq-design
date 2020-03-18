@@ -46,8 +46,8 @@ def determine_val_loss(results):
     increase the loss).
 
     Args:
-        results: dict returned by predictor.train_and_validate() or
-            predictor.test()
+        results: dict returned by predictor.train_with_keras() or
+            predictor.test_with_keras()
 
     Returns:
         (default loss value to use for ranking, dict of loss values for
@@ -117,7 +117,7 @@ def cross_validate(params, x, y, num_splits, regression):
 
         # Split the training data (x_train, y_train) *again* to get a
         # separate validation set (x_validate_for_es, y_validate_for_es) to
-        # pass to predictor.train_and_validate(), which it will use for early
+        # pass to predictor.train_with_keras(), which it will use for early
         # stopping
         # This way, we do not use the same validation set both for early
         # stopping and for measuring the performance of the model (otherwise
@@ -132,17 +132,16 @@ def cross_validate(params, x, y, num_splits, regression):
 
         # Start a new model for this fold
         model = predictor.construct_model(params, x_train_for_train.shape,
-                regression)
+                regression, compile_for_keras=True, y_train=y_train_for_train)
 
         # Train this fold
-        predictor.train_and_validate(model, x_train_for_train,
-                y_train_for_train, x_validate_for_es, y_validate_for_es,
-                params['max_num_epochs'],
-                data_parser)
+        predictor.train_with_keras(model, x_train_for_train,
+                y_train_for_train, x_validate_for_es, y_validate_for_es)
 
-        # Run predictor.test() on the validation data for this fold, to
+        # Run predictor.test_with_keras() on the validation data for this fold, to
         # get its validation results
-        results = predictor.test(model, x_validate, y_validate, data_parser)
+        results = predictor.test_with_keras(model, x_validate, y_validate,
+                data_parser)
         a, b = determine_val_loss(results)
         val_losses_default += [a]
         for k in b.keys():
@@ -459,7 +458,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
         #       y_validate), effectively treating this outer validation data
         #       as a test set for best_params
         best_model = predictor.construct_model(best_params, x_train.shape,
-                regression)
+                regression, compile_with_keras=True, y_train=y_train)
         # Split x_train,y_train into train/validate sets and the validation
         # data is used only for early stopping during training
         train_split_iter = data_parser.split(x_train, y_train,
@@ -468,14 +467,12 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
         # Only take the first split of the generator as the train/validation
         # split
         x_train_for_train, y_train_for_train, x_train_for_es, y_train_for_es = next(train_split_iter)
-        predictor.train_and_validate(best_model,
+        predictor.train_with_keras(best_model,
                 x_train_for_train, y_train_for_train,
-                x_train_for_es, y_train_for_es,
-                best_params['max_num_epochs'],
-                data_parser)
+                x_train_for_es, y_train_for_es)
         # Test the model on the validation data
-        val_results = predictor.test(best_model, x_validate, y_validate,
-                data_parser)
+        val_results = predictor.test_with_keras(best_model,
+                x_validate, y_validate, data_parser)
         val_loss, val_loss_different_metrics = determine_val_loss(val_results)
         optimal_choices += [(best_params, val_loss, val_loss_different_metrics)]
 
@@ -539,16 +536,16 @@ def train_and_save_model(params, x, y, regression, context_nt,
     # input size).
     # So we will split x,y into train/validate sets and the validation data
     # can also be used for early stopping during training.
-    model = predictor.construct_model(params, x.shape, regression)
     split_iter = data_parser.split(x, y,
             hyperparam_search_cross_val_num_splits,
             stratify_by_pos=True)
     # Only take the first split of the generator as the train/validation
     # split
     x_train, y_train, x_validate, y_validate = next(split_iter)
-    predictor.train_and_validate(model, x_train, y_train,
-            x_validate, y_validate, params['max_num_epochs'],
-            data_parser)
+    model = predictor.construct_model(params, x_train.shape, regression,
+            compile_for_keras=True, y_train=y_train)
+    predictor.train_with_keras(model, x_train, y_train,
+            x_validate, y_validate)
 
     # Save the model weights and best parameters to out_path
     if not os.path.exists(out_path):

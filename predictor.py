@@ -322,8 +322,8 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
     # Only train the models on one data point, and for 1 epoch
     print('#'*20)
     print('Initializing variables; ignore metrics..')
-    train_and_validate(model, x_train[:1], y_train[:1], x_validate[:1],
-            y_validate[:1], 1, data_parser)
+    train_with_keras(model, x_train[:1], y_train[:1], x_validate[:1],
+            y_validate[:1])
     print('#'*20)
 
     def copy_weights(model):
@@ -368,20 +368,76 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
     return model
 
 
-def construct_model(params, shape, regression=False):
+def construct_model(params, shape, regression=False, compile_for_keras=False,
+        y_train=None, parallelize_over_gpus=False):
     """Construct model.
 
     This uses the fnn module.
+
+    This can also compile the model for Keras, to use multiple GPUs if
+    available.
 
     Args:
         params: dict of hyperparameters
         shape: shape of input data; only used for printing model summary
         regression: if True, perform regression; if False, classification
+        compile_for_keras: if set, compile for keras
+        y_train: training data to use for computing class weights; only needed
+            if compile_for_keras is True and regression is False
+        parallelize_over_gpus: if True, parallelize over all available GPUs
 
     Returns:
         fnn.CasCNNWithParallelFilters object
     """
-    return fnn.construct_model(params, shape, regression=regression)
+    if not compile_for_keras:
+        # Just return a model
+        return fnn.construct_model(params, shape, regression=regression)
+
+    def make():
+        model = fnn.construct_model(params, shape, regression=regression)
+
+        # Define an optimizer, loss, metrics, etc.
+        if model.regression:
+            # When doing regression, sometimes the output would always be the
+            # same value regardless of input; decreasing the learning rate fixed this
+            optimizer = tf.keras.optimizers.Adam(lr=model.learning_rate)
+            loss = 'mse'
+
+            # Note that using other custom metrics like R^2, Pearson, etc. (as
+            # implemented above) seems to raise errors; they are really only
+            # needed during testing
+            metrics = ['mse', 'mae']
+
+            model.class_weight = None
+        else:
+            optimizer = tf.keras.optimizers.Adam(lr=model.learning_rate)
+            loss = 'binary_crossentropy'    # using class_weight should weight
+
+            # Note that using other custom metrics like auROC (as implemented
+            # above) seems to raise errors; they are really only needed during
+            # testing
+            metrics = ['bce', 'accuracy']
+
+            assert y_train is not None
+            y_train_labels = [y_train[i][0] for i in range(len(y_train))]
+            class_weight = sklearn.utils.class_weight.compute_class_weight(
+                    'balanced', sorted(np.unique(y_train_labels)), y_train_labels)
+            model.class_weight = {i: weight for i, weight in enumerate(class_weight)}
+
+        # Compile the model
+        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+        return model
+
+    if parallelize_over_gpus:
+        # Use a MirroredStrategy to take advantage of multiple GPUs, if there are
+        # multiple
+        strategy = tf.distribute.MirroredStrategy()
+        with strategy.scope():
+            model = make()
+    else:
+        model = make()
+
+    return model
 
 
 def pred_from_nt(model, pairs):
@@ -496,8 +552,11 @@ def load_model_for_cas13_regression_on_active(load_path):
 
 
 #####################################################################
-# Perform training and testing
 #####################################################################
+# Custom functions for training and testing
+#####################################################################
+#####################################################################
+
 # For classification, use cross-entropy as the loss function
 # This expects sigmoids (values in [0,1]) as the output; it will
 # transform back to logits (not bounded betweem 0 and 1) before
@@ -1218,6 +1277,152 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
                 'auc-roc': test_auc_roc.numpy()}
     return test_metrics
 
+#####################################################################
+#####################################################################
+#####################################################################
+#####################################################################
+
+
+#####################################################################
+#####################################################################
+# Functions to train and test using Keras
+#
+# Compared to the custom functions above, this provides less
+# flexibility but makes it simpler and possible to train across
+# multiple GPUs.
+#####################################################################
+#####################################################################
+def train_with_keras(model, x_train, y_train, x_validate, y_validate,
+        max_num_epochs=1000):
+    """Fit a model using Keras.
+
+    The model must have already been compiled (e.g., with construct_model()
+    above).
+
+    Args:
+        model: compiled model, e.g., output by construct_model()
+        x_train/y_train: training data
+        x_validate/y_validate: validation data; also used for early stopping
+        max_num_epochs: maximum number of epochs to train for; note that
+            the number it is trained for should be less due to early stopping
+    """
+    # Setup early stopping
+    # The validation data is only used for early stopping
+    es = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+            mode='min', patience=1)
+
+    # Fit the model
+    model.fit(x_train, y_train, validation_data=(x_validate, y_validate),
+            batch_size=model.batch_size, callbacks=[es],
+            class_weight=model.class_weight,
+            epochs=max_num_epochs,
+            verbose=2)
+
+
+def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None):
+    """Test a model.
+
+    This prints metrics.
+
+    Args:
+        model: model object
+        x_test, y_test: testing input and outputs (labels, if
+            classification)
+        data_parser: data parser object from parse_data
+        write_test_tsv: if set, path to TSV at which to write data on predictions
+            as well as the testing sequences (one row per data point)
+
+    Returns:
+        dict with test metrics at the end (keys are 'loss'
+        and ('bce' or 'mse') and ('auc-roc' or 'r-spearman'))
+    """
+    # Evaluate on test data
+    test_metrics = model.evaluate(x_test, y_test,
+            batch_size=model.batch_size)
+
+    # Turn test_metrics from list into dict
+    test_metrics = dict(zip(model.metrics_names, test_metrics))
+
+    y_true = y_test
+    y_pred = model.predict(x_test, batch_size=model.batch_size)
+
+    if write_test_tsv:
+        x_test_pos = [data_parser.pos_for_input(xi) for xi in x_test]
+
+        # Determine features for all input sequences
+        seq_feats = []
+        for i in range(len(x_test)):
+            seq_feats += [data_parser.seq_features_from_encoding(x_test[i])]
+
+        cols = ['target', 'target_without_context', 'guide',
+                'hamming_dist', 'cas13a_pfs', 'crrna_pos', 'true_activity',
+                'predicted_activity']
+        with gzip.open(write_test_tsv, 'wt') as fw:
+            def write_row(row):
+                fw.write('\t'.join(str(x) for x in row) + '\n')
+
+            # Write header
+            write_row(cols)
+
+            # Write row for each data point
+            for i in range(len(x_test)):
+                def val(k):
+                    if k == 'true_activity':
+                        return y_true[i]
+                    elif k == 'predicted_activity':
+                        return y_pred[i]
+                    elif k == 'crrna_pos':
+                        if x_test_pos is None:
+                            # Use -1 if position is unknown
+                            return -1
+                        else:
+                            # x_test_pos[i] gives position of x_test[i]
+                            return x_test_pos[i]
+                    else:
+                        return seq_feats[i][k]
+                write_row([val(k) for k in cols])
+
+    if model.regression:
+        mse_metric = tf.keras.metrics.MeanSquaredError()
+        mse_metric(y_true, y_pred)
+        mse = mse_metric.result().numpy()
+        pearson_corr_metric = Correlation('pearson_corr')
+        pearson_corr_metric(y_true, y_pred)
+        pearson_corr = pearson_corr_metric.result()
+        spearman_corr_metric = Correlation('spearman_corr')
+        spearman_corr_metric(y_true, y_pred)
+        spearman_corr = spearman_corr_metric.result()
+
+        test_metrics = {'loss': test_metrics['loss'],
+                'mse': mse,
+                'r-pearson': pearson_corr,
+                'r-spearman': spearman_corr}
+    else:
+        bce_metric = tf.keras.metrics.BinaryCrossentropy()
+        bce_metric(y_true, y_pred)
+        bce = bce_metric.result().numpy()
+        auc_pr_metric = tf.keras.metrics.AUC(num_thresholds=500, curve='PR')
+        auc_pr_metric(y_true, y_pred)
+        auc_pr = auc_pr_metric.result()
+        auc_roc_metric = tf.keras.metrics.AUC(num_thresholds=500, curve='ROC')
+        auc_roc_metric(y_true, y_pred)
+        auc_roc = auc_roc_metric.result()
+
+        test_metrics = {'loss': test_metrics['loss'],
+                'bce': bce,
+                'auc-pr': auc_pr,
+                'auc-roc': auc_roc}
+
+    print('TEST METRICS:', test_metrics)
+
+    return test_metrics
+
+
+#####################################################################
+#####################################################################
+#####################################################################
+#####################################################################
+
 
 def main():
     # Read arguments and data
@@ -1267,18 +1472,15 @@ def main():
     else:
         # Construct model
         params = vars(args)
-        model = construct_model(params, x_train.shape, regression)
+        model = construct_model(params, x_train.shape, regression,
+                compile_for_keras=True, y_train=y_train)
 
         # Train the model, with validation
-        train_and_validate(model, x_train, y_train, x_validate, y_validate,
-                args.max_num_epochs, data_parser)
+        train_with_keras(model, x_train, y_train, x_validate, y_validate)
 
     # Test the model
-    test(model, x_test, y_test, data_parser,
-            plot_roc_curve=args.plot_roc_curve,
-            plot_predictions=args.plot_predictions,
-            write_test_tsv=args.write_test_tsv,
-            y_train=y_train)
+    test_with_keras(model, x_test, y_test, data_parser,
+            write_test_tsv=args.write_test_tsv)
 
 
 if __name__ == "__main__":
