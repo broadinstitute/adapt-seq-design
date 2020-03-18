@@ -17,6 +17,7 @@ import predictor
 
 import numpy as np
 import scipy.stats
+import tensorflow as tf
 
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -443,10 +444,16 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
                 np.mean(np.square(np.mean(y_train) - np.array(y_validate))))
 
         if outer_splits_to_run is not None:
-            if not (i in outer_splits_to_run):
+            if i not in outer_splits_to_run:
                 print('  Skipping this outer split')
                 optimal_choices += [None]
                 i += 1
+
+                # Advance random number generator
+                random.random()
+                np.random.random()
+                tf.random.uniform([1])
+
                 continue
 
         # Search for hyperparameters on this outer fold of the data
