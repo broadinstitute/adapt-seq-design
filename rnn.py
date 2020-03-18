@@ -111,11 +111,13 @@ class LSTM:
                 tf.keras.metrics.AUC(),
                 tf.keras.metrics.Accuracy()])
 
-    def fit(self, x_train, y_train):
+    def fit(self, x_train, y_train, max_num_epochs=1000):
         """Fit the model.
 
         Args:
             x_train/y_train: training data
+            max_num_epochs: maximum number of epochs to run (early stopping
+                should stop before this)
         """
         # Setup model; do this again in case parameters changed
         seq_len = len(x_train[0])
@@ -135,7 +137,9 @@ class LSTM:
 
         self.model.fit(x_train, y_train, validation_split=0.25,
                 batch_size=self.batch_size,
-                callbacks=[es], class_weight=self.class_weight, verbose=2)
+                callbacks=[es], class_weight=self.class_weight,
+                epochs=max_num_epochs,
+                verbose=2)
 
     def predict(self, x_test):
         """Make predictions:
