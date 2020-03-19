@@ -30,11 +30,11 @@ if [[ $1 == "baseline" ]]; then
     if [[ $2 == "classify" ]]; then
         outdir="out/cas13/baseline/classify/runs"
         method_arg="--cas13-classify"
-        models=("logit" "l1_logit" "l2_logit" "l1l2_logit" "gbt" "rf" "svm" "mlp" "lstm")
+        models=("lstm" "mlp" "svm" "logit" "l1_logit" "l2_logit" "l1l2_logit" "gbt" "rf")
     elif [[ $2 == "regress" ]]; then
         outdir="out/cas13/baseline/regress/runs"
         method_arg="--cas13-regress-only-on-active"
-        models=("lr" "l1_lr" "l2_lr" "l1l2_lr" "gbt" "rf" "mlp" "lstm")
+        models=("lstm" "mlp" "lr" "l1_lr" "l2_lr" "l1l2_lr" "gbt" "rf")
     else
         echo "FATAL: #2 must be 'classify' or 'regress'"
         exit 1
