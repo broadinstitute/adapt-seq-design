@@ -19,8 +19,19 @@ OUT.PDF <- args[2]
 hyperparams <- read.table(gzfile(IN.TSV), header=TRUE, sep="\t")
 names(hyperparams) <- gsub("_", ".", names(hyperparams))
 
-# R renames the column '1.minus.rho.mean' to 'X1.minus.rho.mean' when reading; rename it back
-colnames(hyperparams)[colnames(hyperparams) == "X1.minus.rho.mean"] <- "1.minus.rho.mean"
+if ("X1.minus.auc.roc.mean" %in% colnames(hyperparams)) {
+    # Classification
+    # R renames the column '1.minus.auc-roc.mean' to 'X1.minus.auc.roc.mean' when reading; rename it back
+    colnames(hyperparams)[colnames(hyperparams) == "X1.minus.auc.roc.mean"] <- "1.minus.auc.roc.mean"
+    runType <- "classify"
+} else if ("X1.minus.rho.mean" %in% colnames(hyperparams)) {
+    # Regression
+    # R renames the column '1.minus.rho.mean' to 'X1.minus.rho.mean' when reading; rename it back
+    colnames(hyperparams)[colnames(hyperparams) == "X1.minus.rho.mean"] <- "1.minus.rho.mean"
+    runType <- "regress"
+} else {
+    stop("Unknown whether classification or regression")
+}
 
 # Add a column giving whether or not a choice of hyperparameters includes
 # a locally connected layer (note the '!' in front of 'grepl')
@@ -105,47 +116,63 @@ hyperparams$conv.num.filters <- str_match(hyperparams$params,
 hyperparams[hyperparams$has.conv.layer == FALSE, ]$conv.num.filters <- 0
 hyperparams$conv.num.filters <- as.numeric(hyperparams$conv.num.filters)
 
-# Compute Spearman's rho
-hyperparams$rho.mean <- 1.0 - hyperparams$`1.minus.rho.mean`
+if (runType == "classify") {
+    # Compute AUC-ROC
+    hyperparams$auc.roc.mean <- 1.0 - hyperparams$`1.minus.auc.roc.mean`
+} else if (runType == "regress") {
+    # Compute Spearman's rho
+    hyperparams$rho.mean <- 1.0 - hyperparams$`1.minus.rho.mean`
+}
 
-# Produce plots of MSE and rho
+# Produce plots of loss and a measurement (e.g., MSE and rho, for regression)
 # x_string gives column name to plot as a string
 # boxplot is FALSE (continuous) or TRUE (discrete)
 plots <- function(x_string, x_label, title, boxplot, x_log) {
+    if (runType == "classify") {
+        loss.col <- "bce.mean"
+        loss.name <- "BCE"
+        measure.col <- "auc.roc.mean"
+        measure.name <- "AUC-ROC"
+    } else if (runType == "regress") {
+        loss.col <- "mse.mean"
+        loss.name <- "MSE"
+        measure.col <- "rho.mean"
+        measure.name <- "Spearman's rho"
+    }
     # Produce plot of MSE
-    p.mse <- ggplot(hyperparams, aes_string(x=x_string, y="mse.mean"))
+    p.loss <- ggplot(hyperparams, aes_string(x=x_string, y=loss.col))
     if (boxplot) {
-        p.mse <- p.mse + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2)
+        p.loss <- p.loss + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2)
     } else {
-        p.mse <- p.mse + geom_point()
+        p.loss <- p.loss + geom_point()
     }
-    p.mse <- p.mse + ylim(0, 2.0)   # ignore the outliers >2.0
-    p.mse <- p.mse + ylab("Mean validation MSE")
-    p.mse <- p.mse + xlab(x_label)
-    p.mse <- p.mse + ggtitle(title)
-    p.mse <- p.mse + theme_bw()
-    p.mse <- p.mse + theme(axis.text=element_text(size=14),
+    p.loss <- p.loss + ylim(0, 2.0)   # ignore the outliers >2.0
+    p.loss <- p.loss + ylab(paste("Mean validation", loss.name))
+    p.loss <- p.loss + xlab(x_label)
+    p.loss <- p.loss + ggtitle(title)
+    p.loss <- p.loss + theme_bw()
+    p.loss <- p.loss + theme(axis.text=element_text(size=14),
                            axis.title=element_text(size=18))
-    # Produce plot of rho
-    p.rho <- ggplot(hyperparams, aes_string(x=x_string, y="rho.mean"))
+    # Produce plot of measure
+    p.measure <- ggplot(hyperparams, aes_string(x=x_string, y=measure.col))
     if (boxplot) {
-        p.rho <- p.rho + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2)
+        p.measure <- p.measure + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2)
     } else {
-        p.rho <- p.rho + geom_point()
+        p.measure <- p.measure + geom_point()
     }
-    p.rho <- p.rho + ylab("Mean validation Spearman's rho")
-    p.rho <- p.rho + xlab(x_label)
-    p.rho <- p.rho + ggtitle(title)
-    p.rho <- p.rho + theme_bw()
-    p.rho <- p.rho + theme(axis.text=element_text(size=14),
+    p.measure <- p.measure + ylab(paste("Mean validation", measure.name))
+    p.measure <- p.measure + xlab(x_label)
+    p.measure <- p.measure + ggtitle(title)
+    p.measure <- p.measure + theme_bw()
+    p.measure <- p.measure + theme(axis.text=element_text(size=14),
                            axis.title=element_text(size=18))
 
     if (x_log) {
-        p.mse <- p.mse + scale_x_log10()
-        p.rho <- p.rho + scale_x_log10()
+        p.loss <- p.loss + scale_x_log10()
+        p.measure <- p.measure + scale_x_log10()
     }
 
-    l <- list(mse=p.mse, rho=p.rho)
+    l <- list(loss=p.loss, measure=p.measure)
     return(l)
 }
 
@@ -166,30 +193,30 @@ p.add.gc.content <- plots("add.gc.content", "Added in GC content", "Added in GC 
 p.sample.weight.scaling.factor <- plots("sample.weight.scaling.factor", "Sample weight scaling factor", "Sample weight scaling factor", FALSE, TRUE)
 
 # Save plots to PDF
-g <- arrangeGrob(p.has.lc.layer$mse,
-                 p.has.lc.layer$rho,
-                 p.lc.width$mse,
-                 p.lc.width$rho,
-                 p.lc.dim$mse,
-                 p.lc.dim$rho,
-                 p.has.conv.layer$mse,
-                 p.has.conv.layer$rho,
-                 p.conv.width$mse,
-                 p.conv.width$rho,
-                 p.conv.num.filters$mse,
-                 p.conv.num.filters$rho,
-                 p.l2.factor$mse,
-                 p.l2.factor$rho,
-                 p.learning.rate$mse,
-                 p.learning.rate$rho,
-                 p.batch.size$mse,
-                 p.batch.size$rho,
-                 p.add.gc.content$mse,
-                 p.add.gc.content$rho,
-                 p.skip.batch.norm$mse,
-                 p.skip.batch.norm$rho,
-                 p.sample.weight.scaling.factor$mse,
-                 p.sample.weight.scaling.factor$rho,
+g <- arrangeGrob(p.has.lc.layer$loss,
+                 p.has.lc.layer$measure,
+                 p.lc.width$loss,
+                 p.lc.width$measure,
+                 p.lc.dim$loss,
+                 p.lc.dim$measure,
+                 p.has.conv.layer$loss,
+                 p.has.conv.layer$measure,
+                 p.conv.width$loss,
+                 p.conv.width$measure,
+                 p.conv.num.filters$loss,
+                 p.conv.num.filters$measure,
+                 p.l2.factor$loss,
+                 p.l2.factor$measure,
+                 p.learning.rate$loss,
+                 p.learning.rate$measure,
+                 p.batch.size$loss,
+                 p.batch.size$measure,
+                 p.add.gc.content$loss,
+                 p.add.gc.content$measure,
+                 p.skip.batch.norm$loss,
+                 p.skip.batch.norm$measure,
+                 p.sample.weight.scaling.factor$loss,
+                 p.sample.weight.scaling.factor$measure,
                  ncol=2)
 ggsave(OUT.PDF, g, width=8, height=48, useDingbats=FALSE, limitsize=FALSE)
 
