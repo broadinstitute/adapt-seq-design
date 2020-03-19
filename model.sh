@@ -9,11 +9,11 @@
 #   1: 'cnn'
 #       2: 'classify' or 'regress'
 #           3: 'large-search'
-#               4: GPU to run on (0-based)
-#               5: seed to use
+#               4: seed to use
+#               5: GPU to run on (0-based)
 #           3: 'nested-cross-val'
-#               4: GPU to run on (0-based)
-#               5: outer split to run (0-based)
+#               4: outer split to run (0-based)
+#               5: GPU to run on (0-based)
 
 
 # Set common arguments
@@ -79,14 +79,14 @@ elif [[ $1 == "cnn" ]]; then
     mkdir -p $modeloutdir
 
     # Set the GPU to use
-    gpu="$4"
+    gpu="$5"
     export CUDA_VISIBLE_DEVICES="$gpu"
 
     if [[ $3 == "large-search" ]]; then
         # Perform a large hyperparameter search; reserve test set
         # Run on different seeds (so it can be in parallel), but results
         # must be manually concatenated
-        seed="$5"
+        seed="$4"
         outdirwithseed="$outdir/large-search/seed-${seed}"
         mkdir -p $outdirwithseed
 
@@ -97,7 +97,7 @@ elif [[ $1 == "cnn" ]]; then
         # Perform a large nested cross-validation
         # Run on different outer splits (so it can be in parallel), but
         # results must be manually concatenated
-        outer_split="$5"
+        outer_split="$4"
         outdirwithsplit="$outdir/nested-cross-val/split-${outer_split}"
         mkdir -p $outdirwithsplit
 
