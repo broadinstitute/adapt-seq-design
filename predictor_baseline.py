@@ -20,6 +20,9 @@ import sklearn.utils
 import tensorflow as tf
 
 
+gpus_are_available = len(tf.config.list_physical_devices('GPU')) > 0
+
+
 def parse_args():
     """Parse arguments.
 
@@ -128,7 +131,7 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-def random_search_cv(model_name, model_obj, cv, scorer, n_iter=50):
+def random_search_cv(model_name, model_obj, cv, scorer, n_iter=100):
     """Construct a RandomizedSearchCV object.
 
     Args:
@@ -226,10 +229,13 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=50):
     else:
         raise Exception("Unknown model: '%s'" % model_name)
 
-    if model_name == 'mlp' or model_name == 'lstm':
-        # Do not parallelize (to avoid memory issues); TensorFlow will already
-        # take advantage of multiple GPUs if available
-        n_jobs = 1
+    if model_name == 'lstm':
+        if gpus_are_available:
+            # Do not parallelize (to avoid memory issues); TensorFlow will already
+            # take advantage of multiple GPUs if available
+            n_jobs = 1
+        else:
+            n_jobs = -2
         # Use a smaller search space; this is slow to train
         n_iter = 25
     else:
