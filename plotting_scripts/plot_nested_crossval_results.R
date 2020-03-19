@@ -67,15 +67,18 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
 
 
 # Read TSV of baseline results and replace '_' in column names with '.'
-baseline.results <- read.table(IN.BASELINES.TSV, header=TRUE, sep="\t")
+baseline.results <- read.table(gzfile(IN.BASELINES.TSV), header=TRUE, sep="\t")
 names(baseline.results) <- gsub("_", ".", names(baseline.results))
 
 # Read TSV of predictor results and replace '_' in column names with '.'
-predictor.results <- read.table(IN.PREDICTOR.TSV, header=TRUE, sep="\t")
+predictor.results <- read.table(gzfile(IN.PREDICTOR.TSV), header=TRUE, sep="\t")
 names(predictor.results) <- gsub("_", ".", names(predictor.results))
 
-# Add a column giving the 'model' for the main predictor; call it 'adapt'
-predictor.results$model <- rep("adapt", nrow(predictor.results))
+# Add a column giving the 'model' for the CNN predictor; call it 'cnn'
+predictor.results$model <- rep("cnn", nrow(predictor.results))
+
+# Give the feature type (onehot) for the CNN predictor
+predictor.results[predictor.results$model == "cnn", "feats.type"] <- "onehot"
 
 # Combine models across baselines and predictor; use plyr's rbind.fill() because
 # not all columns are present in all inputs
@@ -92,31 +95,35 @@ if ('mse' %in% colnames(results)) {
 
     # Order the models explicitly
     results$model <- factor(results$model,
-                            levels=c("lr", "l1_lr", "l2_lr", "l1l2_lr", "gbrt", "adapt"))
+                            levels=c("lr", "l1_lr", "l2_lr", "l1l2_lr", "gbt", "rf", "mlp", "lstm", "cnn"))
 
     # Pull out mse and make a plot of this
-    results.mse <- results[, c("fold", "model", "mse")]
+    results.mse <- results[, c("fold", "model", "feats.type", "mse")]
     # Summarize across folds
     results.mse.summarized <- summarySE(results.mse,
                                         measurevar="mse",
-                                        groupvars=c("model"))
-    p.mse <- ggplot(results.mse.summarized, aes(x=model, y=mse))
-    p.mse <- p.mse + geom_bar(aes(fill=model), stat="identity")
-    p.mse <- p.mse + geom_errorbar(aes(ymin=mse-ci, ymax=mse+ci), width=0.1, alpha=0.5)   # 95% CI
+                                        groupvars=c("model", "feats.type"))
+    p.mse <- ggplot(results.mse.summarized, aes(x=model, y=mse, fill=feats.type))
+    p.mse <- p.mse + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
+    p.mse <- p.mse + geom_errorbar(aes(ymin=mse-ci, ymax=mse+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
     p.mse <- p.mse + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.mse <- p.mse + xlab("Model") + ylab("Mean squared error")
     p.mse <- p.mse + theme_bw()
 
     # Pull out rho and make a plot of this
-    results$rho <- 1.0 - results$`1.minus.rho`
-    results.rho <- results[, c("fold", "model", "rho")]
+    # (only pull out rho if not already available; otherwise 1.minus.rho
+    # may be NA)
+    results$rho[is.na(results$rho)] <- 1.0 - results$`1.minus.rho`[is.na(results$rho)]
+    results.rho <- results[, c("fold", "model", "feats.type", "rho")]
+    print(results.rho)
     # Summarize across folds
     results.rho.summarized <- summarySE(results.rho,
                                         measurevar="rho",
-                                        groupvars=c("model"))
-    p.rho <- ggplot(results.rho.summarized, aes(x=model, y=rho))
-    p.rho <- p.rho + geom_bar(aes(fill=model), stat="identity")
-    p.rho <- p.rho + geom_errorbar(aes(ymin=rho-ci, ymax=rho+ci), width=0.1, alpha=0.5)   # 95% CI
+                                        groupvars=c("model", "feats.type"))
+    print(results.rho.summarized)
+    p.rho <- ggplot(results.rho.summarized, aes(x=model, y=rho, fill=feats.type))
+    p.rho <- p.rho + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
+    p.rho <- p.rho + geom_errorbar(aes(ymin=rho-ci, ymax=rho+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
     p.rho <- p.rho + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.rho <- p.rho + xlab("Model") + ylab("Spearman's rho")
     p.rho <- p.rho + theme_bw()
@@ -131,23 +138,24 @@ if ('mse' %in% colnames(results)) {
 
     # Order the models explicitly
     results$model <- factor(results$model,
-                            levels=c("l1", "l2", "adapt"))
+                            levels=c("l1_logit", "l2_logit", "l1l2_logit",
+                                     "gbt", "rf", "svm", "mlp", "lstm", "cnn"))
 
-    # Pull out roc_auc and make a plot of this
-    results.roc_auc <- results[, c("fold", "model", "roc_auc")]
+    # Pull out auROC and make a plot of this
+    results.auroc <- results[, c("fold", "model", "feats.type", "auroc")]
     # Summarize across folds
-    results.roc_auc.summarized <- summarySE(results.roc_auc,
-                                        measurevar="roc_auc",
-                                        groupvars=c("model"))
-    p.roc_auc <- ggplot(results.roc_auc.summarized, aes(x=model, y=roc_auc))
-    p.roc_auc <- p.roc_auc + geom_bar(aes(fill=model), stat="identity")
-    p.roc_auc <- p.roc_auc + geom_errorbar(aes(ymin=roc_auc-ci, ymax=roc_auc+ci), width=0.1, alpha=0.5)   # 95% CI
-    p.roc_auc <- p.roc_auc + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
-    p.roc_auc <- p.roc_auc + xlab("Model") + ylab("auROC")
-    p.roc_auc <- p.roc_auc + theme_bw()
+    results.auroc.summarized <- summarySE(results.auroc,
+                                        measurevar="auroc",
+                                        groupvars=c("model", "feats.type"))
+    p.auroc <- ggplot(results.auroc.summarized, aes(x=model, y=auroc, fill=feats.type))
+    p.auroc <- p.auroc + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
+    p.auroc <- p.auroc + geom_errorbar(aes(ymin=auroc-ci, ymax=auroc+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
+    p.auroc <- p.auroc + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
+    p.auroc <- p.auroc + xlab("Model") + ylab("auROC")
+    p.auroc <- p.auroc + theme_bw()
 
     # Save to PDF
-    g <- arrangeGrob(p.roc_auc,
+    g <- arrangeGrob(p.auroc,
                      ncol=1)
     ggsave(OUT.PDF, g, width=8, height=8, useDingbats=FALSE)
 }
