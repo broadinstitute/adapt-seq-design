@@ -163,7 +163,7 @@ def hyperparam_grid():
     # Map each parameter to a list of possible values
     grid = {
             'conv_filter_width': [None, [1], [2], [1, 2], [1, 2, 3, 4]],
-            'conv_num_filters': [5, 15, 25],
+            'conv_num_filters': [5, 25, 100, 200],
             'pool_window_width': [1, 2, 4],
             'fully_connected_dim': [[20], [40],
                 [20, 20], [20, 40], [40, 40],
@@ -177,8 +177,8 @@ def hyperparam_grid():
             'dropout_rate': [0, 0.25, 0.50],
             'l2_factor': [0, 0.0001, 0.001, 0.01, 0.1],
             'sample_weight_scaling_factor': [0],
-            'batch_size': [8, 16, 32, 64],
-            'learning_rate': [0.01, 0.001, 0.0001, 0.00001],
+            'batch_size': [16, 32, 64, 256],
+            'learning_rate': [0.1, 0.01, 0.001, 0.0001, 0.00001],
             'max_num_epochs': [1000]
     }
     keys_ordered = sorted(grid.keys())
@@ -247,7 +247,7 @@ def hyperparam_random_dist(num_samples):
                  None,
                  [1], [2], [3], [4],
                  [1, 2], [1, 2, 3], [1, 2, 3, 4]]),
-             'conv_num_filters': uniform_int(10, 100),
+             'conv_num_filters': uniform_int(10, 250),
              'pool_window_width': uniform_int(1, 4),
              'fully_connected_dim': uniform_nested_dist(1, 3,
                  uniform_int(25, 75)),
@@ -262,8 +262,8 @@ def hyperparam_random_dist(num_samples):
              'dropout_rate': uniform_continuous(0, 0.5),
              'l2_factor': lognormal(-13.0, 4.0),
              'sample_weight_scaling_factor': constant(0),
-             'batch_size': uniform_int(4, 65),
-             'learning_rate': loguniform(-6.0, -2.0, 10.0),
+             'batch_size': uniform_int(32, 256),
+             'learning_rate': loguniform(-6.0, 0.0, 10.0),
              'max_num_epochs': constant(1000)
     }
     for i in range(num_samples):
