@@ -507,7 +507,7 @@ def classify(x_train, y_train, x_test, y_test,
 def regress(x_train, y_train, x_test, y_test,
         parsers,
         num_inner_splits=5,
-        scoring_method='mse',
+        scoring_method='rho',
         models_to_use=None,
         feat_coeffs_out_tsv_f=None):
     """Perform regression.

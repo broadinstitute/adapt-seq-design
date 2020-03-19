@@ -24,7 +24,7 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
 _regression_losses = ['mse', '1_minus_r', '1_minus_rho']
-_default_regression_loss = 'mse'
+_default_regression_loss = '1_minus_rho'
 _classification_losses = ['bce', '1_minus_auc-roc', '1_minus_auc-pr']
 _default_classification_loss = '1_minus_auc-roc'
 def determine_val_loss(results):
