@@ -110,7 +110,7 @@ elif [[ $1 == "cnn" ]]; then
         exit 1
     fi
 
-    unset $CUDA_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
 
 else
     echo "FATAL: Unknown argument '$1'"
