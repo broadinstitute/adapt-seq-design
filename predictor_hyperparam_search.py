@@ -8,6 +8,7 @@ import argparse
 from collections import defaultdict
 import hashlib
 import itertools
+import math
 import os
 import pickle
 import random
@@ -342,9 +343,11 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
                     num_splits, model_out_path)
 
         # Decide whether to update the current best choice of hyperparameters
-        if mean_loss is np.nan:
+        # It seems that np.mean(x) where x contains nan is *not* np.nan
+        # but math.isnan(..) is True
+        if mean_loss is np.nan or math.isnan(mean_loss):
             # mean_loss can be nan, e.g., for Spearman's rho if all predicted
-            # values are the same
+            # values are the same for at least one of the inner folds
             # Do not update it in this case
             update_choice = False
         else:
