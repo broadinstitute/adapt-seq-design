@@ -699,6 +699,10 @@ def main(args):
                    'unused test data; it may make sense to set '
                    '--test-split-frac to 0'))
 
+        if args.save_models is not None:
+            print(('WARNING: --save-models is set but models are not saved '
+                   'during nested cross-validation'))
+
         # Perform nested cross-validation
         if args.params_mean_val_loss_out_tsv:
             # Use buffering=1 for line buffering (write each line immediately)

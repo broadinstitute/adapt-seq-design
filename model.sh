@@ -103,7 +103,7 @@ elif [[ $1 == "cnn" ]]; then
         outdirwithsplit="$outdir/nested-cross-val/split-${outer_split}"
         mkdir -p $outdirwithsplit
 
-        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 50 --params-mean-val-loss-out-tsv $outdirwithsplit/nested-cross-val.models.tsv --nested-cross-val-out-tsv $outdirwithsplit/nested-cross-val.folds.tsv --save-models $modeloutdir --nested-cross-val-run-for $outer_split &> $outdirwithsplit/nested-cross-val.out
+        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 50 --params-mean-val-loss-out-tsv $outdirwithsplit/nested-cross-val.models.tsv --nested-cross-val-out-tsv $outdirwithsplit/nested-cross-val.folds.tsv --nested-cross-val-run-for $outer_split &> $outdirwithsplit/nested-cross-val.out
         gzip -f $outdirwithsplit/nested-cross-val.models.tsv
         gzip -f $outdirwithsplit/nested-cross-val.folds.tsv
         gzip -f $outdirwithsplit/nested-cross-val.out
