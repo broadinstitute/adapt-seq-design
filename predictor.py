@@ -1403,10 +1403,10 @@ def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None):
         bce = bce_metric.result().numpy()
         auc_pr_metric = tf.keras.metrics.AUC(num_thresholds=500, curve='PR')
         auc_pr_metric(y_true, y_pred)
-        auc_pr = auc_pr_metric.result()
+        auc_pr = auc_pr_metric.result().numpy()
         auc_roc_metric = tf.keras.metrics.AUC(num_thresholds=500, curve='ROC')
         auc_roc_metric(y_true, y_pred)
-        auc_roc = auc_roc_metric.result()
+        auc_roc = auc_roc_metric.result().numpy()
 
         test_metrics = {'loss': test_metrics['loss'],
                 'bce': bce,
