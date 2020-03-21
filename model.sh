@@ -44,18 +44,19 @@ if [[ $1 == "baseline" ]]; then
     num_outer_splits="5"
 
     # Generate commands to run
-    echo -n "" > /tmp/baseline-cmds.txt
+    cmds="/tmp/baseline-cmds.${2}.txt"
+    echo -n "" > $cmds
     for outer_split in $(seq 0 $((num_outer_splits - 1))); do
         for model in "${models[@]}"; do
+            fn_prefix="$outdir/nested-cross-val.${model}.split-${outer_split}"
             if [ ! -f ${fn_prefix}.metrics.tsv.gz ]; then
-                fn_prefix="$outdir/nested-cross-val.${model}.split-${outer_split}"
-                echo "python -u predictor_baseline.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --models-to-use $model --nested-cross-val --nested-cross-val-outer-num-splits $num_outer_splits --nested-cross-val-run-for $outer_split --nested-cross-val-out-tsv ${fn_prefix}.metrics.tsv --nested-cross-val-feat-coeffs-out-tsv ${fn_prefix}.feature-coeffs.tsv &> ${fn_prefix}.out; gzip -f ${fn_prefix}.metrics.tsv; gzip -f ${fn_prefix}.feature-coeffs.tsv; gzip -f ${fn_prefix}.out" >> /tmp/baseline-cmds.txt
+                echo "python -u predictor_baseline.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --models-to-use $model --nested-cross-val --nested-cross-val-outer-num-splits $num_outer_splits --nested-cross-val-run-for $outer_split --nested-cross-val-out-tsv ${fn_prefix}.metrics.tsv --nested-cross-val-feat-coeffs-out-tsv ${fn_prefix}.feature-coeffs.tsv &> ${fn_prefix}.out; gzip -f ${fn_prefix}.metrics.tsv; gzip -f ${fn_prefix}.feature-coeffs.tsv; gzip -f ${fn_prefix}.out" >> $cmds
             fi
         done
     done
 
     njobs="$3"
-    parallel --jobs $njobs --no-notice --progress < /tmp/baseline-cmds.txt
+    parallel --jobs $njobs --no-notice --progress < $cmds
 
     # Note that this runs each model and outer split separately; results will still
     # need to be manually combined
@@ -91,7 +92,7 @@ elif [[ $1 == "cnn" ]]; then
         outdirwithseed="$outdir/large-search/seed-${seed}"
         mkdir -p $outdirwithseed
 
-        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $seed --test-split-frac 0.3 --command hyperparam-search --hyperparam-search-cross-val-num-splits 5 --search-type random --num-random-samples 50 --params-mean-val-loss-out-tsv $outdirwithseed/search.tsv --save-models $modeloutdir &> $outdirwithseed/search.out
+        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $seed --test-split-frac 0.3 --command hyperparam-search --hyperparam-search-cross-val-num-splits 5 --search-type random --num-random-samples 100 --params-mean-val-loss-out-tsv $outdirwithseed/search.tsv --save-models $modeloutdir &> $outdirwithseed/search.out
         gzip -f $outdirwithseed/search.tsv
         gzip -f $outdirwithseed/search.out
     elif [[ $3 == "nested-cross-val" ]]; then
@@ -102,7 +103,7 @@ elif [[ $1 == "cnn" ]]; then
         outdirwithsplit="$outdir/nested-cross-val/split-${outer_split}"
         mkdir -p $outdirwithsplit
 
-        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 25 --params-mean-val-loss-out-tsv $outdirwithsplit/nested-cross-val.models.tsv --nested-cross-val-out-tsv $outdirwithsplit/nested-cross-val.folds.tsv --save-models $modeloutdir --nested-cross-val-run-for $outer_split &> $outdirwithsplit/nested-cross-val.out
+        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 50 --params-mean-val-loss-out-tsv $outdirwithsplit/nested-cross-val.models.tsv --nested-cross-val-out-tsv $outdirwithsplit/nested-cross-val.folds.tsv --save-models $modeloutdir --nested-cross-val-run-for $outer_split &> $outdirwithsplit/nested-cross-val.out
         gzip -f $outdirwithsplit/nested-cross-val.models.tsv
         gzip -f $outdirwithsplit/nested-cross-val.folds.tsv
         gzip -f $outdirwithsplit/nested-cross-val.out
