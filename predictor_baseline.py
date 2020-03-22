@@ -229,15 +229,13 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=100):
     else:
         raise Exception("Unknown model: '%s'" % model_name)
 
-    if model_name == 'lstm':
-        if gpus_are_available:
-            # Do not parallelize (to avoid memory issues); TensorFlow will already
-            # take advantage of multiple GPUs if available
-            n_jobs = 1
-        else:
-            n_jobs = -2
-        # Use a smaller search space; this is slow to train
-        n_iter = 25
+    if model_name == 'lstm' or model_name == 'mlp':
+        # Do not parallelize (to avoid memory issues); TensorFlow will already
+        # take advantage of multiple GPUs or CPUs if available
+        n_jobs = 1
+        if model_name == 'lstm':
+            # Use a smaller search space; this is slow to train
+            n_iter = 25
     else:
         # Use all but 1 CPU (n_jobs=-2)
         n_jobs = -2
