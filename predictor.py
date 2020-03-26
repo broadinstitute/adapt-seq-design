@@ -157,6 +157,11 @@ def parse_args():
             default=1000,
             help=("Maximum number of training epochs (this employs early "
                   "stopping)"))
+    parser.add_argument('--test-split-frac',
+            type=float,
+            default=0.3,
+            help=("Fraction of the dataset to use for testing the final "
+                  "model"))
     parser.add_argument('--seed',
             type=int,
             default=1,
@@ -311,8 +316,11 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
     """
     # First construct the model
     model = construct_model(params, x_train.shape,
-            regression=params['regression'])
+            regression=params['regression'],
+            compile_for_keras=True)
 
+    # Note: Previoulsly, this would have to train the model on one
+    # data point (reason below); however, this is no longer needed with Keras
     # See https://www.tensorflow.org/beta/guide/keras/saving_and_serializing
     # for details on loading a serialized subclassed model
     # To initialize variables used by the optimizers and any stateful metric
@@ -320,11 +328,6 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
     # note that it appears this is necessary (otherwise, there are no variables
     # in the model, and nothing gets loaded)
     # Only train the models on one data point, and for 1 epoch
-    print('#'*20)
-    print('Initializing variables; ignore metrics..')
-    train_with_keras(model, x_train[:1], y_train[:1], x_validate[:1],
-            y_validate[:1])
-    print('#'*20)
 
     def copy_weights(model):
         # Copy weights, so we can verify that they changed after loading
@@ -353,9 +356,11 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
         # There are some concerns about whether weights are actually being
         # loaded (e.g., https://github.com/tensorflow/tensorflow/issues/27937),
         # so check that they have changed after calling `load_weights`
+        # Use expect_partial() to silence warnings because this will not
+        # load optimizer parameters, which are loaded in construct_model()
         w_before = copy_weights(model)
         w_before2 = copy_weights(model)
-        model.load_weights(os.path.join(load_path, fn))
+        model.load_weights(os.path.join(load_path, fn)).expect_partial()
         w_after = copy_weights(model)
         w_after2 = copy_weights(model)
 
@@ -368,7 +373,7 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
     return model
 
 
-def construct_model(params, shape, regression=False, compile_for_keras=False,
+def construct_model(params, shape, regression=False, compile_for_keras=True,
         y_train=None, parallelize_over_gpus=False):
     """Construct model.
 
@@ -1368,9 +1373,13 @@ def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None):
             for i in range(len(x_test)):
                 def val(k):
                     if k == 'true_activity':
-                        return y_true[i]
+                        yt = y_true[i]
+                        assert len(yt) == 1
+                        return yt[0]
                     elif k == 'predicted_activity':
-                        return y_pred[i]
+                        yp = y_pred[i]
+                        assert len(yp) == 1
+                        return yp[0]
                     elif k == 'crrna_pos':
                         if x_test_pos is None:
                             # Use -1 if position is unknown
@@ -1440,9 +1449,23 @@ def main():
             print("Setting argument '{}'={}".format(k, v))
             params[k] = v
 
+    if args.test_split_frac:
+        train_and_validate_split_frac = 1.0 - args.test_split_frac
+        if not args.load_model:
+            # Since this will be training a model, reserve validation
+            # data (25%) for early stopping
+            validate_frac = 0.2*train_and_validate_split_frac
+            train_frac = train_and_validate_split_frac - validate_frac
+        else:
+            train_frac = train_and_validate_split_frac
+            validate_frac = 0.0
+        split_frac = (train_frac, validate_frac, args.test_split_frac)
+    else:
+        split_frac = None
+
     # Set seed and read data
     set_seed(args.seed)
-    data_parser = read_data(args)
+    data_parser = read_data(args, split_frac=split_frac)
     x_train, y_train = data_parser.train_set()
     x_validate, y_validate = data_parser.validate_set()
     x_test, y_test = data_parser.test_set()
