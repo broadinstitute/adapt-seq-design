@@ -14,6 +14,8 @@
 #           3: 'nested-cross-val'
 #               4: outer split to run (0-based)
 #               5: GPU to run on (0-based)
+#           3: 'test'
+#               4: params id of model to test
 
 
 # Set common arguments
@@ -80,10 +82,6 @@ elif [[ $1 == "cnn" ]]; then
     mkdir -p $outdir
     mkdir -p $modeloutdir
 
-    # Set the GPU to use
-    gpu="$5"
-    export CUDA_VISIBLE_DEVICES="$gpu"
-
     if [[ $3 == "large-search" ]]; then
         # Perform a large hyperparameter search; reserve test set
         # Run on different seeds (so it can be in parallel), but results
@@ -92,7 +90,11 @@ elif [[ $1 == "cnn" ]]; then
         outdirwithseed="$outdir/large-search/seed-${seed}"
         mkdir -p $outdirwithseed
 
-        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $seed --test-split-frac 0.3 --command hyperparam-search --hyperparam-search-cross-val-num-splits 5 --search-type random --num-random-samples 100 --params-mean-val-loss-out-tsv $outdirwithseed/search.tsv --save-models $modeloutdir &> $outdirwithseed/search.out
+        # Set the GPU to use
+        gpu="$5"
+        export CUDA_VISIBLE_DEVICES="$gpu"
+
+        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $seed --test-split-frac 0.3 --command hyperparam-search --hyperparam-search-cross-val-num-splits 5 --search-type random --num-random-samples 50 --params-mean-val-loss-out-tsv $outdirwithseed/search.tsv --save-models $modeloutdir &> $outdirwithseed/search.out
         gzip -f $outdirwithseed/search.tsv
         gzip -f $outdirwithseed/search.out
     elif [[ $3 == "nested-cross-val" ]]; then
@@ -103,12 +105,24 @@ elif [[ $1 == "cnn" ]]; then
         outdirwithsplit="$outdir/nested-cross-val/split-${outer_split}"
         mkdir -p $outdirwithsplit
 
+        # Set the GPU to use
+        gpu="$5"
+        export CUDA_VISIBLE_DEVICES="$gpu"
+
         python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 50 --params-mean-val-loss-out-tsv $outdirwithsplit/nested-cross-val.models.tsv --nested-cross-val-out-tsv $outdirwithsplit/nested-cross-val.folds.tsv --nested-cross-val-run-for $outer_split &> $outdirwithsplit/nested-cross-val.out
         gzip -f $outdirwithsplit/nested-cross-val.models.tsv
         gzip -f $outdirwithsplit/nested-cross-val.folds.tsv
         gzip -f $outdirwithsplit/nested-cross-val.out
+    elif [[ $3 == "test" ]]; then
+        # Run model on the test set and save results
+        model_params_id="$4"
+        outdirformodel="$outdir/test/model-${model_params_id}"
+        mkdir -p $outdirformodel
+
+        python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.tsv.gz &> $outdirformodel/test.out
+        gzip -f $outdirformodel/test.out
     else
-        echo "FATAL: #3 must be 'large-search' or 'nested-cross-val'"
+        echo "FATAL: #3 must be 'large-search' or 'nested-cross-val' or 'test'"
         exit 1
     fi
 
