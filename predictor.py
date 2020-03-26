@@ -317,6 +317,7 @@ def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
     # First construct the model
     model = construct_model(params, x_train.shape,
             regression=params['regression'],
+            y_train=y_train,
             compile_for_keras=True)
 
     # Note: Previoulsly, this would have to train the model on one
