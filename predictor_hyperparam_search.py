@@ -327,6 +327,8 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
     for params in params_iter:
         params['context_nt'] = context_nt
 
+        params_id = params_hash(params)
+
         # Compute a mean validation loss at this choice of params
         val_losses_default, val_losses_different_metrics = cross_validate(
                 params, x, y, num_splits, regression)
@@ -338,7 +340,7 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
             # Train a model across all data, and save hyperparameters and
             # weights
             model_out_path = os.path.join(models_out,
-                    'model-' + params_hash(params))
+                    'model-' + params_id)
             train_and_save_model(params, x, y, regression, context_nt,
                     num_splits, model_out_path)
 
@@ -371,7 +373,7 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
         if loss_out is not None:
             # Write a row listing this model's hyperparameters and validation
             # results
-            row = [params_hash(params), params]
+            row = [params_id, params]
             metrics_ordered = _regression_losses if regression else _classification_losses
             for metric in metrics_ordered:
                 losses = val_losses_different_metrics[metric]
@@ -525,7 +527,8 @@ def params_hash(params, length=8):
     Returns:
         hash of params
     """
-    return hashlib.sha224(str(params).encode()).hexdigest()[-length:]
+    params_str = str(sorted(list(params.items())))
+    return hashlib.sha224(params_str.encode()).hexdigest()[-length:]
 
 
 def train_and_save_model(params, x, y, regression, context_nt,
