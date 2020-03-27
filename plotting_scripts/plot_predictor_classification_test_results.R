@@ -9,6 +9,7 @@ require(reshape2)
 require(dplyr)
 require(viridis)
 require(PRROC)
+require(egg)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
@@ -81,9 +82,93 @@ pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE,
 print(roc)
 print(pr)
 
+#####################################################################
+# Compute ROC and PR curves for different choices of Hamming distance,
+# and separately for different choices of PFS
+
+roc.df.all <- data.frame(roc$curve)
+roc.df.all$hamming.dist <- rep("all", nrow(roc.df.all))
+roc.df.all$cas13a.pfs <- rep("all", nrow(roc.df.all))
+pr.df.all <- data.frame(pr$curve)
+pr.df.all$hamming.dist <- rep("all", nrow(pr.df.all))
+pr.df.all$cas13a.pfs <- rep("all", nrow(pr.df.all))
+
+# ROC - Hamming distance
+hamming.dist.roc <- do.call(rbind, lapply(unique(test.results$hamming.dist),
+    function(hamming.dist) {
+        if (hamming.dist > 5) {
+            # Only use hamming.dist <= 5; higher values have too little data
+            return(data.frame())
+        }
+        vals <- test.results[test.results$hamming.dist == hamming.dist, ]
+        pos <- vals$predicted.activity[vals$true.activity == 1]
+        neg <- vals$predicted.activity[vals$true.activity == 0]
+        roc <- roc.curve(scores.class0=pos, scores.class1=neg, curve=TRUE)
+        roc.df <- data.frame(roc$curve)
+        roc.df$hamming.dist <- rep(hamming.dist, nrow(roc.df))
+        roc.df$cas13a.pfs <- rep(NA, nrow(roc.df))
+        return(roc.df)
+    }
+))
+hamming.dist.roc$hamming.dist <- factor(hamming.dist.roc$hamming.dist)
+hamming.dist.roc <- rbind(hamming.dist.roc, roc.df.all)
+
+# PR - Hamming distance
+hamming.dist.pr <- do.call(rbind, lapply(unique(test.results$hamming.dist),
+    function(hamming.dist) {
+        if (hamming.dist > 5) {
+            # Only use hamming.dist <= 5; higher values have too little data
+            return(data.frame())
+        }
+        vals <- test.results[test.results$hamming.dist == hamming.dist, ]
+        pos <- vals$predicted.activity[vals$true.activity == 1]
+        neg <- vals$predicted.activity[vals$true.activity == 0]
+        pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE)
+        pr.df <- data.frame(pr$curve)
+        pr.df$hamming.dist <- rep(hamming.dist, nrow(pr.df))
+        pr.df$cas13a.pfs <- rep(NA, nrow(pr.df))
+        return(pr.df)
+    }
+))
+hamming.dist.pr$hamming.dist <- factor(hamming.dist.pr$hamming.dist)
+hamming.dist.pr <- rbind(hamming.dist.pr, pr.df.all)
+
+# ROC - Cas13a PFS
+cas13a.pfs.roc <- do.call(rbind, lapply(unique(test.results$cas13a.pfs),
+    function(cas13a.pfs) {
+        vals <- test.results[test.results$cas13a.pfs == cas13a.pfs, ]
+        pos <- vals$predicted.activity[vals$true.activity == 1]
+        neg <- vals$predicted.activity[vals$true.activity == 0]
+        roc <- roc.curve(scores.class0=pos, scores.class1=neg, curve=TRUE)
+        roc.df <- data.frame(roc$curve)
+        roc.df$cas13a.pfs <- rep(cas13a.pfs, nrow(roc.df))
+        roc.df$hamming.dist <- rep(NA, nrow(roc.df))
+        return(roc.df)
+    }
+))
+cas13a.pfs.roc$cas13a.pfs <- factor(cas13a.pfs.roc$cas13a.pfs)
+cas13a.pfs.roc <- rbind(cas13a.pfs.roc, roc.df.all)
+
+# PR - Cas13a PFS
+cas13a.pfs.pr <- do.call(rbind, lapply(unique(test.results$cas13a.pfs),
+    function(cas13a.pfs) {
+        vals <- test.results[test.results$cas13a.pfs == cas13a.pfs, ]
+        pos <- vals$predicted.activity[vals$true.activity == 1]
+        neg <- vals$predicted.activity[vals$true.activity == 0]
+        pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE)
+        pr.df <- data.frame(pr$curve)
+        pr.df$cas13a.pfs <- rep(cas13a.pfs, nrow(pr.df))
+        pr.df$hamming.dist <- rep(NA, nrow(pr.df))
+        return(pr.df)
+    }
+))
+cas13a.pfs.pr$cas13a.pfs <- factor(cas13a.pfs.pr$cas13a.pfs)
+cas13a.pfs.pr <- rbind(cas13a.pfs.pr, pr.df.all)
+#####################################################################
 
 #####################################################################
 # Plot ROC curve
+# Color represents threshold
 
 p <- ggplot(data.frame(roc$curve), aes(x=X1, y=X2, color=X3))
 p <- p + geom_line()
@@ -91,11 +176,41 @@ p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for ra
 p <- p + xlab("FPR") + ylab("Sensitivity") + labs(color="Threshold")
 p <- p + scale_color_viridis() # adjust color gradient
 p <- p + theme_bw(base_size=18) # bw and larger font sizes
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # remove grid lines
 p.roc <- p
 #####################################################################
 
 #####################################################################
+# Plot ROC curve
+# Color represents choices of Hamming distance
+
+p <- ggplot(hamming.dist.roc, aes(x=X1, y=X2))
+p <- p + geom_line(aes(color=hamming.dist))
+p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for random classifier
+p <- p + xlab("FPR") + ylab("Sensitivity") + labs(color="Hamming distance")
+p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
+p <- p + theme_bw(base_size=18) # bw and larger font sizes
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # remove grid lines
+p.hamming.dist.roc <- p
+#####################################################################
+
+#####################################################################
+# Plot ROC curve
+# Color represents choices of Cas13a PFS
+
+p <- ggplot(cas13a.pfs.roc, aes(x=X1, y=X2))
+p <- p + geom_line(aes(color=cas13a.pfs))
+p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for random classifier
+p <- p + xlab("FPR") + ylab("Sensitivity") + labs(color="PFS")
+p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
+p <- p + theme_bw(base_size=18) # bw and larger font sizes
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # remove grid lines
+p.cas13a.pfs.roc <- p
+#####################################################################
+
+#####################################################################
 # Plot PR curve
+# Color represents threshold
 
 random.precision <- length(pos) / nrow(test.results)
 
@@ -106,15 +221,86 @@ p <- p + xlab("Recall") + ylab("Precision") + labs(color="Threshold")
 p <- p + ylim(0.8, 1.0)
 p <- p + scale_color_viridis() # adjust color gradient
 p <- p + theme_bw(base_size=18) # bw and larger font sizes
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # remove grid lines
 p.pr <- p
 #####################################################################
 
 #####################################################################
+# Plot PR curve
+# Color represents choices of Hamming distance
+
+# Find the precision of a random classifier for each choice of
+# Hamming distance
+random.precision <- do.call(rbind, lapply(unique(test.results$hamming.dist),
+    function(hamming.dist) {
+        if (hamming.dist > 5) {
+            # Only use hamming.dist <= 5; higher values have too little data
+            return(data.frame())
+        }
+        vals <- test.results[test.results$hamming.dist == hamming.dist, ]
+        pos <- vals$predicted.activity[vals$true.activity == 1]
+        neg <- vals$predicted.activity[vals$true.activity == 0]
+        df <- data.frame(hamming.dist=c(hamming.dist),
+                         precision=c(length(pos) / nrow(vals)))
+        return(df)
+    }
+))
+random.precision$hamming.dist <- factor(random.precision$hamming.dist)
+random.precision <- rbind(random.precision,
+                          data.frame(hamming.dist=c("all"),
+                                     precision=c(length(pos) / nrow(test.results))))
+
+p <- ggplot(hamming.dist.pr, aes(x=X1, y=X2))
+p <- p + geom_line(aes(color=hamming.dist))
+p <- p + geom_hline(data=random.precision, aes(yintercept=precision, color=hamming.dist), linetype="dotted")    # representing random classifier
+p <- p + xlab("Recall") + ylab("Precision") + labs(color="Hamming distance")
+p <- p + ylim(0.5, 1.0)
+p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
+p <- p + theme_bw(base_size=18) # bw and larger font sizes
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # remove grid lines
+p.hamming.dist.pr <- p
+#####################################################################
+
+#####################################################################
+# Plot PR curve
+# Color represents choices of PFS
+
+# Find the precision of a random classifier for each choice of Cas13a PFS
+random.precision <- do.call(rbind, lapply(unique(test.results$cas13a.pfs),
+    function(cas13a.pfs) {
+        vals <- test.results[test.results$cas13a.pfs == cas13a.pfs, ]
+        pos <- vals$predicted.activity[vals$true.activity == 1]
+        neg <- vals$predicted.activity[vals$true.activity == 0]
+        df <- data.frame(cas13a.pfs=c(as.character(cas13a.pfs)),
+                         precision=c(length(pos) / nrow(vals)))
+        return(df)
+    }
+))
+random.precision <- rbind(random.precision,
+                          data.frame(cas13a.pfs=c("all"),
+                                     precision=c(length(pos) / nrow(test.results))))
+
+p <- ggplot(cas13a.pfs.pr, aes(x=X1, y=X2))
+p <- p + geom_line(aes(color=cas13a.pfs))
+p <- p + geom_hline(data=random.precision, aes(yintercept=precision, color=cas13a.pfs), linetype="dotted")    # representing random classifier
+p <- p + xlab("Recall") + ylab("Precision") + labs(color="PFS")
+p <- p + ylim(0.5, 1.0)
+p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
+p <- p + theme_bw(base_size=18) # bw and larger font sizes
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # remove grid lines
+p.cas13a.pfs.pr <- p
+#####################################################################
+
+#####################################################################
 # Produce PDF
-g <- arrangeGrob(p.roc,
-                 p.pr,
-                 ncol=1)
-ggsave(OUT.PDF, g, width=8, height=16, useDingbats=FALSE, limitsize=FALSE)
+g <- ggarrange(p.roc,
+               p.pr,
+               p.hamming.dist.roc,
+               p.hamming.dist.pr,
+               p.cas13a.pfs.roc,
+               p.cas13a.pfs.pr,
+               ncol=1)
+ggsave(OUT.PDF, g, width=10, height=36, useDingbats=FALSE, limitsize=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
