@@ -175,6 +175,11 @@ def parse_args():
             help=("If set, path to .tsv.gz at which to write test results, "
                   "including sequences in the test set and predictions "
                   "(one row per test data point)"))
+    parser.add_argument('--determine-classifier-threshold-for-precision',
+            type=float,
+            default=0.95,
+            help=("If set, determine thresholds (across folds) that "
+                  "achieve this precision; does not use test data"))
     args = parser.parse_args()
 
     # Print the arguments provided
@@ -555,6 +560,49 @@ def load_model_for_cas13_regression_on_active(load_path):
     # Load the model
     return load_model(load_path, params, x_train, y_train, x_validate,
             y_validate, data_parser)
+
+
+
+def determine_classifier_threshold_for_precision(params, x, y,
+        num_splits, data_parser, precision_threshold):
+    """Find a threshold, via cross-valiation, to achieve a desired precision.
+
+    This focuses on precision because it is an important metric for
+    deploying assays.
+
+    It finds the smallest threshold that achieves a desired precision.
+    It does this across multiple splits of the training data.
+
+    Args:
+        params: model parameters (model should *not* be pre-trained)
+        x, y: data to perform cross-validation with
+        num_splits: number of folds to compute threshold
+        data_parser: object to parse data from parse_data
+        precision_threshold: desired threshold on precision
+
+    Returns:
+        list of thresholds, one per split
+    """
+    # Construct a function that the test function will callback
+    best_thresholds = []
+    def find_threshold(y_true, y_pred):
+        # Compute threshold
+        pr_curve = sklearn.metrics.precision_recall_curve(y_true, y_pred)
+        precision, recall, thresholds = pr_curve
+
+        # Find the smallest threshold (highest i) where precision is
+        # >= precision_threshold
+        for i, prec in enumerate(precision):
+            if prec >= precision_threshold:
+                thres = float(thresholds[i])
+                break
+        best_thresholds.append(thres)
+
+    import predictor_hyperparam_search as phs
+    phs.cross_validate(params, x, y, num_splits, False,
+            callback=find_threshold, dp=data_parser)
+
+    return best_thresholds
 
 
 #####################################################################
@@ -1325,7 +1373,8 @@ def train_with_keras(model, x_train, y_train, x_validate, y_validate,
             verbose=2)
 
 
-def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None):
+def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None,
+        callback=None):
     """Test a model.
 
     This prints metrics.
@@ -1337,6 +1386,8 @@ def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None):
         data_parser: data parser object from parse_data
         write_test_tsv: if set, path to TSV at which to write data on predictions
             as well as the testing sequences (one row per data point)
+        callback: if set, a function to call that accepts the true and
+            predicted test values -- called like callback(y_true, f_pred)
 
     Returns:
         dict with test metrics at the end (keys are 'loss'
@@ -1425,6 +1476,9 @@ def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None):
 
     print('TEST METRICS:', test_metrics)
 
+    if callback is not None:
+        callback(y_true, y_pred)
+
     return test_metrics
 
 
@@ -1505,6 +1559,21 @@ def main():
     # Test the model
     test_with_keras(model, x_test, y_test, data_parser,
             write_test_tsv=args.write_test_tsv)
+
+    if not regression:
+        # Determine threshold for classifier
+        # Note that this should only use params; it should *not* use
+        # a pre-trained model with loaded weights
+        # This does not use test data
+        print('Determining classifier threshold via cross-validation')
+        num_splits = 5
+        thresholds = determine_classifier_threshold_for_precision(
+                params, x_train, y_train, num_splits, data_parser,
+                args.determine_classifier_threshold_for_precision)
+        print(('Mean threshold across folds to achieve precision of %f = %f') %
+                (args.determine_classifier_threshold_for_precision,
+                    np.mean(thresholds)))
+        print('  Thresholds are:', thresholds)
 
 
 if __name__ == "__main__":

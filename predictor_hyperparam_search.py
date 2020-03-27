@@ -85,7 +85,8 @@ def determine_val_loss(results):
     return default_loss, losses
 
 
-def cross_validate(params, x, y, num_splits, regression):
+def cross_validate(params, x, y, num_splits, regression,
+        callback=None, dp=None):
     """Perform k-fold cross-validation.
 
     This uses data_parser.split() to split data, which uses stratified
@@ -97,6 +98,9 @@ def cross_validate(params, x, y, num_splits, regression):
         y: output (labels, if classification)
         num_splits: number of folds
         regression: if True, perform regression; if False, classification
+        callback: if set, a function to have the test function call
+        dp: if set, a data parser to use rather than the module-wide
+            data_parser object
 
     Returns:
         tuple ([default validation loss for each fold], dict {metric: [list of
@@ -104,10 +108,13 @@ def cross_validate(params, x, y, num_splits, regression):
     """
     print('Performing cross-validation with parameters: {}'.format(params))
 
+    if dp is None:
+        dp = data_parser
+
     val_losses_default = []
     val_losses_different_metrics = defaultdict(list)
     i = 0
-    split_iter = data_parser.split(x, y, num_splits=num_splits,
+    split_iter = dp.split(x, y, num_splits=num_splits,
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in split_iter:
         print('STARTING FOLD {} of {}'.format(i+1, num_splits))
@@ -128,7 +135,7 @@ def cross_validate(params, x, y, num_splits, regression):
         # it on the fold)
         # Only use one of the splits, with 3/4 being used to train the model
         # and 1/4 for early stopping
-        train_split_iter = data_parser.split(x_train, y_train, num_splits=4,
+        train_split_iter = dp.split(x_train, y_train, num_splits=4,
                 stratify_by_pos=True)
         x_train_for_train, y_train_for_train, x_validate_for_es, y_validate_for_es = next(train_split_iter)
 
@@ -143,7 +150,7 @@ def cross_validate(params, x, y, num_splits, regression):
         # Run predictor.test_with_keras() on the validation data for this fold, to
         # get its validation results
         results = predictor.test_with_keras(model, x_validate, y_validate,
-                data_parser)
+                dp, callback=callback)
         a, b = determine_val_loss(results)
         val_losses_default += [a]
         for k in b.keys():

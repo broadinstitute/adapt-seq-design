@@ -119,7 +119,13 @@ elif [[ $1 == "cnn" ]]; then
         outdirformodel="$outdir/test/model-${model_params_id}"
         mkdir -p $outdirformodel
 
-        python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.tsv.gz &> $outdirformodel/test.out
+        if [[ $2 == "classify" ]]; then
+            classifier_threshold_arg="--determine-classifier-threshold-for-precision 0.95"
+        else
+            classifier_threshold_arg=""
+        fi
+
+        python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.tsv.gz $classifier_threshold_arg &> $outdirformodel/test.out
         gzip -f $outdirformodel/test.out
     else
         echo "FATAL: #3 must be 'large-search' or 'nested-cross-val' or 'test'"
