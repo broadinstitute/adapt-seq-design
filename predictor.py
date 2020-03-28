@@ -3,6 +3,7 @@ regression.
 """
 
 import argparse
+from collections import defaultdict
 import gzip
 import os
 import pickle
@@ -180,6 +181,16 @@ def parse_args():
             default=0.975,
             help=("If set, determine thresholds (across folds) that "
                   "achieve this precision; does not use test data"))
+    parser.add_argument('--filter-test-data-by-classification-score',
+            nargs=2,
+            help=("If set, only test on data that is classified as active. "
+                  "This consists of 2 arguments: (1) path to TSV file "
+                  "written by test functions with classification scores; "
+                  "(2) score to use as threshold for classifying (>= "
+                  "threshold is active). This is useful when evaluating "
+                  "regression models trained on active data points; we "
+                  "want to test only on data that has been classified as "
+                  "active."))
     args = parser.parse_args()
 
     # Print the arguments provided
@@ -603,6 +614,87 @@ def determine_classifier_threshold_for_precision(params, x, y,
             callback=find_threshold, dp=data_parser)
 
     return best_thresholds
+
+
+def filter_test_data_by_classification_score(x_test, y_test,
+        data_parser, classification_test_tsv, score_threshold):
+    """Select test data points that are classified as positive.
+
+    This is useful if we wish to evaluate regression that was trained on active
+    data points. We would first classify the test data, and then only
+    evaluate regression using the data points that are classified
+    as active.
+
+    Args:
+        x_test, y_test: test data
+        data_parser: object to parse data from parse_data
+        classification_test_tsv: the output TSV file ('write_test_tsv')
+            written by the test functions
+        score_threshold: classification score (between 0 and 1); deem
+            all test data with scores >= SCORE_THRESHOLD to be
+            active/positive
+
+    Returns:
+        list of tuples (x_test, y_test), filtered to only
+        contain active data points
+    """
+    # Read all rows in classification_test_tsv
+    header_idx = {}
+    rows = []
+    with gzip.open(classification_test_tsv, 'rt') as f:
+        for i, line in enumerate(f):
+            ls = line.rstrip().split('\t')
+            if i == 0:
+                # Parse header
+                for j in range(len(ls)):
+                    header_idx[ls[j]] = j
+            else:
+                rows += [ls]
+    rows_new = []
+    for row in rows:
+        row_dict = {k: row[header_idx[k]] for k in header_idx.keys()}
+        rows_new += [row_dict]
+    rows = rows_new
+
+    # Convert x_test, y_test into the same encoding that is
+    # used in the test TSV; keep just the target and guide
+    # as strings, and crRNA position, which is enough to
+    # uniquely identify data points (up to technical replicates)
+    # In particular, map a tuple of that to indices of the test
+    # data
+    encoding_idx = defaultdict(list)
+    for i in range(len(x_test)):
+        m = data_parser.seq_features_from_encoding(x_test[i])
+        crrna_pos = data_parser.pos_for_input(x_test[i])
+        enc = (m['target'], m['guide'], crrna_pos)
+        encoding_idx[enc].append(i)
+
+    # Keep all test data that is classified as active
+    # Note that there are replicates, but all the replicates for a single
+    # guide-target pair will have the same classification score because the
+    # classification is deterministic and depends only on the guide-target
+    # sequence (however their measured activity may differ). So if a
+    # guide-target pair is classified as active, keep all of its replicates;
+    # and if it is classified as inactive, discard all replicates
+    x_test_filtered, y_test_filtered = [], []
+    added_enc = set()
+    for row in rows:
+        enc = (row['target'], row['guide'], int(row['crrna_pos']))
+        if enc in added_enc:
+            # Already added data points for this
+            continue
+        if float(row['predicted_activity']) >= score_threshold:
+            # Classify this as active, and add all data points (replicates)
+            # for this guide-target pair
+            for i in encoding_idx[enc]:
+                x_test_filtered.append(x_test[i])
+                y_test_filtered.append(y_test[i])
+            added_enc.add(enc)
+
+    x_test_filtered = np.array(x_test_filtered)
+    y_test_filtered = np.array(y_test_filtered)
+
+    return x_test_filtered, y_test_filtered
 
 
 #####################################################################
@@ -1555,6 +1647,16 @@ def main():
 
         # Train the model, with validation
         train_with_keras(model, x_train, y_train, x_validate, y_validate)
+
+    if args.filter_test_data_by_classification_score:
+        if not regression:
+            raise Exception(("Can only use --filter-test-data-by-classification-"
+                "score when testing regression"))
+        classification_test_tsv, score_threshold = args.filter_test_data_by_classification_score
+        score_threshold = float(score_threshold)
+        x_test, y_test = filter_test_data_by_classification_score(
+                x_test, y_test, data_parser,
+                classification_test_tsv, score_threshold)
 
     # Test the model
     test_with_keras(model, x_test, y_test, data_parser,

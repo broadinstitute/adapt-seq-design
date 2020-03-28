@@ -16,6 +16,10 @@
 #               5: GPU to run on (0-based)
 #           3: 'test'
 #               4: params id of model to test
+#                   if 'regress', then:
+#                       5: path to classification test results TSV
+#                       6: classification score threshold to use
+#                          for classifying activity
 
 
 # Set common arguments
@@ -121,12 +125,19 @@ elif [[ $1 == "cnn" ]]; then
 
         if [[ $2 == "classify" ]]; then
             classifier_threshold_arg="--determine-classifier-threshold-for-precision 0.975"
-        else
-            classifier_threshold_arg=""
+            python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.tsv.gz $classifier_threshold_arg &> $outdirformodel/test.out
+            gzip -f $outdirformodel/test.out
+        elif [[ $2 == "regress" ]]; then
+            # Run this to test regressing only on true active data points ($method_arg uses --cas13-regress-only-on-active)
+            python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.on-true-active.tsv.gz &> $outdirformodel/test.on-true-active.out
+            gzip -f $outdirformodel/test.on-true-active.out
+
+            # Also run to test regressing on all test data, filtered to those that are classified as active
+            filter_test_data_arg="--filter-test-data-by-classification-score $5 $6"
+            python -u predictor.py $COMMON_ARGS --cas13-regress-on-all --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.on-classified-active.tsv.gz $filter_test_data_arg &> $outdirformodel/test.on-classified-active.out
+            gzip -f $outdirformodel/test.on-classified-active.out
         fi
 
-        python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.tsv.gz $classifier_threshold_arg &> $outdirformodel/test.out
-        gzip -f $outdirformodel/test.out
     else
         echo "FATAL: #3 must be 'large-search' or 'nested-cross-val' or 'test'"
         exit 1
