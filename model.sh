@@ -120,7 +120,7 @@ elif [[ $1 == "cnn" ]]; then
         mkdir -p $outdirformodel
 
         if [[ $2 == "classify" ]]; then
-            classifier_threshold_arg="--determine-classifier-threshold-for-precision 0.95"
+            classifier_threshold_arg="--determine-classifier-threshold-for-precision 0.975"
         else
             classifier_threshold_arg=""
         fi

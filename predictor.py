@@ -177,7 +177,7 @@ def parse_args():
                   "(one row per test data point)"))
     parser.add_argument('--determine-classifier-threshold-for-precision',
             type=float,
-            default=0.95,
+            default=0.975,
             help=("If set, determine thresholds (across folds) that "
                   "achieve this precision; does not use test data"))
     args = parser.parse_args()
@@ -1573,6 +1573,9 @@ def main():
         print(('Mean threshold across folds to achieve precision of %f = %f') %
                 (args.determine_classifier_threshold_for_precision,
                     np.mean(thresholds)))
+        print(('Median threshold across folds to achieve precision of %f = %f') %
+                (args.determine_classifier_threshold_for_precision,
+                    np.median(thresholds)))
         print('  Thresholds are:', thresholds)
 
 
