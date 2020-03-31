@@ -1,7 +1,9 @@
 # Plot distribution of mean validation loss (over folds) for different
 # choices of hyperparameters.
 #
-# This currently only looks at the advantage of locally connected layers.
+# Note that, for regression, there can be warnings about missing values; this
+# is because, for some models, the output is constant and Spearman's rho is
+# nan.
 #
 # By Hayden Metsky <hayden@mit.edu>
 
@@ -190,7 +192,7 @@ p.learning.rate <- plots("learning.rate", "Learning rate", "Learning rate", FALS
 p.skip.batch.norm <- plots("skip.batch.norm", "Skipped batch norm", "Skipped batch norm", TRUE, FALSE)
 
 p.add.gc.content <- plots("add.gc.content", "Added in GC content", "Added in GC content", TRUE, FALSE)
-p.sample.weight.scaling.factor <- plots("sample.weight.scaling.factor", "Sample weight scaling factor", "Sample weight scaling factor", FALSE, TRUE)
+p.sample.weight.scaling.factor <- plots("sample.weight.scaling.factor", "Sample weight scaling factor", "Sample weight scaling factor", FALSE, FALSE)
 
 # Save plots to PDF
 g <- arrangeGrob(p.has.lc.layer$loss,
