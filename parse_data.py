@@ -417,7 +417,7 @@ class Cas13ActivityParser:
         # Remove the inactive points
         if self.regress_only_on_active:
             rows = [row for row in rows if
-                    float(row['out_logk_measurement']) >= self.ACTIVITY_THRESHOLD]
+                    float(row['out_logk_measurement']) > self.ACTIVITY_THRESHOLD]
 
         # Calculate the mean and stdev of activity for each crRNA (according
         # to position); note that the input includes multiple measurements
