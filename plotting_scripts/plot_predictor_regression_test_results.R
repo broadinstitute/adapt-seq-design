@@ -6,14 +6,13 @@
 require(ggplot2)
 require(gridExtra)
 require(reshape2)
-require(dplyr)
 require(ggridges)
 require(viridis)
+require(ggsignif)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
 OUT.PDF <- args[2]
-
 
 ## A helper function from:
 ##   http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/#Helper%20functions
@@ -75,6 +74,47 @@ test.results.melted <- melt(test.results,
                             variable.name="activity.type",
                             value.name="activity")
 
+# Find test results summarized for each crRNA (across targets) and
+# activity type
+test.results.summarized.over.targets <- summarySE(test.results.melted,
+                                                  measurevar="activity",
+                                                  groupvars=c("crrna.pos", "activity.type"))
+
+# Because it is hard to visualize, print regression results
+# for different choices of guide-target Hamming distance and PFS
+# And save them
+metrics <- function(x, y) {
+    r <- cor(x, y, method="pearson")
+    rho <- cor(x, y, method="spearman")
+    return(list(r=r, rho=rho, str=paste0("r=", r, "; rho=", rho)))
+}
+print("Metrics:")
+print("  All data points:")
+all.metrics <- metrics(test.results$true.activity, test.results$predicted.activity)
+print(paste0("    ", all.metrics$str))
+print("  Each value of Hamming distance:")
+hd.rho <- data.frame(hamming.dist=c(), rho=c())
+for (hd in sort(unique(test.results$hamming.dist))) {
+    tr.hd <- test.results[test.results$hamming.dist == hd, ]
+    hd.metrics <- metrics(tr.hd$true.activity, tr.hd$predicted.activity)
+    print(paste0("    Dist=", hd, ": ", hd.metrics$str))
+    hd.rho <- rbind(hd.rho, data.frame(hamming.dist=c(hd), rho=c(hd.metrics$rho)))
+}
+print("  Each PFS:")
+pfs.rho <- data.frame(cas13a.pfs=c(), rho=c())
+for (pfs in sort(unique(test.results$cas13a.pfs))) {
+    tr.pfs <- test.results[test.results$cas13a.pfs == pfs, ]
+    pfs.metrics <- metrics(tr.pfs$true.activity, tr.pfs$predicted.activity)
+    print(paste0("    PFS=", pfs, ": ", pfs.metrics$str))
+    pfs.rho <- rbind(pfs.rho, data.frame(cas13a.pfs=c(pfs), rho=c(pfs.metrics$rho)))
+}
+
+# Determine activity range for plots, so axes have the same range
+# Round to the nearest 0.5
+lo <- floor(min(test.results$true.activity, test.results$predicted.activity) * 2) / 2
+hi <- ceiling(max(test.results$true.activity, test.results$predicted.activity) * 2) / 2
+ACTIVITY.RANGE <- c(lo, hi)
+
 #####################################################################
 # Plot distribution of true activity and predicted activity
 # Show as density plots
@@ -86,8 +126,8 @@ p <- p + scale_fill_viridis(discrete=TRUE) # adjust color gradient
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
                legend.position=c(0.01,0.99),
-               legend.text=element_text(size=10),
-               legend.title=element_text(size=10))
+               legend.text=element_text(size=7),
+               legend.title=element_text(size=7))
 p.output.dist <- p
 #####################################################################
 
@@ -99,17 +139,45 @@ p.output.dist <- p
 # the same color are the same crRNA, ones with similar colors likely
 # overlap
 
+all.rho.str <- paste0("rho = ", format(all.metrics$rho, digits=3))
+
 p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
-p <- p + geom_point(aes(color=crrna.pos))
+p <- p + geom_point(aes(color=crrna.pos), alpha=0.5, stroke=0)
 p <- p + scale_color_viridis() # adjust color gradient
-#p <- p + xlim(-2.5, 0) + ylim(-2.5, 0)  # make plot be square
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
 p <- p + xlab("True activity") + ylab("Predicted activity")
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
                legend.position=c(0.01,0.99),
-               legend.text=element_text(size=10),
-               legend.title=element_text(size=10))
+               legend.text=element_text(size=7),
+               legend.title=element_text(size=7))
+# Include text with the rho value
+p <- p + annotate(geom="text", label=all.rho.str,
+                  x=Inf, y=Inf, hjust=1, vjust=1, size=3)
 p.true.vs.predicted <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value with density
+# contours
+# This is useful because on the scatter plot many points overlap
+# and it is hard to read
+
+p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
+p <- p + stat_density_2d(aes(fill=stat(level)), geom='polygon', contour=TRUE)
+#p <- p + stat_density_2d(aes(fill=stat(density)), geom='raster', contour=FALSE) # density heatmap
+p <- p + scale_fill_viridis() # adjust color gradient
+p <- p + geom_point(shape='.', color='black', size=0.005, alpha=0.1) # show the points as small black dots
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + theme_bw(base_size=18) # bw & larger font sizes
+p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=7),
+               legend.title=element_text(size=7))
+p.true.vs.predicted.density.contours <- p
 #####################################################################
 
 #####################################################################
@@ -119,16 +187,91 @@ p.true.vs.predicted <- p
 # The points are colored by guide-target Hamming distance
 
 p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
-p <- p + geom_point(aes(color=hamming.dist))
+p <- p + geom_point(aes(color=hamming.dist), alpha=0.5, stroke=0)
 p <- p + scale_color_viridis() # adjust color gradient
-#p <- p + xlim(-2.5, 0) + ylim(-2.5, 0)  # make plot be square
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
 p <- p + xlab("True activity") + ylab("Predicted activity")
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
                legend.position=c(0.01,0.99),
-               legend.text=element_text(size=10),
-               legend.title=element_text(size=10))
+               legend.text=element_text(size=7),
+               legend.title=element_text(size=7))
 p.true.vs.predicted.colored.by.hamming.dist <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value
+# This is a scatter plot, where each dot represents a target/crRNA
+# pair (test data point)
+# There is a facet for each guide-target Hamming distance
+
+hd.rho$rho.str <- paste0("rho = ", format(hd.rho$rho, digits=3))
+
+#facet.ncol <- floor(sqrt(length(unique(test.results$hamming.dist)))) + 1
+facet.ncol <- 4
+p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(alpha=0.5, stroke=0, size=0.2)
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + facet_wrap(~ hamming.dist, ncol=facet.ncol)
+p <- p + theme_bw(base_size=18) # bw & larger font sizes
+p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=7),
+               legend.title=element_text(size=7))
+# Include text with the rho value
+p <- p + geom_text(data=hd.rho, aes(label=rho.str),
+                   x=Inf, y=Inf, hjust=1, vjust=1, size=3)
+p.true.vs.predicted.facet.by.hamming.dist <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value
+# This is a scatter plot, where each dot represents a target/crRNA
+# pair (test data point)
+# The points are colored by Cas13 PFS
+
+p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(aes(color=cas13a.pfs), alpha=0.5, stroke=0)
+p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + theme_bw(base_size=18) # bw & larger font sizes
+p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=7),
+               legend.title=element_text(size=7))
+p.true.vs.predicted.colored.by.pfs <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value
+# This is a scatter plot, where each dot represents a target/crRNA
+# pair (test data point)
+# There is a facet for each Cas13a PFS
+
+pfs.rho$rho.str <- paste0("rho = ", format(pfs.rho$rho, digits=3))
+
+#facet.ncol <- floor(sqrt(length(unique(test.results$cas13a.pfs)))) + 1
+facet.ncol <- 4
+p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(alpha=0.5, stroke=0, size=0.2)
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + facet_wrap(~ cas13a.pfs, ncol=facet.ncol)
+p <- p + theme_bw(base_size=18) # bw & larger font sizes
+p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
+               legend.position=c(0.01,0.99),
+               legend.text=element_text(size=7),
+               legend.title=element_text(size=7))
+# Include text with the rho value
+p <- p + geom_text(data=pfs.rho, aes(label=rho.str),
+                   x=Inf, y=Inf, hjust=1, vjust=1, size=3)
+p.true.vs.predicted.facet.by.pfs <- p
 #####################################################################
 
 #####################################################################
@@ -140,6 +283,7 @@ p.true.vs.predicted.colored.by.hamming.dist <- p
 
 # Create a separate data frame with a quantile factor that also
 # includes 'all' for all data points
+require(dplyr)
 test.results.with.quantile.group <- data.frame(test.results)
 test.results.with.quantile.group$predicted.quantile <- ntile(test.results.with.quantile.group$predicted.activity, 4)
 test.results.all <- data.frame(test.results)
@@ -157,21 +301,104 @@ p.by.predicted.quantile.group <- p
 #####################################################################
 
 #####################################################################
+# Print p-values comparing quantile groupings -- i.e., whether
+# the best quartile of predictions has higher true activity than
+# the second best quartile
+# Use Wilcoxon rank sum (Mann Whitney U) test
+
+compare.quartile <- function(a, b) {
+    a.vals <- test.results.with.quantile.group$true.activity[test.results.with.quantile.group$predicted.quantile == a]
+    b.vals <- test.results.with.quantile.group$true.activity[test.results.with.quantile.group$predicted.quantile == b]
+    return(wilcox.test(a.vals, b.vals, paired=FALSE, alternative="greater")$p.value)
+}
+
+print("p-values for quartile comparisons (quartile 4 is best predictions, 1 is worst):")
+print(paste0("  4 > 3: p=", compare.quartile("4", "3")))
+print(paste0("  3 > 2: p=", compare.quartile("3", "2")))
+print(paste0("  2 > 1: p=", compare.quartile("2", "1")))
+#####################################################################
+
+#####################################################################
 # Plot true activity value for different predicted quantile groupings
 # y-axis shows the quantile (grouped) for the predicted activity and
 # x-axis shows the true activity as a boxplot
 # Use quartiles here (4 groupings)
 
-# Only show top quartile, bottom quartile, and all
-test.results.with.quantile.group.subset <- test.results.with.quantile.group[test.results.with.quantile.group$predicted.quantile %in% c("all", "1", "4"), ]
+box.n <- function(x) {
+    return(data.frame(y=max(x)-0.5, vjust="bottom", label=paste0("n=", length(x))))
+}
 
 # For geom_boxplot(), we need the variable of interest to be y, so use
 # this and then do coord_flip()
-p <- ggplot(test.results.with.quantile.group.subset, aes(y=true.activity, x=predicted.quantile))
+p <- ggplot(test.results.with.quantile.group, aes(y=true.activity, x=predicted.quantile))
 p <- p + ylab("Activity") + xlab("Quartile")
-p <- p + geom_boxplot() + coord_flip()
+p <- p + geom_boxplot(#outlier.size=0.25,
+                      #outlier.stroke=0,
+                      #outlier.color="gray46",
+                      outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
+# Add p-values, using Wilcoxon rank sum (aka, Mann Whitney U) test to
+# compare whether predictions in each quartile are 'better' (have
+# higher true activity) than predictions from another quartile
+p <- p + geom_signif(comparisons=list(c("4","3"), c("3","2"), c("2","1")),
+                     test="wilcox.test", test.args=list(paired=FALSE, alternative="greater"),
+                     step_increase=0.1, size=0.1)
+p <- p + stat_summary(fun.data=box.n, geom="text", size=2) # show N
+p <- p + coord_flip()
 p <- p + theme_bw(base_size=18)    # bw & larger font sizes
 p.by.predicted.quantile.group.boxplot <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value for different predicted quantile groupings,
+# with facet for each choice of Hamming distance
+# y-axis shows the quantile (grouped) for the predicted activity and
+# x-axis shows the true activity as a boxplot
+# Use quartiles here (4 groupings)
+# coord_flip() does not work well with facet_wrap(), so we cannot use
+# the approach above to coord_flip()
+
+#facet.ncol <- floor(sqrt(length(unique(test.results.with.quantile.group$hamming.dist)))) + 1
+facet.ncol <- 4
+p <- ggplot(test.results.with.quantile.group, aes(y=true.activity, x=predicted.quantile))
+p <- p + facet_wrap(~ hamming.dist, ncol=facet.ncol, scales="fixed")
+p <- p + ylab("Activity") + xlab("Quartile")
+p <- p + geom_boxplot(#outlier.size=0.25,
+                      #outlier.stroke=0,
+                      #outlier.color="gray46",
+                      outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
+p <- p + stat_summary(fun.data=box.n, geom="text", size=2) # show N
+p <- p + coord_flip()
+p <- p + theme_bw(base_size=18)    # bw & larger font sizes
+#p <- p + theme(aspect.ratio=1)  # square facets
+p <- p + theme(strip.background=element_blank(),    # remove background on facet label
+               panel.border=element_rect(colour = "black"))
+p.by.predicted.quantile.group.boxplot.hamming.dist <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value for different predicted quantile groupings,
+# with facet for each choice of PFS
+# y-axis shows the quantile (grouped) for the predicted activity and
+# x-axis shows the true activity as a boxplot
+# Use quartiles here (4 groupings)
+# coord_flip() does not work well with facet_wrap(), so we cannot use
+# the approach above to coord_flip()
+
+facet.ncol <- floor(sqrt(length(unique(test.results.with.quantile.group$cas13a.pfs))))
+p <- ggplot(test.results.with.quantile.group, aes(y=true.activity, x=predicted.quantile))
+p <- p + facet_wrap(~ cas13a.pfs, ncol=facet.ncol, scales="fixed")
+p <- p + ylab("Activity") + xlab("Quartile")
+p <- p + geom_boxplot(#outlier.size=0.25,
+                      #outlier.stroke=0,
+                      #outlier.color="gray46",
+                      outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
+p <- p + stat_summary(fun.data=box.n, geom="text", size=2) # show N
+p <- p + coord_flip()
+p <- p + theme_bw(base_size=18)    # bw & larger font sizes
+#p <- p + theme(aspect.ratio=1)  # square facets
+p <- p + theme(strip.background=element_blank(),    # remove background on facet label
+               panel.border=element_rect(colour = "black"))
+p.by.predicted.quantile.group.boxplot.pfs <- p
 #####################################################################
 
 #####################################################################
@@ -191,10 +418,6 @@ p <- p + geom_smooth(method=lm)
 p <- p + scale_color_viridis() # adjust color gradient
 p <- p + xlab("True activity quantile") + ylab("Predicted activity quantile")
 p <- p + theme_bw(base_size=18)    # bw & larger font sizes
-p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
-               legend.position=c(0.01,0.99),
-               legend.text=element_text(size=10),
-               legend.title=element_text(size=10))
 p.true.vs.predicted.quantiles <- p
 #####################################################################
 
@@ -239,9 +462,6 @@ p.rho.across.crrnas <- p
 # is computed for each crRNA (taken across the targets)
 # This is a scatter plot with one dot for each crRNA
 
-test.results.summarized.over.targets <- summarySE(test.results.melted,
-                                                  measurevar="activity",
-                                                  groupvars=c("crrna.pos", "activity.type"))
 test.results.summarized.over.targets.true <- test.results.summarized.over.targets[test.results.summarized.over.targets$activity.type == "true.activity", ]
 test.results.summarized.over.targets.predicted <- test.results.summarized.over.targets[test.results.summarized.over.targets$activity.type == "predicted.activity", ]
 test.results.summarized.over.targets <- merge(test.results.summarized.over.targets.true,
@@ -260,13 +480,14 @@ p <- p + geom_point(aes(color=crrna.pos), size=5)
 p <- p + geom_errorbarh(aes(xmin=activity.true-sd.true, xmax=activity.true+sd.true), alpha=0.5)
 p <- p + geom_errorbar(aes(ymin=activity.predicted-sd.predicted, ymax=activity.predicted+sd.predicted), alpha=0.5)
 p <- p + scale_color_viridis() # adjust color gradient
-p <- p + xlim(-2.3, -0.3) + ylim(-2.3, -0.3)  # make plot be square
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
 p <- p + xlab("True activity") + ylab("Predicted activity")
 p <- p + theme_bw(base_size=18) # bw & larger font sizes
 p <- p + theme(legend.justification=c(0,1), # place legend in upper-left
                legend.position=c(0.01,0.99),
-               legend.text=element_text(size=10),
-               legend.title=element_text(size=10))
+               legend.text=element_text(size=7),
+               legend.title=element_text(size=7))
 # Include text with the rho value
 p <- p + annotate(geom='text', x=Inf, y=Inf, hjust=1, vjust=1, size=5,
                   label=as.character(as.expression(substitute(
@@ -279,15 +500,21 @@ p.true.vs.predicted.summarized <- p
 # Produce PDF
 g <- arrangeGrob(p.output.dist,
                  p.true.vs.predicted,
+                 p.true.vs.predicted.density.contours,
                  p.true.vs.predicted.colored.by.hamming.dist,
+                 p.true.vs.predicted.facet.by.hamming.dist,
+                 p.true.vs.predicted.colored.by.pfs,
+                 p.true.vs.predicted.facet.by.pfs,
                  p.by.predicted.quantile.group,
                  p.by.predicted.quantile.group.boxplot,
+                 p.by.predicted.quantile.group.boxplot.hamming.dist,
+                 p.by.predicted.quantile.group.boxplot.pfs,
                  p.true.vs.predicted.quantiles,
                  p.true.vs.predicted.faceted.by.crrna,
                  p.rho.across.crrnas,
                  p.true.vs.predicted.summarized,
                  ncol=1)
-ggsave(OUT.PDF, g, width=8, height=56, useDingbats=FALSE, limitsize=FALSE)
+ggsave(OUT.PDF, g, width=8, height=84, useDingbats=FALSE, limitsize=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
