@@ -284,7 +284,7 @@ def hyperparam_random_dist(num_samples):
 
 def search_for_hyperparams(x, y, search_type, regression, context_nt,
         num_splits=5, loss_out=None, models_out=None, num_random_samples=None,
-        max_sem=None):
+        max_sem=None, dp=None):
     """Search for optimal hyperparameters.
 
     This uses hyperparam_grid() to find the grid of hyperparameters over
@@ -312,12 +312,17 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
         max_sem: maximum standard error of the mean (SEM) on the loss to allow
             the hyperparameters with that loss to be chosen as the 'best'
             choice of hyperparameters (if None, no limit)
+        dp: if set, a data parser to use rather than the module-wide
+            data_parser object
 
     Returns:
         tuple (params, loss, sem) where params is the optimal choice of
         hyperparameters and loss is the mean validation loss at that choice
         and sem of the standard error of the loss
     """
+    if dp is None:
+        dp = data_parser
+
     if num_random_samples is not None and search_type != 'random':
         raise Exception("Cannot set num_random_samples without random search")
 
@@ -338,7 +343,7 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
 
         # Compute a mean validation loss at this choice of params
         val_losses_default, val_losses_different_metrics = cross_validate(
-                params, x, y, num_splits, regression)
+                params, x, y, num_splits, regression, dp=dp)
 
         mean_loss = np.mean(val_losses_default)
         sem_loss = scipy.stats.sem(val_losses_default)
@@ -446,7 +451,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
     """
     optimal_choices = []
     i = 0
-    outer_split_iter = data_parser.split(x, y, num_splits=num_outer_splits,
+    outer_split_iter = dp.split(x, y, num_splits=num_outer_splits,
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in outer_split_iter:
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
@@ -491,7 +496,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
                 regression, compile_for_keras=True, y_train=y_train)
         # Split x_train,y_train into train/validate sets and the validation
         # data is used only for early stopping during training
-        train_split_iter = data_parser.split(x_train, y_train,
+        train_split_iter = dp.split(x_train, y_train,
                 num_inner_splits,
                 stratify_by_pos=True)
         # Only take the first split of the generator as the train/validation
@@ -502,7 +507,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
                 x_train_for_es, y_train_for_es)
         # Test the model on the validation data
         val_results = predictor.test_with_keras(best_model,
-                x_validate, y_validate, data_parser)
+                x_validate, y_validate, dp)
         val_loss, val_loss_different_metrics = determine_val_loss(val_results)
         optimal_choices += [(best_params, val_loss, val_loss_different_metrics)]
 

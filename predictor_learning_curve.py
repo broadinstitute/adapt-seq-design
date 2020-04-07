@@ -13,34 +13,14 @@ import predictor
 import predictor_hyperparam_search
 
 import numpy as np
+import tensorflow as tf
 
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-def construct_model(params, regression, x):
-    """Construct model according to hyperparameter search.
-
-    Note that this reads hyperparameters to construct a model, but does not
-    load weights.
-
-    Args:
-        params: hyperparameters for model
-        regression: if True, perform regression; if False, classification
-        x: train data (only needed for shape)
-
-    Returns:..
-        fnn.CasCNNWithParallelFilters object
-    """
-    # Construct the model
-    model = predictor.construct_model(params, x.shape,
-            regression=regression)
-
-    return model
-
-
 def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
-        num_inner_splits=5, num_sizes=10):
+        num_inner_splits=5, num_sizes=10, outer_splits_to_run=None):
     """Compute a learning curve.
 
     This splits the data num_splits ways. In each split S, there is a training
@@ -67,6 +47,8 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             search on each outer fold and sampling size
         num_sizes: number of different sizes of the training data to compute
             a train/validation metrics for
+        outer_splits_to_run: if set, a list of outer splits to run (0-based);
+            if not set, run all
 
     Returns:
         dict
@@ -75,8 +57,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
         sampling across all data points, or 'sample_crrnas' indicating
         sampling from the crRNAs):
                     {sample size:
-                        {'train': training metrics,
-                         'val': validation metrics}
+                         {'val': validation metrics}
                     }
                 }
             }
@@ -100,7 +81,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
         assert len(xx) == len(yy)
         # Determine the crRNA positions of each data point in xx; this
         # effectively serves as an identifier for the crRNA
-        xx_with_pos = [(xi, parse_data._split_parser.pos_for_input(xi))
+        xx_with_pos = [(xi, data_parser.pos_for_input(xi))
                 for xi in xx]
         all_pos = set([pos for xi, pos in xx_with_pos])
         assert num <= len(all_pos)
@@ -136,7 +117,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
                 sample_sizes_all[i] = num_points_to_sample
 
             # Number to sample, sampling from crRNAs
-            crrna_pos = set([parse_data._split_parser.pos_for_input(xi) for xi in
+            crrna_pos = set([data_parser.pos_for_input(xi) for xi in
                 x_train_for_train])
             num_crrnas_to_sample = round(frac_to_sample * len(crrna_pos))
             if sample_sizes_crrnas[i] is None or num_crrnas_to_sample < sample_sizes_crrnas[i]:
@@ -151,6 +132,18 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
         print('STARTING SPLIT {} of {}'.format(fold+1, num_splits))
         print('  Training up to n={}, validating on n={}'.format(len(x_train),
             len(x_validate)))
+
+        if outer_splits_to_run is not None:
+            if fold not in outer_splits_to_run:
+                print('  Skipping this outer split')
+                fold += 1
+
+                # Advance random number generator
+                random.random()
+                np.random.random()
+                tf.random.uniform([1])
+
+                continue
 
         learning_curve[fold] = {'sample_all': {}, 'sample_crrnas': {}}
 
@@ -175,6 +168,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             # predictor.test() on the validation data for this fold to
             # get the validation results
             size = sample_sizes_all[size_i]
+            print('Sampling {} points from all data points'.format(size))
             x_train_sample, y_train_sample = sample_over_all_data(
                     size, x_train_for_train, y_train_for_train)
             # Perform hyperparameter search; do this because hyperparameters
@@ -182,7 +176,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             hyperparams, _, _ = predictor_hyperparam_search.search_for_hyperparams(
                     x_train_sample, y_train_sample, 'random', regression,
                     context_nt, num_splits=num_inner_splits,
-                    num_random_samples=100)
+                    num_random_samples=50, dp=data_parser)
             # Split the training data ({x,y}_train_sample) *again* to get a
             # separate validation set ({x,y}_train_sample_for_es)) to
             # pass to predictor.train_and_validate(), which it will use for early
@@ -198,16 +192,15 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
                     num_splits=4, stratify_by_pos=True)
             x_train_sample_for_train, y_train_sample_for_train, x_train_sample_for_es, y_train_sample_for_es = next(train_split_iter)
             # Construct model
-            model = construct_model(hyperparams, regression,
-                    x_train_sample_for_train)
-            train_results, _ = predictor.train_and_validate(
+            model = predictor.construct_model(hyperparams,
+                    x_train_sample.shape, regression,
+                    compile_for_keras=True, y_train=y_train_sample)
+            predictor.train_with_keras(
                     model, x_train_sample_for_train, y_train_sample_for_train,
-                    x_train_sample_for_es, y_train_sample_for_es,
-                    hyperparams['max_num_epochs'], data_parser)
-            val_results = predictor.test(model, x_validate, y_validate,
+                    x_train_sample_for_es, y_train_sample_for_es)
+            val_results = predictor.test_with_keras(model, x_validate, y_validate,
                     data_parser)
-            learning_curve[fold]['sample_all'][size] = {'train': train_results,
-                    'val': val_results}
+            learning_curve[fold]['sample_all'][size] = {'val': val_results}
 
             # Sample from the crRNAs, train, and then run
             # predictor.test() on the validation data for this fold to
@@ -215,6 +208,26 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             # Above, size is the total number of data points; for this, it is
             # the number of crRNAs
             size = sample_sizes_crrnas[size_i]
+            if size < 30:
+                # There are too few crRNAs sampled at this size
+                #
+                # This can cause errors downstream -- for example, if the
+                # number of inner splits during the hyperparameter search
+                # cross-validation is greater than the number of samples
+                #
+                # It can also cause an error in which there is no valdidation
+                # data during a cross-validation of the hyperparameter search;
+                # this happens because the inner split avoids overlap between
+                # the validation data and training data (removing points from
+                # the validation data to achieve it). When there is no
+                # validation data, Keras presents the error 'ValueError: Empty
+                # training data.'
+                #
+                # So skip this sampling
+                print(('Skipping crRNA sampling because there are too '
+                    'few sampled crRNAs ({})').format(size))
+                continue
+            print('Sampling {} crRNAs'.format(size))
             x_train_sample, y_train_sample = sample_over_crrnas(
                     size, x_train_for_train, y_train_for_train)
             # Perform hyperparameter search; do this because hyperparameters
@@ -222,22 +235,21 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             hyperparams, _, _ = predictor_hyperparam_search.search_for_hyperparams(
                     x_train_sample, y_train_sample, 'random', regression,
                     context_nt, num_splits=num_inner_splits,
-                    num_random_samples=100)
+                    num_random_samples=50, dp=data_parser)
             # Split the training data ({x,y}_train_sample), as explained above
             train_split_iter = data_parser.split(x_train_sample, y_train_sample,
                     num_splits=4, stratify_by_pos=True)
             x_train_sample_for_train, y_train_sample_for_train, x_train_sample_for_es, y_train_sample_for_es = next(train_split_iter)
             # Construct model
-            model = construct_model(hyperparams, regression,
-                    x_train_sample_for_train)
-            train_results, _ = predictor.train_and_validate(
+            model = predictor.construct_model(hyperparams,
+                    x_train_sample.shape, regression,
+                    compile_for_keras=True, y_train=y_train_sample)
+            predictor.train_with_keras(
                     model, x_train_sample_for_train, y_train_sample_for_train,
-                    x_train_sample_for_es, y_train_sample_for_es,
-                    hyperparams['max_num_epochs'], data_parser)
-            val_results = predictor.test(model, x_validate, y_validate,
+                    x_train_sample_for_es, y_train_sample_for_es)
+            val_results = predictor.test_with_keras(model, x_validate, y_validate,
                     data_parser)
-            learning_curve[fold]['sample_crrnas'][size] = {'train': train_results,
-                    'val': val_results}
+            learning_curve[fold]['sample_crrnas'][size] = {'val': val_results}
 
         print(('FINISHED SPLIT {} of {}').format(fold+1, num_splits))
         fold += 1
@@ -249,26 +261,45 @@ def main(args):
     # Seed the predictor
     predictor.set_seed(args.seed)
 
-    # Make the data parser be module wide
+    # Make the data_parser be module wide
     global data_parser
 
     # Read data
     # Do not have a validation set; read the test set if desired, but
     # don't use it for anything
-    split_frac = (1.0 - args.test_split_frac, 0, args.test_split_frac)
-    data_parser = predictor.read_data(args, split_frac)
-    x, y = data_parser.train_set()
-    x_test, y_test = data_parser.test_set()
+    train_split_frac = 1.0 - args.test_split_frac
     if args.dataset == 'cas13':
+        parser_class = parse_data.Cas13ActivityParser
+        subset = args.cas13_subset
         if args.cas13_classify:
             regression = False
         else:
             regression = True
+    data_parser = parser_class(
+            subset=subset,
+            context_nt=args.context_nt,
+            split=(train_split_frac, 0, args.test_split_frac),
+            shuffle_seed=args.seed,
+            stratify_by_pos=True)
+    if args.dataset == 'cas13':
+        classify_activity = args.cas13_classify
+        regress_on_all = args.cas13_regress_on_all
+        regress_only_on_active = args.cas13_regress_only_on_active
+        data_parser.set_activity_mode(
+                classify_activity, regress_on_all, regress_only_on_active)
+        if args.cas13_normalize_crrna_activity:
+            data_parser.set_normalize_crrna_activity()
+    data_parser.read()
+    parse_data._split_parser = data_parser
+
+    x, y = data_parser.train_set()
+    x_test, y_test = data_parser.test_set()
 
     # Compute the learning curve
     learning_curve = compute_learning_curve(x, y,
             regression, args.context_nt,
-            num_splits=args.num_splits, num_sizes=args.num_sizes)
+            num_splits=args.num_splits, num_sizes=args.num_sizes,
+            outer_splits_to_run=args.outer_splits_to_run)
 
     # Write the learning curve to a TSV file
     with gzip.open(args.write_tsv, 'wt') as fw:
@@ -338,9 +369,14 @@ if __name__ == "__main__":
             default=10,
             help=("Number of different sizes of the training data to compute "
                   "train/validation metrics for"))
+    parser.add_argument('--outer-splits-to-run',
+            nargs='+',
+            type=int,
+            help=("If set, only run the given outer splits (0-based). If "
+                  "not set, run for all."))
     parser.add_argument('--test-split-frac',
             type=float,
-            default=0,
+            default=0.3,
             help=("Fraction of the dataset to leave out (completely ignore) "
                   "from this analysis"))
     parser.add_argument('--seed',
