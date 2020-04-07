@@ -66,13 +66,15 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
 }
 
 
-# Read TSV of baseline results and replace '_' in column names with '.'
+# Read TSV of baseline results and replace '_' and '-' in column names with '.'
 baseline.results <- read.table(gzfile(IN.BASELINES.TSV), header=TRUE, sep="\t")
 names(baseline.results) <- gsub("_", ".", names(baseline.results))
+names(baseline.results) <- gsub("-", ".", names(baseline.results))
 
-# Read TSV of predictor results and replace '_' in column names with '.'
+# Read TSV of predictor results and replace '_' and '-' in column names with '.'
 predictor.results <- read.table(gzfile(IN.PREDICTOR.TSV), header=TRUE, sep="\t")
 names(predictor.results) <- gsub("_", ".", names(predictor.results))
+names(predictor.results) <- gsub("-", ".", names(predictor.results))
 
 # Add a column giving the 'model' for the CNN predictor; call it 'cnn'
 predictor.results$model <- rep("cnn", nrow(predictor.results))
@@ -88,7 +90,14 @@ results <- rbind.fill(baseline.results, predictor.results)
 results <- results[results$model != "lr", ]
 
 # R renames the column '1.minus.rho' to 'X1.minus.rho' when reading; rename it back
+# And similarly for 1.minus.auc.roc and 1.minus.auc.pr
 colnames(results)[colnames(results) == "X1.minus.rho"] <- "1.minus.rho"
+colnames(results)[colnames(results) == "X1.minus.auc.roc"] <- "1.minus.auc.roc"
+colnames(results)[colnames(results) == "X1.minus.auc.pr"] <- "1.minus.auc.pr"
+
+# Order the feats.type levels
+results$feats.type <- factor(results$feats.type,
+                             levels=c("onehot", "onehot-flat", "onehot-simple", "handcrafted", "combined"))
 
 if ('mse' %in% colnames(results)) {
     # Regression
@@ -115,12 +124,10 @@ if ('mse' %in% colnames(results)) {
     # may be NA)
     results$rho[is.na(results$rho)] <- 1.0 - results$`1.minus.rho`[is.na(results$rho)]
     results.rho <- results[, c("fold", "model", "feats.type", "rho")]
-    print(results.rho)
     # Summarize across folds
     results.rho.summarized <- summarySE(results.rho,
                                         measurevar="rho",
                                         groupvars=c("model", "feats.type"))
-    print(results.rho.summarized)
     p.rho <- ggplot(results.rho.summarized, aes(x=model, y=rho, fill=feats.type))
     p.rho <- p.rho + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
     p.rho <- p.rho + geom_errorbar(aes(ymin=rho-ci, ymax=rho+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
@@ -138,26 +145,46 @@ if ('mse' %in% colnames(results)) {
 
     # Order the models explicitly
     results$model <- factor(results$model,
-                            levels=c("l1_logit", "l2_logit", "l1l2_logit",
+                            levels=c("logit", "l1_logit", "l2_logit", "l1l2_logit",
                                      "gbt", "rf", "svm", "mlp", "lstm", "cnn"))
 
     # Pull out auROC and make a plot of this
-    results.auroc <- results[, c("fold", "model", "feats.type", "auroc")]
+    # (only pull out auc.roc if not already available; otherwise 1.minus.auc.roc
+    # may be NA)
+    results$auc.roc[is.na(results$auc.roc)] <- 1.0 - results$`1.minus.auc.roc`[is.na(results$auc.roc)]
+    results.auroc <- results[, c("fold", "model", "feats.type", "auc.roc")]
     # Summarize across folds
     results.auroc.summarized <- summarySE(results.auroc,
-                                        measurevar="auroc",
+                                        measurevar="auc.roc",
                                         groupvars=c("model", "feats.type"))
-    p.auroc <- ggplot(results.auroc.summarized, aes(x=model, y=auroc, fill=feats.type))
+    p.auroc <- ggplot(results.auroc.summarized, aes(x=model, y=auc.roc, fill=feats.type))
     p.auroc <- p.auroc + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
-    p.auroc <- p.auroc + geom_errorbar(aes(ymin=auroc-ci, ymax=auroc+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
+    p.auroc <- p.auroc + geom_errorbar(aes(ymin=auc.roc-ci, ymax=auc.roc+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
     p.auroc <- p.auroc + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.auroc <- p.auroc + xlab("Model") + ylab("auROC")
     p.auroc <- p.auroc + theme_bw()
 
+    # Pull out auPR and make a plot of this
+    # (only pull out auc.pr if not already available; otherwise 1.minus.auc.pr
+    # may be NA)
+    results$auc.pr[is.na(results$auc.pr)] <- 1.0 - results$`1.minus.auc.pr`[is.na(results$auc.pr)]
+    results.aupr <- results[, c("fold", "model", "feats.type", "auc.pr")]
+    # Summarize across folds
+    results.aupr.summarized <- summarySE(results.aupr,
+                                        measurevar="auc.pr",
+                                        groupvars=c("model", "feats.type"))
+    p.aupr <- ggplot(results.aupr.summarized, aes(x=model, y=auc.pr, fill=feats.type))
+    p.aupr <- p.aupr + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
+    p.aupr <- p.aupr + geom_errorbar(aes(ymin=auc.pr-ci, ymax=auc.pr+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
+    p.aupr <- p.aupr + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
+    p.aupr <- p.aupr + xlab("Model") + ylab("auPR")
+    p.aupr <- p.aupr + theme_bw()
+
     # Save to PDF
     g <- arrangeGrob(p.auroc,
-                     ncol=1)
-    ggsave(OUT.PDF, g, width=8, height=8, useDingbats=FALSE)
+                     p.aupr,
+                     ncol=2)
+    ggsave(OUT.PDF, g, width=16, height=8, useDingbats=FALSE)
 }
 
 # Remove the empty Rplots.pdf created above
