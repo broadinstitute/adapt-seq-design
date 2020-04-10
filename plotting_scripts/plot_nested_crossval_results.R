@@ -9,11 +9,13 @@ require(reshape2)
 require(plyr)
 require(ggridges)
 require(viridis)
+require(scales)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.BASELINES.TSV <- args[1]
 IN.PREDICTOR.TSV <- args[2]
-OUT.PDF <- args[3]
+IN.CLASSIFICATION.TEST.RESULTS.TSV <- args[3]  # classification results on test data set; only used for computing baseline precision
+OUT.PDF <- args[4]
 
 
 ## A helper function from:
@@ -99,6 +101,14 @@ colnames(results)[colnames(results) == "X1.minus.auc.pr"] <- "1.minus.auc.pr"
 results$feats.type <- factor(results$feats.type,
                              levels=c("onehot", "onehot-flat", "onehot-simple", "handcrafted", "combined"))
 
+# Compute baseline precision (precision of random classifier) from
+# classification test results; note that this only uses/needs the
+# true values, not the predicted values
+classification.test.results <- read.table(IN.CLASSIFICATION.TEST.RESULTS.TSV, header=TRUE, sep="\t")
+names(classification.test.results) <- gsub("_", ".", names(classification.test.results))
+classifier.pos <- classification.test.results$predicted.activity[classification.test.results$true.activity == 1]
+random.precision <- length(classifier.pos) / nrow(classification.test.results)
+
 if ('mse' %in% colnames(results)) {
     # Regression
 
@@ -157,10 +167,13 @@ if ('mse' %in% colnames(results)) {
     results.auroc.summarized <- summarySE(results.auroc,
                                         measurevar="auc.roc",
                                         groupvars=c("model", "feats.type"))
+    results.auroc.baseline <- 0.5   # auROC of random classifier
     p.auroc <- ggplot(results.auroc.summarized, aes(x=model, y=auc.roc, fill=feats.type))
     p.auroc <- p.auroc + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
     p.auroc <- p.auroc + geom_errorbar(aes(ymin=auc.roc-ci, ymax=auc.roc+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
     p.auroc <- p.auroc + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
+    p.auroc <- p.auroc + geom_hline(yintercept=results.auroc.baseline, linetype="dotted")    # representing random classifier
+    p.auroc <- p.auroc + scale_y_continuous(limits=c(0.4,1.0), oob=rescale_none)    # ylim() does not work, as described at https://stackoverflow.com/a/10365218
     p.auroc <- p.auroc + xlab("Model") + ylab("auROC")
     p.auroc <- p.auroc + theme_bw()
 
@@ -173,10 +186,13 @@ if ('mse' %in% colnames(results)) {
     results.aupr.summarized <- summarySE(results.aupr,
                                         measurevar="auc.pr",
                                         groupvars=c("model", "feats.type"))
+    results.aupr.baseline <- random.precision # auPR of random classifier
     p.aupr <- ggplot(results.aupr.summarized, aes(x=model, y=auc.pr, fill=feats.type))
     p.aupr <- p.aupr + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
     p.aupr <- p.aupr + geom_errorbar(aes(ymin=auc.pr-ci, ymax=auc.pr+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
     p.aupr <- p.aupr + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
+    p.aupr <- p.aupr + geom_hline(yintercept=results.aupr.baseline, linetype="dotted")    # representing random classifier
+    p.aupr <- p.aupr + scale_y_continuous(limits=c(0.8,1.0), oob=rescale_none)    # ylim() does not work, as described at https://stackoverflow.com/a/10365218
     p.aupr <- p.aupr + xlab("Model") + ylab("auPR")
     p.aupr <- p.aupr + theme_bw()
 
