@@ -35,6 +35,10 @@ def parse_args():
                   "any other arguments provided about the model "
                   "architecture or hyperparameters will be overridden and "
                   "this will skip training and only test the model"))
+    parser.add_argument('--load-model-as-tf-savedmodel',
+            help=("Path to directory containing a model in TensorFlow's "
+                  "SavedModel architecture; this cannot be set along "
+                  "with --load-model"))
     parser.add_argument('--dataset',
             choices=['cas13'],
             default='cas13',
@@ -167,6 +171,11 @@ def parse_args():
             type=int,
             default=1,
             help=("Random seed"))
+    parser.add_argument('--serialize-model-with-tf-savedmodel',
+            help=("Serialize the model with TensorFlow's SavedModel format. "
+                  "This should be a directory in which to serialize the "
+                  "model; this saves the entire model (architecture, "
+                  "weights, training configuration"))
     parser.add_argument('--plot-roc-curve',
             help=("If set, path to PDF at which to save plot of ROC curve"))
     parser.add_argument('--plot-predictions',
@@ -316,16 +325,14 @@ def make_dataset_and_batch(x, y, batch_size=32):
     return tf.data.Dataset.from_tensor_slices((x, y)).batch(batch_size)
 
 
-def load_model(load_path, params, x_train, y_train, x_validate, y_validate,
-        data_parser):
+def load_model(load_path, params, x_train, y_train):
     """Construct model and load weights according to hyperparameter search.
 
     Args:
         load_path: path containing model weights
         params: dict of parameters
-        x_train, y_train, x_validate, y_validate: train and validate data
-            (only needed to initialize variables)
-        data_parser: data parser object from parse_data
+        x_train, y_train: train data (only needed for data shape and class
+            weights)
 
     Returns:..
         fnn.CasCNNWithParallelFilters object
@@ -566,11 +573,9 @@ def load_model_for_cas13_regression_on_active(load_path):
     data_parser.set_activity_mode(False, False, True)
     data_parser.read()
     x_train, y_train = data_parser.train_set()
-    x_validate, y_validate = data_parser.validate_set()
 
     # Load the model
-    return load_model(load_path, params, x_train, y_train, x_validate,
-            y_validate, data_parser)
+    return load_model(load_path, params, x_train, y_train)
 
 
 
@@ -1466,7 +1471,7 @@ def train_with_keras(model, x_train, y_train, x_validate, y_validate,
 
 
 def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None,
-        callback=None):
+        callback=None, regression=False):
     """Test a model.
 
     This prints metrics.
@@ -1480,20 +1485,37 @@ def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None,
             as well as the testing sequences (one row per data point)
         callback: if set, a function to call that accepts the true and
             predicted test values -- called like callback(y_true, f_pred)
+        regression: True iff this is testing a model for regression;
+            this is only used if model.regression is not available
 
     Returns:
         dict with test metrics at the end (keys are 'loss'
         and ('bce' or 'mse') and ('auc-roc' or 'r-spearman'))
     """
+    # model may not have batch_size if it is loaded from a SavedModel
+    # serialization
+    # But the batch_size should not matter for testing, so just use 32
+    if hasattr(model, 'batch_size'):
+        batch_size = model.batch_size
+    else:
+        batch_size = 32
+
+    # Likewise, model may not have regression attribute if it is loaded
+    # from a SavedModel serialization
+    # Override the argument given to this function if it does; otherwise
+    # just use the argument
+    if hasattr(model, 'regression'):
+        regression = model.regression
+
     # Evaluate on test data
     test_metrics = model.evaluate(x_test, y_test,
-            batch_size=model.batch_size)
+            batch_size=batch_size)
 
     # Turn test_metrics from list into dict
     test_metrics = dict(zip(model.metrics_names, test_metrics))
 
     y_true = y_test
-    y_pred = model.predict(x_test, batch_size=model.batch_size)
+    y_pred = model.predict(x_test, batch_size=batch_size)
 
     if write_test_tsv:
         x_test_pos = [data_parser.pos_for_input(xi) for xi in x_test]
@@ -1535,7 +1557,7 @@ def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None,
                         return seq_feats[i][k]
                 write_row([val(k) for k in cols])
 
-    if model.regression:
+    if regression:
         mse_metric = tf.keras.metrics.MeanSquaredError()
         mse_metric(y_true, y_pred)
         mse = mse_metric.result().numpy()
@@ -1598,7 +1620,7 @@ def main():
 
     if args.test_split_frac:
         train_and_validate_split_frac = 1.0 - args.test_split_frac
-        if not args.load_model:
+        if not (args.load_model or args.load_model_as_tf_savedmodel):
             # Since this will be training a model, reserve validation
             # data (25%) for early stopping
             validate_frac = 0.2*train_and_validate_split_frac
@@ -1631,14 +1653,21 @@ def main():
     if not regression and args.plot_predictions:
         raise Exception(("Can only use --plot-predictions when doing "
             "regression"))
+    if args.load_model and args.load_model_as_tf_savedmodel:
+        raise Exception(("Cannot set both --load-model and "
+            "--load-model-as-tf-savedmodel"))
 
     if args.load_model:
-        # Load the model
+        # Load the model weights; the model architecture is specified
+        # by params
         print('Loading model weights..')
-        model = load_model(args.load_model, params,
-                x_train, y_train, x_validate, y_validate,
-                data_parser)
+        model = load_model(args.load_model, params, x_train, y_train)
         print('Done loading model.')
+    elif args.load_model_as_tf_savedmodel:
+        # Load a model saved with TensorFlow's SavedModel format
+        # This contains both model architecture and weights
+        model = tf.keras.models.load_model(
+                args.load_model_as_tf_savedmodel)
     else:
         # Construct model
         params = vars(args)
@@ -1660,9 +1689,10 @@ def main():
 
     # Test the model
     test_with_keras(model, x_test, y_test, data_parser,
-            write_test_tsv=args.write_test_tsv)
+            write_test_tsv=args.write_test_tsv,
+            regression=regression)
 
-    if not regression:
+    if (not regression) and (not args.load_model_as_tf_savedmodel):
         # Determine threshold for classifier
         # Note that this should only use params; it should *not* use
         # a pre-trained model with loaded weights
@@ -1679,6 +1709,11 @@ def main():
                 (args.determine_classifier_threshold_for_precision,
                     np.median(thresholds)))
         print('  Thresholds are:', thresholds)
+
+    if args.serialize_model_with_tf_savedmodel:
+        # Serialize the model using TensorFlow's SavedModel format
+        # This saves model architecture, weights, and training configuration
+        model.save(args.serialize_model_with_tf_savedmodel)
 
 
 if __name__ == "__main__":

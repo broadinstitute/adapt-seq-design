@@ -20,6 +20,11 @@
 #                       5: path to classification test results TSV
 #                       6: classification score threshold to use
 #                          for classifying activity
+#           3: 'serialize-model'
+#               4: params id of model to serialize
+#           3: 'learning-curve'
+#               4: outer split to run (0-based)
+#               5: GPU to run on (0-based)
 
 
 # Set common arguments
@@ -137,9 +142,36 @@ elif [[ $1 == "cnn" ]]; then
             python -u predictor.py $COMMON_ARGS --cas13-regress-on-all --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.on-classified-active.tsv.gz $filter_test_data_arg &> $outdirformodel/test.on-classified-active.out
             gzip -f $outdirformodel/test.on-classified-active.out
         fi
+    elif [[ $3 == "serialize-model" ]]; then
+        # Load model, print test results, and serialize the model
+        model_params_id="$4"
+        outdirformodelserialize="models/cas13/${2}/model-${model_params_id}/serialized"
+        mkdir -p $outdirformodelserialize
 
+        # The test results are only to verify that the model was serialized correctly,
+        # so put them in tmp
+        # Use --serialize-model-with-tf-savedmodel to serialize
+        python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --serialize-model-with-tf-savedmodel $outdirformodelserialize --write-test-tsv /tmp/test-results.model-${model_params_id}.before-serialize.tsv.gz &> /tmp/test-results.model-${model_params_id}.before-serialize.out
+
+        # Now load the serialized model and test; manually verify
+        # results are the same as above
+        python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model-as-tf-savedmodel $outdirformodelserialize --write-test-tsv /tmp/test-results.model-${model_params_id}.on-serialized-model.tsv.gz &> /tmp/test-results.model-${model_params_id}.on-serialized-model.out
+    elif [[ $3 == "learning-curve" ]]; then
+        # Construct a learning curve
+        # Run on different outer splits (so it can be in parallel), but
+        # results must be manually concatenated
+        outer_split="$4"
+        outdirwithsplit="$outdir/learning-curve/split-${outer_split}"
+        mkdir -p $outdirwithsplit
+
+        # Set the GPU to use
+        gpu="$5"
+        export CUDA_VISIBLE_DEVICES="$gpu"
+
+        python -u predictor_learning_curve.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --num-splits 5 --num-sizes 10 --outer-splits-to-run $outer_split --write-tsv $outdirwithsplit/learning-curve.tsv.gz &> $outdirwithsplit/learning-curve.out
+        gzip -f $outdirwithsplit/learning-curve.out
     else
-        echo "FATAL: #3 must be 'large-search' or 'nested-cross-val' or 'test'"
+        echo "FATAL: #3 must be 'large-search' or 'nested-cross-val' or 'test' or 'learning-curve'"
         exit 1
     fi
 
