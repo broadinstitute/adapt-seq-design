@@ -505,16 +505,16 @@ g <- arrangeGrob(p.output.dist,
                  p.true.vs.predicted.facet.by.hamming.dist,
                  p.true.vs.predicted.colored.by.pfs,
                  p.true.vs.predicted.facet.by.pfs,
-                 p.by.predicted.quantile.group,
+                 #p.by.predicted.quantile.group,
                  p.by.predicted.quantile.group.boxplot,
                  p.by.predicted.quantile.group.boxplot.hamming.dist,
                  p.by.predicted.quantile.group.boxplot.pfs,
-                 p.true.vs.predicted.quantiles,
-                 p.true.vs.predicted.faceted.by.crrna,
+                 #p.true.vs.predicted.quantiles,
+                 #p.true.vs.predicted.faceted.by.crrna,
                  p.rho.across.crrnas,
-                 p.true.vs.predicted.summarized,
+                 #p.true.vs.predicted.summarized,
                  ncol=1)
-ggsave(OUT.PDF, g, width=8, height=84, useDingbats=FALSE, limitsize=FALSE)
+ggsave(OUT.PDF, g, width=8, height=64, useDingbats=FALSE, limitsize=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
