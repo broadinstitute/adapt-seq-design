@@ -123,7 +123,7 @@ if ("lr" %in% data$model) {
     stop("Unknown whether this is regression or classification")
 }
 
-g <- arrangeGrob(p.no.regularization,
+g <- arrangeGrob(#p.no.regularization,
                  p.l1,
                  p.l2,
                  p.l1l2,
