@@ -156,6 +156,18 @@ elif [[ $1 == "cnn" ]]; then
         # Now load the serialized model and test; manually verify
         # results are the same as above
         python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model-as-tf-savedmodel $outdirformodelserialize --write-test-tsv /tmp/test-results.model-${model_params_id}.on-serialized-model.tsv.gz &> /tmp/test-results.model-${model_params_id}.on-serialized-model.out
+
+        # Save the context_nt argument used for the model
+        # Extra assets that co-exist with the model but are not loaded
+        # can be in `assets.extra/`
+        mkdir -p $outdirformodelserialize/assets.extra
+        echo -n "$CONTEXT_NT" > $outdirformodelserialize/assets.extra/context_nt.arg
+
+        # Note: manually add the file `assets.extra/default_threshold.arg`; for
+        # classification this could be the mean threshold across folds to achieve
+        # precision of 0.975 (as output by classifier testing) and, for regression,
+        # this could be the top 25% of predicted values on the subset of test
+        # data that is classified as active
     elif [[ $3 == "learning-curve" ]]; then
         # Construct a learning curve
         # Run on different outer splits (so it can be in parallel), but
