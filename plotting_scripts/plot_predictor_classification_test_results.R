@@ -10,6 +10,7 @@ require(dplyr)
 require(viridis)
 require(PRROC)
 require(egg)
+require(caret)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
@@ -81,6 +82,36 @@ pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE,
                max.compute=TRUE, min.compute=TRUE, rand.compute=TRUE)
 print(roc)
 print(pr)
+
+# For a baseline to compare to, let's imagine choosing positive points
+# to be non-G PFS with <=3 Hamming distance (similarly, <=2, <=1, and 0)
+# Compute sensitivity, FPR, and precision for these choices
+test.results$baseline.predicted.activity.hd3 <- ifelse(test.results$cas13a.pfs != "G" & test.results$hamming.dist <= 3, 1, 0)
+test.results$baseline.predicted.activity.hd2 <- ifelse(test.results$cas13a.pfs != "G" & test.results$hamming.dist <= 2, 1, 0)
+test.results$baseline.predicted.activity.hd1 <- ifelse(test.results$cas13a.pfs != "G" & test.results$hamming.dist <= 1, 1, 0)
+test.results$baseline.predicted.activity.hd0 <- ifelse(test.results$cas13a.pfs != "G" & test.results$hamming.dist == 0, 1, 0)
+baseline.conf.matrix.hd3 <- table(test.results$baseline.predicted.activity.hd3, test.results$true.activity)
+baseline.conf.matrix.hd2 <- table(test.results$baseline.predicted.activity.hd2, test.results$true.activity)
+baseline.conf.matrix.hd1 <- table(test.results$baseline.predicted.activity.hd1, test.results$true.activity)
+baseline.conf.matrix.hd0 <- table(test.results$baseline.predicted.activity.hd0, test.results$true.activity)
+baseline.sensitivity.hd3 <- sensitivity(baseline.conf.matrix.hd3, positive="1", negative="0")
+baseline.sensitivity.hd2 <- sensitivity(baseline.conf.matrix.hd2, positive="1", negative="0")
+baseline.sensitivity.hd1 <- sensitivity(baseline.conf.matrix.hd1, positive="1", negative="0")
+baseline.sensitivity.hd0 <- sensitivity(baseline.conf.matrix.hd0, positive="1", negative="0")
+baseline.fpr.hd3 <- 1.0 - specificity(baseline.conf.matrix.hd3, positive="1", negative="0")
+baseline.fpr.hd2 <- 1.0 - specificity(baseline.conf.matrix.hd2, positive="1", negative="0")
+baseline.fpr.hd1 <- 1.0 - specificity(baseline.conf.matrix.hd1, positive="1", negative="0")
+baseline.fpr.hd0 <- 1.0 - specificity(baseline.conf.matrix.hd0, positive="1", negative="0")
+baseline.precision.hd3 <- posPredValue(baseline.conf.matrix.hd3, positive="1", negative="0")
+baseline.precision.hd2 <- posPredValue(baseline.conf.matrix.hd2, positive="1", negative="0")
+baseline.precision.hd1 <- posPredValue(baseline.conf.matrix.hd1, positive="1", negative="0")
+baseline.precision.hd0 <- posPredValue(baseline.conf.matrix.hd0, positive="1", negative="0")
+baseline.results.hd.levels <- c("<=3", "<=2", "<=1", "=0")
+baseline.results <- data.frame(hd=baseline.results.hd.levels,
+                               sensitivity=c(baseline.sensitivity.hd3, baseline.sensitivity.hd2, baseline.sensitivity.hd1, baseline.sensitivity.hd0),
+                               fpr=c(baseline.fpr.hd3, baseline.fpr.hd2, baseline.fpr.hd1, baseline.fpr.hd0),
+                               precision=c(baseline.precision.hd3, baseline.precision.hd2, baseline.precision.hd1, baseline.precision.hd0))
+baseline.results$hd <- factor(baseline.results$hd, levels=baseline.results.hd.levels)
 
 #####################################################################
 # Compute ROC and PR curves for different choices of Hamming distance,
@@ -170,10 +201,11 @@ cas13a.pfs.pr <- rbind(cas13a.pfs.pr, pr.df.all)
 # Plot ROC curve
 # Color represents threshold
 
-p <- ggplot(data.frame(roc$curve), aes(x=X1, y=X2, color=X3))
-p <- p + geom_line()
+p <- ggplot(data.frame(roc$curve))
+p <- p + geom_line(aes(x=X1, y=X2, color=X3))
 p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for random classifier
-p <- p + xlab("FPR") + ylab("Sensitivity") + labs(color="Threshold")
+p <- p + geom_point(data=baseline.results, aes(x=fpr, y=sensitivity, shape=hd)) # dots for baseline
+p <- p + xlab("FPR") + ylab("Sensitivity") + labs(color="Threshold", shape="Baseline HD")
 p <- p + scale_color_viridis() # adjust color gradient
 p <- p + theme_bw(base_size=18) # bw and larger font sizes
 p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # remove grid lines
@@ -214,10 +246,11 @@ p.cas13a.pfs.roc <- p
 
 random.precision <- length(pos) / nrow(test.results)
 
-p <- ggplot(data.frame(pr$curve), aes(x=X1, y=X2, color=X3))
-p <- p + geom_line()
+p <- ggplot(data.frame(pr$curve))
+p <- p + geom_line(aes(x=X1, y=X2, color=X3))
 p <- p + geom_hline(yintercept=random.precision, linetype="dotted")    # representing random classifier
-p <- p + xlab("Recall") + ylab("Precision") + labs(color="Threshold")
+p <- p + geom_point(data=baseline.results, aes(x=sensitivity, y=precision, shape=hd)) # dots for baseline
+p <- p + xlab("Recall") + ylab("Precision") + labs(color="Threshold", shape="Baseline HD")
 p <- p + ylim(0.8, 1.0)
 p <- p + scale_color_viridis() # adjust color gradient
 p <- p + theme_bw(base_size=18) # bw and larger font sizes
