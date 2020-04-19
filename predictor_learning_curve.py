@@ -19,8 +19,9 @@ import tensorflow as tf
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
-        num_inner_splits=5, num_sizes=10, outer_splits_to_run=None):
+def compute_learning_curve(x, y, regression, context_nt, data_parser,
+        num_splits=5, num_inner_splits=5, num_sizes=10,
+        outer_splits_to_run=None):
     """Compute a learning curve.
 
     This splits the data num_splits ways. In each split S, there is a training
@@ -40,6 +41,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
         y: labels/output
         regression: if True, perform regression; if False, classification
         context_nt: number of nt on each side of guide to use for context
+        data_parser: data parser object; needed for sampling
         num_splits: number of splits of the data to make (i.e., k in k-fold);
             at each size, this yields num_splits different train/validation
             metrics based on the different splits of the data
@@ -63,11 +65,12 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             }
     """
     def sample_over_all_data(num, xx, yy):
-        # Produce a subsample, of size num, across all data points
-        # in xx and yy
+        # Produce a subsample, of size num, across all unique data points,
+        # in xx and yy; sample to include all replicates for each unique
+        # data point included
         assert len(xx) == len(yy)
-        assert num <= len(xx)
-        idx = random.sample(list(range(len(xx))), num)
+        assert num <= data_parser.num_unique_points(xx)
+        idx = data_parser.unique_sampling_idx(num, xx)
         return xx[idx], yy[idx]
 
     def sample_over_crrnas(num, xx, yy):
@@ -105,14 +108,16 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
                 stratify_by_pos=True)
         x_train_for_train, y_train_for_train, _, _ = next(train_split_iter)
 
+        num_unique_points = data_parser.num_unique_points(x_train_for_train)
+
         # Use num_sizes different subsamplings of x_train_for_train, in
         # increasing size
         for i in range(num_sizes):
             n = i + 1
             frac_to_sample = (float(n) / num_sizes)
 
-            # Number to sample, sampling from all data points
-            num_points_to_sample = round(frac_to_sample * len(x_train_for_train))
+            # Number to sample, sampling from unique data points
+            num_points_to_sample = round(frac_to_sample * num_unique_points)
             if sample_sizes_all[i] is None or num_points_to_sample < sample_sizes_all[i]:
                 sample_sizes_all[i] = num_points_to_sample
 
@@ -151,7 +156,8 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
         # this fold
 
         # Use num_sizes different subsamplings of x_train_for_train, in
-        # increasing size
+        # increasing size; each sampling has some number of *unique* data
+        # points (and all replicates for each of those)
         for size_i in range(num_sizes):
             print('Training on sampling {} of {} of the training set'.format(
                 size_i+1, num_sizes))
@@ -168,7 +174,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             # predictor.test() on the validation data for this fold to
             # get the validation results
             size = sample_sizes_all[size_i]
-            print('Sampling {} points from all data points'.format(size))
+            print('Sampling {} unique points from all data points'.format(size))
             x_train_sample, y_train_sample = sample_over_all_data(
                     size, x_train_for_train, y_train_for_train)
             # Perform hyperparameter search; do this because hyperparameters
@@ -208,7 +214,7 @@ def compute_learning_curve(x, y, regression, context_nt, num_splits=5,
             # Above, size is the total number of data points; for this, it is
             # the number of crRNAs
             size = sample_sizes_crrnas[size_i]
-            if size < 30:
+            if size < 35:
                 # There are too few crRNAs sampled at this size
                 #
                 # This can cause errors downstream -- for example, if the
@@ -297,7 +303,7 @@ def main(args):
 
     # Compute the learning curve
     learning_curve = compute_learning_curve(x, y,
-            regression, args.context_nt,
+            regression, args.context_nt, data_parser,
             num_splits=args.num_splits, num_sizes=args.num_sizes,
             outer_splits_to_run=args.outer_splits_to_run)
 

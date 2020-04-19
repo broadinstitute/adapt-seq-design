@@ -54,7 +54,7 @@ class Cas13ActivityParser:
     # Define threshold on activity for inactive/active data points
     ACTIVITY_THRESHOLD = -4.0
 
-    def __init__(self, subset=None, context_nt=20, split=(0.8, 0.1, 0.1),
+    def __init__(self, subset=None, context_nt=10, split=(0.8, 0.1, 0.1),
             shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
         """
         Args:
@@ -542,6 +542,59 @@ class Cas13ActivityParser:
         x_key = np.array(x, dtype='f').tostring()
         assert x_key in self.input_feats_pos
         return self.input_feats_pos[x_key]
+
+    def unique_sampling_idx(self, num_unique_sample, xx):
+        """Return indices for sampling unique data points.
+
+        The data contains replicate measurements. which complicates sampling
+        from it. If we wanted to subsample a small fraction of the data, it
+        would be possible that we end up sampling a large fraction or all of
+        the unique data points (with, on average, just a small fraction of
+        replicate measurements for each unique data point).
+
+        Args:
+            num_unique_sample: number of unique data points to sample
+            xx: collection of data points, including replicates
+
+        Returns:
+            list of indices in xx to sample, including all replicates for
+                each of num_unique_sample unique data points
+        """
+        if not self.was_read:
+            raise Exception("read() must be called first")
+
+        def key(x):
+            return np.array(x, dtype='f').tostring()
+
+        # Sample keys corresponding to unique data points (i.e.,
+        # as given by key(x))
+        xx_keys = set(key(x) for x in xx)
+        sampled_keys = set(random.sample(list(xx_keys), num_unique_sample))
+
+        # Determine all indices in xx that correspond to the unique
+        # data points sampled (with replicates)
+        idx = [i for i in range(len(xx)) if key(xx[i]) in sampled_keys]
+        return idx
+
+    def num_unique_points(self, xx):
+        """Return number of unique data points.
+
+        The data contains replicate measurements, so this determines
+        how many represent unique guide-target pairs.
+
+        Args:
+            xx: collection of data points, including replicates
+
+        Returns:
+            number of unique points in xx
+        """
+        if not self.was_read:
+            raise Exception("read() must be called first")
+
+        def key(x):
+            return np.array(x, dtype='f').tostring()
+
+        return len(set(key(x) for x in xx))
 
     def make_nonoverlapping_datasets(self, data1, data2):
         """Make sure there is no overlap (leakage) between two datasets.
