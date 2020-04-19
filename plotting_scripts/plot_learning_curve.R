@@ -76,13 +76,15 @@ learning.curve.summarized <- summarySE(learning.curve,
 
 # Only pull out a single metric
 if ("mse" %in% learning.curve.summarized$metric) {
-    # This was regression; use mse
-    learning.curve.summarized <- learning.curve.summarized[learning.curve.summarized$metric == "mse", ]
-    metric <- "MSE"
+    # This was regression; use Spearman's rho
+    learning.curve.summarized <- learning.curve.summarized[learning.curve.summarized$metric == "r-pearson", ]
+    ylim <- c(0.4, 1.0)
+    metric <- "Spearman's rho"
 } else if ("bce" %in% learning.curve.summarized$metric) {
-    # This was classification; use binary cross-entropy
-    learning.curve.summarized <- learning.curve.summarized[learning.curve.summarized$metric == "bce", ]
-    metric <- "Binary cross-entropy"
+    # This was classification; use auROC
+    learning.curve.summarized <- learning.curve.summarized[learning.curve.summarized$metric == "auc-roc", ]
+    ylim <- c(0.5, 1.0)
+    metric <- "auROC"
 } else {
     stop("Unknown metric")
 }
@@ -93,11 +95,13 @@ learning.curve.summarized.sampling.crrnas <- learning.curve.summarized[learning.
 
 # Plot for sampling from all data points
 # Plot mean value (across folds) with 95% confidence interval
+# Confidence interval can be shown tih geom_errorbar() or geom_ribbon()
 p.sampling.all <- ggplot(learning.curve.summarized.sampling.all,
                          aes(x=size))
-p.sampling.all <- p.sampling.all + geom_line(aes(y=value, color=dataset))
-p.sampling.all <- p.sampling.all + geom_ribbon(aes(ymin=value-ci, ymax=value+ci, fill=dataset), alpha=0.5)
-p.sampling.all <- p.sampling.all + xlim(0, max(learning.curve.summarized.sampling.all$size))
+p.sampling.all <- p.sampling.all + geom_line(aes(y=value))
+p.sampling.all <- p.sampling.all + geom_errorbar(aes(ymin=value-ci, ymax=value+ci), width=200)
+p.sampling.all <- p.sampling.all + xlim(0, max(learning.curve.summarized.sampling.all$size)*1.1)
+p.sampling.all <- p.sampling.all + ylim(ylim)
 p.sampling.all <- p.sampling.all + xlab("Number of data points for training") + ylab(metric)
 p.sampling.all <- p.sampling.all + ggtitle("Sampling from all data points")
 p.sampling.all <- p.sampling.all + scale_color_viridis(discrete=TRUE)
@@ -105,21 +109,24 @@ p.sampling.all <- p.sampling.all + scale_fill_viridis(discrete=TRUE)
 
 # Plot for sampling from crRNAs
 # Plot mean value (across folds) with 95% confidence interval
-p.sampling.crrnas <- ggplot(learning.curve.summarized.sampling.crrnas,
-                         aes(x=size))
-p.sampling.crrnas <- p.sampling.crrnas + geom_line(aes(y=value, color=dataset))
-p.sampling.crrnas <- p.sampling.crrnas + geom_ribbon(aes(ymin=value-ci, ymax=value+ci, fill=dataset), alpha=0.5)
-p.sampling.crrnas <- p.sampling.crrnas + xlim(0, max(learning.curve.summarized.sampling.crrnas$size))
-p.sampling.crrnas <- p.sampling.crrnas + xlab("Number of crRNAs for training") + ylab(metric)
-p.sampling.crrnas <- p.sampling.crrnas + ggtitle("Sampling from crRNAs")
-p.sampling.crrnas <- p.sampling.crrnas + scale_color_viridis(discrete=TRUE)
-p.sampling.crrnas <- p.sampling.crrnas + scale_fill_viridis(discrete=TRUE)
+# Do not show this; there are too few sampling sizes (x value) from which
+#   we can sample a sufficient number of crRNAs from which to estimate
+#   a CI
+#p.sampling.crrnas <- ggplot(learning.curve.summarized.sampling.crrnas,
+#                         aes(x=size))
+#p.sampling.crrnas <- p.sampling.crrnas + geom_line(aes(y=value, color=dataset))
+#p.sampling.crrnas <- p.sampling.crrnas + geom_ribbon(aes(ymin=value-ci, ymax=value+ci, fill=dataset), alpha=0.5)
+#p.sampling.crrnas <- p.sampling.crrnas + xlim(0, max(learning.curve.summarized.sampling.crrnas$size))
+#p.sampling.crrnas <- p.sampling.crrnas + xlab("Number of crRNAs for training") + ylab(metric)
+#p.sampling.crrnas <- p.sampling.crrnas + ggtitle("Sampling from crRNAs")
+#p.sampling.crrnas <- p.sampling.crrnas + scale_color_viridis(discrete=TRUE)
+#p.sampling.crrnas <- p.sampling.crrnas + scale_fill_viridis(discrete=TRUE)
 
 # Produce PDF
 g <- arrangeGrob(p.sampling.all,
-                 p.sampling.crrnas,
-                 ncol=2)
-ggsave(OUT.PDF, g, width=16, height=8, useDingbats=FALSE)
+                 #p.sampling.crrnas,
+                 ncol=1)
+ggsave(OUT.PDF, g, width=8, height=8, useDingbats=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
