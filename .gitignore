@@ -133,4 +133,7 @@ dmypy.json
 models/cas13/*/model-*
 !models/cas13/classify/model-51373185
 !models/cas13/regress/model-f8b6fd5d
+
+# GAN
+!models/cas13/gan
 ######

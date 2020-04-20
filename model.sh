@@ -25,6 +25,9 @@
 #           3: 'learning-curve'
 #               4: outer split to run (0-based)
 #               5: GPU to run on (0-based)
+#  1: 'gan'
+#       2: 'train'
+#           3: number of generator iterations during training
 
 
 # Set common arguments
@@ -188,7 +191,24 @@ elif [[ $1 == "cnn" ]]; then
     fi
 
     unset CUDA_VISIBLE_DEVICES
+elif [[ $1 == "gan" ]]; then
+    mkdir -p out/cas13/gan
 
+    if [[ $2 == "train" ]]; then
+        num_gen_iter="$3"
+
+        outdir="out/cas13/gan/train_${num_gen_iter}-gen-iter"
+        mkdir -p $outdir
+
+        modeloutdir="models/cas13/gan/${num_gen_iter}-gen-iter"
+        mkdir -p $modeloutdir
+
+        python -u gan.py --dataset cas13 --cas13-subset exp-and-pos --cas13-only-active --context-nt 10 --seed 1 --num-gen-iter $num_gen_iter --test-split-frac 0.3 --save-path $modeloutdir &> $outdir/train.out
+        gzip -f $outdir/train.out
+    else
+        echo "FATAL: #2 must be 'train'"
+        exit 1
+    fi
 else
     echo "FATAL: Unknown argument '$1'"
     exit 1
