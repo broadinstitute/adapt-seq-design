@@ -130,14 +130,6 @@ dmypy.json
 # Models during hyperparameter search, but allow
 # selected models (i.e., the best ones)
 
-# Old models
-models/predictor_exp-and-pos_regress-on-active/*
-models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/*
-!models/predictor_exp-and-pos_regress-on-active_normalized-crrnas/model-f08075e6
-!models/predictor_exp-and-pos_regress-on-active/model-c15f787d
-models/predictor_exp-and-pos_classify/*
-
-# More recent models
 models/cas13/*/model-*
 !models/cas13/classify/model-51373185
 !models/cas13/regress/model-f8b6fd5d
