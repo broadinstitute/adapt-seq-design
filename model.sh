@@ -28,6 +28,8 @@
 #  1: 'gan'
 #       2: 'train'
 #           3: number of generator iterations during training
+#       2: 'evaluate'
+#           3: number of generator iterations during training
 
 
 # Set common arguments
@@ -205,6 +207,16 @@ elif [[ $1 == "gan" ]]; then
 
         python -u gan.py --dataset cas13 --cas13-subset exp-and-pos --cas13-only-active --context-nt 10 --seed 1 --num-gen-iter $num_gen_iter --test-split-frac 0.3 --save-path $modeloutdir &> $outdir/train.out
         gzip -f $outdir/train.out
+    elif [[ $2 == "evaluate" ]]; then
+        num_gen_iter="$3"
+
+        outdir="out/cas13/gan/evaluate_${num_gen_iter}-gen-iter"
+        mkdir -p $outdir
+
+        modeldir="models/cas13/gan/${num_gen_iter}-gen-iter"
+
+        python -u evaluate_gan.py --load-path $modeldir --out-tsv $outdir/evaluate.tsv.gz &> $outdir/evaluate.out
+        gzip -f $outdir/evaluate.out
     else
         echo "FATAL: #2 must be 'train'"
         exit 1
