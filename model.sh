@@ -35,6 +35,7 @@
 # Set common arguments
 DEFAULT_SEED="1"
 CONTEXT_NT="10"
+GUIDE_LENGTH="28"
 DATASET_ARGS="--dataset cas13 --cas13-subset exp-and-pos"
 COMMON_ARGS="$DATASET_ARGS --context-nt $CONTEXT_NT"
 
@@ -162,11 +163,12 @@ elif [[ $1 == "cnn" ]]; then
         # results are the same as above
         python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model-as-tf-savedmodel $outdirformodelserialize --write-test-tsv /tmp/test-results.model-${model_params_id}.on-serialized-model.tsv.gz &> /tmp/test-results.model-${model_params_id}.on-serialized-model.out
 
-        # Save the context_nt argument used for the model
+        # Save the context_nt argument used for the model, and also guide length
         # Extra assets that co-exist with the model but are not loaded
         # can be in `assets.extra/`
         mkdir -p $outdirformodelserialize/assets.extra
         echo -n "$CONTEXT_NT" > $outdirformodelserialize/assets.extra/context_nt.arg
+        echo -n "$GUIDE_LENGTH" > $outdirformodelserialize/assets.extra/guide_length.arg
 
         # Note: manually add the file `assets.extra/default_threshold.arg`; for
         # classification this could be the mean threshold across folds to achieve
