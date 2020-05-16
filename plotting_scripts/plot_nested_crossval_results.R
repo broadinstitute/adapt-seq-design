@@ -10,6 +10,7 @@ require(plyr)
 require(ggridges)
 require(viridis)
 require(scales)
+require(ggpubr)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.BASELINES.TSV <- args[1]
@@ -97,9 +98,9 @@ colnames(results)[colnames(results) == "X1.minus.rho"] <- "1.minus.rho"
 colnames(results)[colnames(results) == "X1.minus.auc.roc"] <- "1.minus.auc.roc"
 colnames(results)[colnames(results) == "X1.minus.auc.pr"] <- "1.minus.auc.pr"
 
-# Order the feats.type levels
-results$feats.type <- factor(results$feats.type,
-                             levels=c("onehot", "onehot-flat", "onehot-simple", "handcrafted", "combined"))
+# Make feats.type and model be factor
+results$feats.type <- factor(results$feats.type)
+results$model <- factor(results$model)
 
 # Compute baseline precision (precision of random classifier) from
 # classification test results; note that this only uses/needs the
@@ -109,12 +110,23 @@ names(classification.test.results) <- gsub("_", ".", names(classification.test.r
 classifier.pos <- classification.test.results$predicted.activity[classification.test.results$true.activity == 1]
 random.precision <- length(classifier.pos) / nrow(classification.test.results)
 
+# Reorder and rename feature types
+levels(results$feats.type) <- list("One-hot (1D)"="onehot-flat",
+                                   "One-hot MM"="onehot-simple",
+                                   "Handcrafted"="handcrafted",
+                                   "One-hot MM + Handcrafted"="combined",
+                                   "One-hot (2D)"="onehot")
 if ('mse' %in% colnames(results)) {
     # Regression
 
-    # Order the models explicitly
-    results$model <- factor(results$model,
-                            levels=c("lr", "l1_lr", "l2_lr", "l1l2_lr", "gbt", "rf", "mlp", "lstm", "cnn"))
+    # Remove 'lr' model, which has no regularization
+    results <- results[results$model != "lr",]
+
+    # Reorder and rename models
+    levels(results$model) <- list("L1 LR"="l1_lr", "L2 LR"="l2_lr",
+                                  "L1L2 LR"="l1l2_lr", "GBT"="gbt",
+                                  "RF"="rf", "MLP"="mlp", "LSTM"="lstm",
+                                  "CNN"="cnn")
 
     # Pull out mse and make a plot of this
     results.mse <- results[, c("fold", "model", "feats.type", "mse")]
@@ -124,10 +136,11 @@ if ('mse' %in% colnames(results)) {
                                         groupvars=c("model", "feats.type"))
     p.mse <- ggplot(results.mse.summarized, aes(x=model, y=mse, fill=feats.type))
     p.mse <- p.mse + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
-    p.mse <- p.mse + geom_errorbar(aes(ymin=mse-ci, ymax=mse+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
+    p.mse <- p.mse + geom_errorbar(aes(ymin=mse-ci, ymax=mse+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
     p.mse <- p.mse + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.mse <- p.mse + xlab("Model") + ylab("Mean squared error")
-    p.mse <- p.mse + theme_bw()
+    p.mse <- p.mse + labs(fill="")	# no legend title
+    p.mse <- p.mse + theme_pubr()
 
     # Pull out rho and make a plot of this
     # (only pull out rho if not already available; otherwise 1.minus.rho
@@ -140,23 +153,28 @@ if ('mse' %in% colnames(results)) {
                                         groupvars=c("model", "feats.type"))
     p.rho <- ggplot(results.rho.summarized, aes(x=model, y=rho, fill=feats.type))
     p.rho <- p.rho + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
-    p.rho <- p.rho + geom_errorbar(aes(ymin=rho-ci, ymax=rho+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
+    p.rho <- p.rho + geom_errorbar(aes(ymin=rho-ci, ymax=rho+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
     p.rho <- p.rho + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.rho <- p.rho + xlab("Model") + ylab("Spearman's rho")
-    p.rho <- p.rho + theme_bw()
+    p.rho <- p.rho + labs(fill="")	# no legend title
+    p.rho <- p.rho + theme_pubr()
 
     # Save to PDF
     g <- arrangeGrob(p.mse,
                      p.rho,
                      ncol=2)
-    ggsave(OUT.PDF, g, width=16, height=8, useDingbats=FALSE)
+    ggsave(OUT.PDF, g, width=16, height=4, useDingbats=FALSE)
 } else {
     # Classification
 
-    # Order the models explicitly
-    results$model <- factor(results$model,
-                            levels=c("logit", "l1_logit", "l2_logit", "l1l2_logit",
-                                     "gbt", "rf", "svm", "mlp", "lstm", "cnn"))
+    # Remove 'logit' model, which has no regularization
+    results <- results[results$model != "logit",]
+
+    # Reorder and rename models
+    levels(results$model) <- list("L1 LR"="l1_logit", "L2 LR"="l2_logit",
+                                  "L1L2 LR"="l1l2_logit", "GBT"="gbt",
+                                  "RF"="rf", "SVM"="svm", "MLP"="mlp", "LSTM"="lstm",
+                                  "CNN"="cnn")
 
     # Pull out auROC and make a plot of this
     # (only pull out auc.roc if not already available; otherwise 1.minus.auc.roc
@@ -170,12 +188,13 @@ if ('mse' %in% colnames(results)) {
     results.auroc.baseline <- 0.5   # auROC of random classifier
     p.auroc <- ggplot(results.auroc.summarized, aes(x=model, y=auc.roc, fill=feats.type))
     p.auroc <- p.auroc + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
-    p.auroc <- p.auroc + geom_errorbar(aes(ymin=auc.roc-ci, ymax=auc.roc+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
+    p.auroc <- p.auroc + geom_errorbar(aes(ymin=auc.roc-ci, ymax=auc.roc+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
     p.auroc <- p.auroc + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.auroc <- p.auroc + geom_hline(yintercept=results.auroc.baseline, linetype="dotted")    # representing random classifier
     p.auroc <- p.auroc + scale_y_continuous(limits=c(0.4,1.0), oob=rescale_none)    # ylim() does not work, as described at https://stackoverflow.com/a/10365218
     p.auroc <- p.auroc + xlab("Model") + ylab("auROC")
-    p.auroc <- p.auroc + theme_bw()
+    p.auroc <- p.auroc + labs(fill="")	# no legend title
+    p.auroc <- p.auroc + theme_pubr()
 
     # Pull out auPR and make a plot of this
     # (only pull out auc.pr if not already available; otherwise 1.minus.auc.pr
@@ -189,18 +208,19 @@ if ('mse' %in% colnames(results)) {
     results.aupr.baseline <- random.precision # auPR of random classifier
     p.aupr <- ggplot(results.aupr.summarized, aes(x=model, y=auc.pr, fill=feats.type))
     p.aupr <- p.aupr + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
-    p.aupr <- p.aupr + geom_errorbar(aes(ymin=auc.pr-ci, ymax=auc.pr+ci), width=0.3, alpha=0.5, position=position_dodge(0.7))   # 95% CI
+    p.aupr <- p.aupr + geom_errorbar(aes(ymin=auc.pr-ci, ymax=auc.pr+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
     p.aupr <- p.aupr + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.aupr <- p.aupr + geom_hline(yintercept=results.aupr.baseline, linetype="dotted")    # representing random classifier
     p.aupr <- p.aupr + scale_y_continuous(limits=c(0.8,1.0), oob=rescale_none)    # ylim() does not work, as described at https://stackoverflow.com/a/10365218
     p.aupr <- p.aupr + xlab("Model") + ylab("auPR")
-    p.aupr <- p.aupr + theme_bw()
+    p.aupr <- p.aupr + labs(fill="")	# no legend title
+    p.aupr <- p.aupr + theme_pubr()
 
     # Save to PDF
     g <- arrangeGrob(p.auroc,
                      p.aupr,
                      ncol=2)
-    ggsave(OUT.PDF, g, width=16, height=8, useDingbats=FALSE)
+    ggsave(OUT.PDF, g, width=16, height=4, useDingbats=FALSE)
 }
 
 # Remove the empty Rplots.pdf created above
