@@ -14,17 +14,20 @@ require(viridis)
 require(ggridges)
 require(stringr)
 require(ggforce)    # for sina plots
+require(ggpubr)
 
 IN.TABLE <- "data/CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz"
-OUT.DIST.PDF <- "out/cas13-pair-activity-dist.pdf"
-OUT.DIST.BLOCKS.FACETS.PDF <- "out/cas13-pair-activity-dist.blocks.facets.pdf"
-OUT.DIST.BLOCKS.RIDGES.PDF <- "out/cas13-pair-activity-dist.blocks.ridges.pdf"
-OUT.DIST.TRAIN.AND.TEST.PDF <- "out/cas13-pair-activity-dist.train-and-test.pdf"
-OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF <- "out/cas13-pair-activity-dist.between-and-within-guides.pdf"
-OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDE.TARGET.PAIRS.PDF <- "out/cas13-pair-activity-dist.between-and-within-guide-target-pairs.pdf"
-OUT.DIST.GC.CONTENT.PDF <- "out/cas13-pair-activity-dist.gc-content.pdf"
-OUT.DIST.DIFF.FROM.WILDTYPE.PDF <- "out/cas13-pair-activity-dist.diff-from-wildtype.pdf"
-OUT.DIST.HAMMING.DIST.PDF <- "out/cas13-pair-activity-dist.hamming-dist.pdf"
+OUT.DIST.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.pdf"
+OUT.DIST.BLOCKS.FACETS.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.blocks.facets.pdf"
+OUT.DIST.BLOCKS.RIDGES.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.blocks.ridges.pdf"
+OUT.DIST.TRAIN.AND.TEST.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.train-and-test.pdf"
+OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.between-and-within-guides.pdf"
+OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDE.TARGET.PAIRS.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.between-and-within-guide-target-pairs.pdf"
+OUT.DIST.GC.CONTENT.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.gc-content.pdf"
+OUT.DIST.DIFF.FROM.WILDTYPE.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.diff-from-wildtype.pdf"
+OUT.DIST.HAMMING.DIST.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.hamming-dist.pdf"
+OUT.DIST.HAMMING.DIST.VIOLIN.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.hamming-dist.violin.pdf"
+OUT.DIST.HAMMING.DIST.RIDGES.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.hamming-dist.ridges.pdf"
 
 
 ## A helper function from:
@@ -92,8 +95,8 @@ names(all.data) <- gsub("_", ".", names(all.data))
 # are the 30% highest, which is nt position >= 629
 TEST.START.POS <- 629
 all.data$train.or.test <- ifelse(all.data$guide.pos.nt >= TEST.START.POS,
-                                 'test',
-                                 'train')
+                                 'Test',
+                                 'Train')
 all.data$train.or.test <- factor(all.data$train.or.test)
 
 # Add a column giving the mean wildtype activity for each guide (i.e., for each
@@ -129,9 +132,10 @@ guide.target.expandpos <- subset(all.data, type == "exp" | type == "pos")
 
 # Melt all data and the different subsets into a single
 # data frame
-df <- melt(list(guide.target.expandpos=guide.target.expandpos,
-                guide.target.exp=guide.target.exp,
-                guide.target.pos=guide.target.pos),
+# Note that 'All' refers to expandpos (i.e., it does exclude negatives)
+df <- melt(list("All"=guide.target.expandpos,
+                #guide.target.exp=guide.target.exp,
+                "Wildtype"=guide.target.pos),
            id.vars=names(guide.target.expandpos))
 names(df)[names(df) == "L1"] <- "dataset"
 
@@ -142,8 +146,9 @@ p <- ggplot(df, aes(x=out.logk.measurement, fill=dataset, color=dataset))
 p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
 p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
+p <- p + labs(fill="", color="")    # remove legend title
 p <- p + xlab("Activity") + ylab("Density")
-p <- p + theme_bw()
+p <- p + theme_pubr()
 p + ggsave(OUT.DIST.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
@@ -151,8 +156,8 @@ p + ggsave(OUT.DIST.PDF, width=8, height=8, useDingbats=FALSE)
 # Make a separate plot showing a separate facet for each choice of crrna.block
 # (which will be used to split data in train/validate/test)
 p.faceted <- p + facet_wrap(. ~ crrna.block, scales="free")
-p <- p + theme_bw()
-p.faceted + ggsave(OUT.DIST.BLOCKS.FACETS.PDF, width=16, height=16, useDingbats=FALSE)
+p <- p + theme_pubr()
+p.faceted + ggsave(OUT.DIST.BLOCKS.FACETS.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -162,7 +167,7 @@ guide.target.expandpos$crrna.block.factor <- factor(guide.target.expandpos$crrna
 p <- ggplot(guide.target.expandpos, aes(x=out.logk.measurement, y=crrna.block.factor))
 p <- p + geom_density_ridges()
 p <- p + xlab("Activity") + ylab("Block")
-p <- p + theme_bw()
+p <- p + theme_pubr()
 p + ggsave(OUT.DIST.BLOCKS.RIDGES.PDF, width=8, height=48, useDingbats=FALSE)
 ##############################################################################
 
@@ -173,8 +178,9 @@ p <- ggplot(guide.target.expandpos, aes(x=out.logk.measurement, fill=train.or.te
 p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
 p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
+p <- p + labs(fill="", color="")    # remove legend title
 p <- p + xlab("Activity") + ylab("Density")
-p <- p + theme_bw()
+p <- p + theme_pubr()
 p + ggsave(OUT.DIST.TRAIN.AND.TEST.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
@@ -212,9 +218,9 @@ guide.expandpos.summarized.ordered <- transform(guide.expandpos.summarized.order
 p <- ggplot(guide.expandpos.summarized.ordered, aes(y=order))
 p <- p + geom_errorbarh(aes(xmin=lower, xmax=upper), height=0, size=0.5, color="black", alpha=0.5)
 p <- p + geom_point(aes(x=median), size=1)
-p <- p + geom_point(aes(x=out.logk.wildtype.mean), color="blue", size=1)    # show a blue dot for mean wildtype activity of the guide
-p <- p + xlab("Activity (variation is across targets)") + ylab("crRNA")
-p <- p + theme_bw()
+p <- p + geom_point(aes(x=out.logk.wildtype.mean), color="#42075E", size=1)    # show a purple dot for mean wildtype activity of the guide
+p <- p + xlab("Activity with variation is across targets") + ylab("Guide")
+p <- p + theme_pubr()
 p <- p + theme(axis.text.y=element_blank(), # y-axis text/ticks are meaningless
                axis.ticks.y=element_blank())
 p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF, width=8, height=8, useDingbats=FALSE)
@@ -249,9 +255,9 @@ guide.target.expandpos.summarized.ordered <- transform(guide.target.expandpos.su
 # Produce an ordered dot plot
 p <- ggplot(guide.target.expandpos.summarized.ordered, aes(y=order))
 p <- p + geom_errorbarh(aes(xmin=lower, xmax=upper), height=0, size=0.5, color="black", alpha=0.5)
-p <- p + geom_point(aes(x=mean), color="blue", size=1)
-p <- p + xlab("Activity (95% CI across measurements/replicates)") + ylab("Guide-target pair")
-p <- p + theme_bw()
+p <- p + geom_point(aes(x=mean), color="#42075E", size=1)
+p <- p + xlab("Activity with 95% CI across replicate measurements") + ylab("Guide-target pair")
+p <- p + theme_pubr()
 p <- p + theme(axis.text.y=element_blank(), # y-axis text/ticks are meaningless
                axis.ticks.y=element_blank())
 p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDE.TARGET.PAIRS.PDF, width=8, height=8, useDingbats=FALSE)
@@ -273,8 +279,9 @@ spearman.rho <- cor(mean.wildtype.activity$gc.content,
 p <- ggplot(mean.wildtype.activity, aes(x=gc.content, y=mean))
 p <- p + geom_point(aes(color=guide.pos.nt))
 p <- p + scale_color_viridis() # adjust color gradient
-p <- p + xlab("GC content") + ylab("Mean activity")
-p <- p + theme_bw()
+p <- p + xlab("GC content") + ylab("Mean activity for guide")
+p <- p + labs(color="Guide position on target")
+p <- p + theme_pubr()
 # Include text with the rho value
 p <- p + annotate(geom='text', x=Inf, y=Inf, hjust=1, vjust=1, size=5,
                   label=as.character(as.expression(substitute(
@@ -296,8 +303,9 @@ p <- ggplot(df, aes(x=diff.from.wildtype, fill=dataset, color=dataset))
 p <- p + geom_density(alpha=0.5, position='identity')
 p <- p + scale_color_viridis(discrete=TRUE) # adjust color gradient
 p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
-p <- p + xlab("Activity - (wildtype activity)") + ylab("Density")
-p <- p + theme_bw()
+p <- p + xlab("Activity minus guide's wildtype activity") + ylab("Density")
+p <- p + labs(fill="", color="")    # remove legend title
+p <- p + theme_pubr()
 p + ggsave(OUT.DIST.DIFF.FROM.WILDTYPE.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
@@ -313,11 +321,34 @@ guide.target.expandpos.trimmed$guide.target.hamming.dist.factor <- factor(guide.
 
 p <- ggplot(guide.target.expandpos.trimmed, aes(x=guide.target.hamming.dist.factor, y=out.logk.measurement))
 p <- p + geom_sina(aes(group=guide.target.hamming.dist.factor), size=0.1)
-p <- p + xlab("Guide-target Hamming distance") + ylab("Activity")
-p <- p + theme_bw()
+p <- p + xlab("Guide-target distance") + ylab("Activity")
+p <- p + theme_pubr()
 p + ggsave(OUT.DIST.HAMMING.DIST.PDF, width=8, height=8, useDingbats=FALSE)
 ##############################################################################
 
+##############################################################################
+# Plot activity by guide-target Hamming distance with violin plots instead
+# of sina
+# Only do this for the exp-and-pos (non-negative control) data points.
+
+p <- ggplot(guide.target.expandpos.trimmed, aes(x=guide.target.hamming.dist.factor, y=out.logk.measurement))
+p <- p + geom_violin(aes(group=guide.target.hamming.dist.factor), fill="gray")
+p <- p + xlab("Guide-target distance") + ylab("Activity")
+p <- p + theme_pubr()
+p + ggsave(OUT.DIST.HAMMING.DIST.VIOLIN.PDF, width=8, height=8, useDingbats=FALSE)
+##############################################################################
+
+##############################################################################
+# Plot activity by guide-target Hamming distance with ridges (one per Hamming
+# distance factor)
+# Only do this for the exp-and-pos (non-negative control) data points.
+
+p <- ggplot(guide.target.expandpos.trimmed, aes(y=guide.target.hamming.dist.factor, x=out.logk.measurement))
+p <- p + geom_density_ridges()
+p <- p + xlab("Activity") + ylab("Guide-target distance")
+p <- p + theme_pubr()
+p + ggsave(OUT.DIST.HAMMING.DIST.RIDGES.PDF, width=8, height=4, useDingbats=FALSE)
+##############################################################################
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
