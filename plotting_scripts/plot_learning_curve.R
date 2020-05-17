@@ -8,6 +8,7 @@ require(gridExtra)
 require(reshape2)
 require(dplyr)
 require(viridis)
+require(ggpubr)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
@@ -79,7 +80,7 @@ if ("mse" %in% learning.curve.summarized$metric) {
     # This was regression; use Spearman's rho
     learning.curve.summarized <- learning.curve.summarized[learning.curve.summarized$metric == "r-pearson", ]
     ylim <- c(0.4, 1.0)
-    metric <- "Spearman's rho"
+    metric <- "Spearman correlation"
 } else if ("bce" %in% learning.curve.summarized$metric) {
     # This was classification; use auROC
     learning.curve.summarized <- learning.curve.summarized[learning.curve.summarized$metric == "auc-roc", ]
@@ -106,6 +107,7 @@ p.sampling.all <- p.sampling.all + xlab("Number of data points for training") + 
 p.sampling.all <- p.sampling.all + ggtitle("Sampling from all data points")
 p.sampling.all <- p.sampling.all + scale_color_viridis(discrete=TRUE)
 p.sampling.all <- p.sampling.all + scale_fill_viridis(discrete=TRUE)
+p.sampling.all <- p.sampling.all + theme_pubr()
 
 # Plot for sampling from crRNAs
 # Plot mean value (across folds) with 95% confidence interval
