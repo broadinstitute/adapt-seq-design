@@ -8,12 +8,14 @@
 
 require(ggplot2)
 require(gridExtra)
+require(ggpubr)
+require(stringr)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.FEATURE.COEFFS.TSV <- args[1]
 OUT.PDF <- args[2]
 
-# Show the best 10 features (ranked by mean of abs. value across splits)
+# Show the best 20 features (ranked by mean of abs. value across splits)
 TOP.N <- 20
 
 
@@ -90,7 +92,19 @@ data <- feature.coeffs.summarized %>%
     top_n(n=TOP.N, wt=coeff.abs)
 data <- data.frame(data)
 
-plot.for.model <- function(model) {
+# Rename some feat.description values
+feat.replace <- function(from, to) {
+    # '<<-' is needed to modify outside scope
+    data$feat.description <<- str_replace_all(data$feat.description, from, to)
+}
+feat.replace("target-after-0-([ACGT])", "PFS = \\1")   # PFS
+feat.replace("target-after-1-([ACGT])", "PFS+1 = \\1")   # 1 after PFS
+feat.replace("num-mismatches-seed", "Mismatches in seed")
+feat.replace("num-mismatches-nonseed", "Mismatches outside seed")
+feat.replace("guide-mismatch-allele-([0-9]+)-([ACGT])", "Mismatch at \\1 = \\2")
+feat.replace("target-at-guide-([0-9]+)-([ACGT])", "Match at \\1 = \\2")
+
+plot.for.model <- function(model, model.name) {
     # Produce plot for model
     data.for.model <- data.frame(data[data$model == model, ])
 
@@ -101,24 +115,25 @@ plot.for.model <- function(model) {
     p <- p + geom_bar(stat="identity")
     p <- p + geom_errorbar(aes(ymin=coeff-ci, ymax=coeff+ci), width=0.3)
     p <- p + xlab("Feature") + ylab("Coefficient")
-    p <- p + ggtitle(model)
-    p <- p + theme_bw()
-    p <- p + theme(axis.text.x=element_text(angle=45, hjust=1)) # rotate x labels
+    p <- p + ggtitle(model.name)
+    p <- p + theme_pubr()
+    p <- p + theme(axis.text.x=element_text(angle=45, hjust=1), # rotate x labels
+                   plot.margin=margin(t=10, r=10, b=10, l=50)) # add margin on left so x label is not cutoff
     return(p)
 }
 
 if ("lr" %in% data$model) {
     # Linear regression models
-    p.no.regularization <- plot.for.model("lr")
-    p.l1 <- plot.for.model("l1_lr")
-    p.l2 <- plot.for.model("l2_lr")
-    p.l1l2 <- plot.for.model("l1l2_lr")
+    p.no.regularization <- plot.for.model("lr", "Linear regression")
+    p.l1 <- plot.for.model("l1_lr", "L1 linear regression")
+    p.l2 <- plot.for.model("l2_lr", "L2 linear regression")
+    p.l1l2 <- plot.for.model("l1l2_lr", "L1+L2 linear regression")
 } else if ("logit" %in% data$model) {
     # Classification models
-    p.no.regularization <- plot.for.model("logit")
-    p.l1 <- plot.for.model("l1_logit")
-    p.l2 <- plot.for.model("l2_logit")
-    p.l1l2 <- plot.for.model("l1l2_logit")
+    p.no.regularization <- plot.for.model("logit", "Logistic regression")
+    p.l1 <- plot.for.model("l1_logit", "L1 logistic regression")
+    p.l2 <- plot.for.model("l2_logit", "L2 logistic regression")
+    p.l1l2 <- plot.for.model("l1l2_logit", "L1+L2 logistic regression")
 } else {
     stop("Unknown whether this is regression or classification")
 }
@@ -128,7 +143,7 @@ g <- arrangeGrob(#p.no.regularization,
                  p.l2,
                  p.l1l2,
                  ncol=1)
-ggsave(OUT.PDF, g, width=8, height=8*4, useDingbats=FALSE)
+ggsave(OUT.PDF, g, width=10, height=16, useDingbats=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
