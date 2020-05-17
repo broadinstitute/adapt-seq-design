@@ -12,6 +12,8 @@ require(ggplot2)
 require(gridExtra)
 require(reshape2)
 require(stringr)
+require(ggpubr)
+require(ggsignif)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
@@ -48,7 +50,6 @@ lc.width.pattern <- regex("locally_connected_width: (\\[.+?\\]),")
 hyperparams$lc.width <- str_match(hyperparams$params,
                                   lc.width.pattern)[,2]
 hyperparams[hyperparams$has.lc.layer == FALSE, ]$lc.width <- "None"
-hyperparams$lc.width <- factor(hyperparams$lc.width)
 
 # Add a column giving the dimension of the locally connected layer; if there
 # is no layer, the dimension (a random choice) is meaningless for the model,
@@ -107,7 +108,6 @@ conv.filter.width.pattern <- regex("conv_filter_width: (\\[.+?\\]),")
 hyperparams$conv.filter.width <- str_match(hyperparams$params,
                                            conv.filter.width.pattern)[,2]
 hyperparams[hyperparams$has.conv.layer == FALSE, ]$conv.filter.width <- "None"
-hyperparams$conv.filter.width <- factor(hyperparams$conv.filter.width)
 
 # Add a column giving the number of convolutional filters (dimension); if there
 # is no layer, the dimension (a random choice) is meaningless for the model,
@@ -126,15 +126,46 @@ if (runType == "classify") {
     hyperparams$rho.mean <- 1.0 - hyperparams$`1.minus.rho.mean`
 }
 
+# Replace FALSE with No and TRUE with Yes
+# Also replace [1] with 1, [1,2] with 1+2, etc.
+val.replace <- function(from, to) {
+    # Use '<<-' to change variable outside scope
+    hyperparams[hyperparams == from] <<- to
+}
+val.replace("FALSE", "No")
+val.replace("TRUE", "Yes")
+val.replace("[1]", "1")
+val.replace("[2]", "2")
+val.replace("[3]", "3")
+val.replace("[4]", "4")
+val.replace("[1, 2]", "1+2")
+val.replace("[1, 2, 3]", "1+2+3")
+val.replace("[1, 2, 3, 4]", "1+2+3+4")
+val.replace("[2, 3]", "2+3")
+val.replace("[3, 4]", "3+4")
+
+# Make some variables factors; this must happen after the find+replace above
+# if they may be changed by that
+hyperparams$conv.filter.width <- factor(hyperparams$conv.filter.width)
+hyperparams$lc.width <- factor(hyperparams$lc.width)
+
+# There are a few outliers with loss value >2.0 (only for regression/MSE) --
+# namely, one point per plot
+# Ignore these; it is easier to remove them here than to specify ylim()
+# because otherwise the geom_signif() does not show correctly
+if (runType == "regress") {
+    hyperparams <- hyperparams[is.na(hyperparams$mse.mean) | hyperparams$mse.mean <= 2.0, ]
+}
+
 # Produce plots of loss and a measurement (e.g., MSE and rho, for regression)
 # x_string gives column name to plot as a string
 # boxplot is FALSE (continuous) or TRUE (discrete)
-plots <- function(x_string, x_label, title, boxplot, x_log) {
+plots <- function(x_string, x_label, title, boxplot, x_log, rotate_x) {
     if (runType == "classify") {
         loss.col <- "bce.mean"
         loss.name <- "BCE"
         measure.col <- "auc.roc.mean"
-        measure.name <- "AUC-ROC"
+        measure.name <- "auROC"
     } else if (runType == "regress") {
         loss.col <- "mse.mean"
         loss.name <- "MSE"
@@ -144,55 +175,71 @@ plots <- function(x_string, x_label, title, boxplot, x_log) {
     # Produce plot of MSE
     p.loss <- ggplot(hyperparams, aes_string(x=x_string, y=loss.col))
     if (boxplot) {
-        p.loss <- p.loss + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2)
+        p.loss <- p.loss + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2, size=0.5)
     } else {
-        p.loss <- p.loss + geom_point()
+        p.loss <- p.loss + geom_point(size=0.5)
     }
-    p.loss <- p.loss + ylim(0, 2.0)   # ignore the outliers >2.0
     p.loss <- p.loss + ylab(paste("Mean validation", loss.name))
     p.loss <- p.loss + xlab(x_label)
     p.loss <- p.loss + ggtitle(title)
-    p.loss <- p.loss + theme_bw()
-    p.loss <- p.loss + theme(axis.text=element_text(size=14),
-                           axis.title=element_text(size=18))
+    p.loss <- p.loss + theme_pubr()
+    p.loss <- p.loss + theme(plot.margin=margin(t=10,r=10,b=10,l=10)) # increase spacing between plots
     # Produce plot of measure
     p.measure <- ggplot(hyperparams, aes_string(x=x_string, y=measure.col))
     if (boxplot) {
-        p.measure <- p.measure + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2)
+        p.measure <- p.measure + geom_boxplot(outlier.shape=NA) + geom_jitter(width=0.2, size=0.5)
     } else {
-        p.measure <- p.measure + geom_point()
+        p.measure <- p.measure + geom_point(size=0.5)
     }
     p.measure <- p.measure + ylab(paste("Mean validation", measure.name))
     p.measure <- p.measure + xlab(x_label)
     p.measure <- p.measure + ggtitle(title)
-    p.measure <- p.measure + theme_bw()
-    p.measure <- p.measure + theme(axis.text=element_text(size=14),
-                           axis.title=element_text(size=18))
+    p.measure <- p.measure + theme_pubr()
+    p.measure <- p.measure + theme(plot.margin=margin(t=10,r=10,b=10,l=10)) # increase spacing between plots
 
     if (x_log) {
         p.loss <- p.loss + scale_x_log10()
         p.measure <- p.measure + scale_x_log10()
+    }
+    if (rotate_x) {
+        p.loss <- p.loss + theme(axis.text.x=element_text(angle=45, hjust=1))
+        p.measure <- p.measure + theme(axis.text.x=element_text(angle=45, hjust=1))
+    }
+
+    if ("No" %in% hyperparams[,x_string] && "Yes" %in% hyperparams[,x_string]) {
+        # Add a statistical test with p-values comparing NO vs. YES
+        # Use Wilcoxon rank sum test (aka, Mann Whitney U) to
+        # compare the distribution of metrics for NO vs. YES
+        # For the loss, the alternative hypothesis is YES<NO and for
+        # the measurement value, the alternative hypothesis is YES>NO (in
+        # both cases, that YES is better)
+        p.loss <- p.loss + geom_signif(comparisons=list(c("Yes", "No")),
+                                       test="wilcox.test", test.args=list(paired=FALSE, alternative="less"),
+                                       step_increase=0.1, size=0.1)
+        p.measure <- p.measure + geom_signif(comparisons=list(c("Yes", "No")),
+                                       test="wilcox.test", test.args=list(paired=FALSE, alternative="greater"),
+                                       step_increase=0.1, size=0.1)
     }
 
     l <- list(loss=p.loss, measure=p.measure)
     return(l)
 }
 
-p.has.lc.layer <- plots("has.lc.layer", "Uses LC layer", "LC layer", TRUE, FALSE)
-p.lc.width <- plots("lc.width", "LC width", "LC width", TRUE, FALSE)
-p.lc.dim <- plots("lc.dim", "LC dimension", "LC dimension", TRUE, FALSE)
+p.has.lc.layer <- plots("has.lc.layer", "Uses LC layer", "LC layer", TRUE, FALSE, FALSE)
+p.lc.width <- plots("lc.width", "LC width(s)", "LC width(s)", TRUE, FALSE, FALSE)
+p.lc.dim <- plots("lc.dim", "Number of filters", "LC dimension", TRUE, FALSE, FALSE)
 
-p.has.conv.layer <- plots("has.conv.layer", "Uses convolutional layer", "Convolutional layer", TRUE, FALSE)
-p.conv.width <- plots("conv.filter.width", "Conv width", "Conv width", TRUE, FALSE)
-p.conv.num.filters <- plots("conv.num.filters", "Conv dimension (num filters)", "Conv dimension (num filters)", FALSE, FALSE)
+p.has.conv.layer <- plots("has.conv.layer", "Uses convolutional layer", "Convolutional layer", TRUE, FALSE, FALSE)
+p.conv.width <- plots("conv.filter.width", "Convolutional width(s)", "Convolutional width(s)", TRUE, FALSE, TRUE)
+p.conv.num.filters <- plots("conv.num.filters", "Number of filters", "Convolutional dimension", FALSE, FALSE, FALSE)
 
-p.l2.factor <- plots("l2.factor", "L2 factor", "L2 factor", FALSE, TRUE)
-p.batch.size <- plots("batch.size", "Batch size", "Batch size", FALSE, FALSE)
-p.learning.rate <- plots("learning.rate", "Learning rate", "Learning rate", FALSE, TRUE)
-p.skip.batch.norm <- plots("skip.batch.norm", "Skipped batch norm", "Skipped batch norm", TRUE, FALSE)
+p.l2.factor <- plots("l2.factor", "L2 factor", "L2 factor", FALSE, TRUE, FALSE)
+p.batch.size <- plots("batch.size", "Batch size", "Batch size", FALSE, FALSE, FALSE)
+p.learning.rate <- plots("learning.rate", "Learning rate", "Learning rate", FALSE, TRUE, FALSE)
+p.skip.batch.norm <- plots("skip.batch.norm", "Skipped batch norm", "Skipped batch norm", TRUE, FALSE, FALSE)
 
-p.add.gc.content <- plots("add.gc.content", "Added in GC content", "Added in GC content", TRUE, FALSE)
-p.sample.weight.scaling.factor <- plots("sample.weight.scaling.factor", "Sample weight scaling factor", "Sample weight scaling factor", FALSE, FALSE)
+p.add.gc.content <- plots("add.gc.content", "Added in GC content", "Added in GC content", TRUE, FALSE, FALSE)
+p.sample.weight.scaling.factor <- plots("sample.weight.scaling.factor", "Sample weight scaling factor", "Sample weight scaling factor", FALSE, FALSE, FALSE)
 
 # Save plots to PDF
 g <- arrangeGrob(p.has.lc.layer$loss,
@@ -207,20 +254,21 @@ g <- arrangeGrob(p.has.lc.layer$loss,
                  p.conv.width$measure,
                  p.conv.num.filters$loss,
                  p.conv.num.filters$measure,
-                 p.l2.factor$loss,
-                 p.l2.factor$measure,
-                 p.learning.rate$loss,
-                 p.learning.rate$measure,
-                 p.batch.size$loss,
-                 p.batch.size$measure,
-                 p.add.gc.content$loss,
-                 p.add.gc.content$measure,
-                 p.skip.batch.norm$loss,
-                 p.skip.batch.norm$measure,
-                 p.sample.weight.scaling.factor$loss,
-                 p.sample.weight.scaling.factor$measure,
+                 #p.l2.factor$loss,
+                 #p.l2.factor$measure,
+                 #p.learning.rate$loss,
+                 #p.learning.rate$measure,
+                 #p.batch.size$loss,
+                 #p.batch.size$measure,
+                 #p.add.gc.content$loss,
+                 #p.add.gc.content$measure,
+                 #p.skip.batch.norm$loss,
+                 #p.skip.batch.norm$measure,
+                 #p.sample.weight.scaling.factor$loss,
+                 #p.sample.weight.scaling.factor$measure,
                  ncol=2)
-ggsave(OUT.PDF, g, width=8, height=48, useDingbats=FALSE, limitsize=FALSE)
+plot.width <- 4
+ggsave(OUT.PDF, g, width=plot.width*2, height=plot.width*6, useDingbats=FALSE, limitsize=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
