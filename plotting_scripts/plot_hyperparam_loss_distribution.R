@@ -170,7 +170,7 @@ plots <- function(x_string, x_label, title, boxplot, x_log, rotate_x) {
         loss.col <- "mse.mean"
         loss.name <- "MSE"
         measure.col <- "rho.mean"
-        measure.name <- "Spearman's rho"
+        measure.name <- "Spearman correlation"
     }
     # Produce plot of MSE
     p.loss <- ggplot(hyperparams, aes_string(x=x_string, y=loss.col))

@@ -155,7 +155,7 @@ if ('mse' %in% colnames(results)) {
     p.rho <- p.rho + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
     p.rho <- p.rho + geom_errorbar(aes(ymin=rho-ci, ymax=rho+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
     p.rho <- p.rho + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
-    p.rho <- p.rho + xlab("Model") + ylab("Spearman's rho")
+    p.rho <- p.rho + xlab("Model") + ylab("Spearman correlation")
     p.rho <- p.rho + labs(fill="")	# no legend title
     p.rho <- p.rho + theme_pubr()
 
