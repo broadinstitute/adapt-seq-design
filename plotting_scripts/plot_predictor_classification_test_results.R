@@ -119,6 +119,39 @@ baseline.results <- data.frame(hd=baseline.results.hd.levels,
                                precision=c(baseline.precision.hd0, baseline.precision.hd1, baseline.precision.hd2, baseline.precision.hd3, baseline.precision.hd4))
 baseline.results$hd <- factor(baseline.results$hd, levels=baseline.results.hd.levels)
 
+# Make a data frame comparing the baseline and 'main' predictor
+# For each Hamming distance, find the baseline's FPR and the 'main' predictor's
+# FPR at equivalent sensitivity (recall), as given in roc$curve; do the
+# same for precision, as given in pr$curve
+roc.curve.df <- data.frame(roc$curve)
+pr.curve.df <- data.frame(pr$curve)
+compare.to.baseline <- do.call(rbind, lapply(baseline.results.hd.levels,
+    function(hd) {
+        # Find the sensitivity, FPR, and precision of the baseline at this hd
+        baseline.sensitivity <- baseline.results[baseline.results$hd == hd,]$sensitivity
+        baseline.fpr <- baseline.results[baseline.results$hd == hd,]$fpr
+        baseline.precision <- baseline.results[baseline.results$hd == hd,]$precision
+
+        # Find the FPR, in roc.curve.df, at equivalent sensitivity (or closest)
+        predictor.roc.idx <- which(abs(roc.curve.df$X2 - baseline.sensitivity) == min(abs(roc.curve.df$X2 - baseline.sensitivity)))[[1]]
+        predictor.fpr <- roc.curve.df[predictor.roc.idx,]$X1
+
+        # Find the precision, in pr$curve, at equivalent sensitivity (or
+        # closest)
+        predictor.pr.idx <- which(abs(pr.curve.df$X1 - baseline.sensitivity) == min(abs(pr.curve.df$X1 - baseline.sensitivity)))[[1]]
+        predictor.precision <- pr.curve.df[predictor.pr.idx,]$X2
+
+        rows.to.add <- data.frame(hd=c(hd, hd, hd, hd),
+                                  model=c("Baseline", "Baseline", "ADAPT", "ADAPT"),
+                                  metric=c("fpr", "precision", "fpr", "precision"),
+                                  value=c(baseline.fpr, baseline.precision, predictor.fpr, predictor.precision),
+                                  color=c(hd, hd, "ADAPT", "ADAPT"))
+        return(rows.to.add)
+    }
+))
+compare.to.baseline$color <- factor(compare.to.baseline$color,
+                                    levels=c("ADAPT", baseline.results.hd.levels))
+
 #####################################################################
 # Compute ROC and PR curves for different choices of Hamming distance,
 # and separately for different choices of PFS
@@ -230,14 +263,14 @@ p.roc <- p
 p <- ggplot(data.frame(roc$curve))
 p <- p + geom_line(aes(x=X1, y=X2), size=2)
 p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for random classifier
-p <- p + geom_point(data=baseline.results, aes(x=fpr, y=sensitivity, color=hd), size=2) # dots for baseline
-p <- p + xlab("FPR") + ylab("Sensitivity") + labs(color="Baseline")
-p <- p + scale_color_viridis(discrete=TRUE, direction=-1,
-                             labels=c(expression(phantom()==0),
-                                      expression(phantom()<=1),
-                                      expression(phantom()<=2),
-                                      expression(phantom()<=3),
-                                      expression(phantom()<=4)))
+p <- p + geom_point(data=baseline.results, aes(x=fpr, y=sensitivity, fill=hd), size=4, shape=21, color="white", stroke=0.5) # dots for baseline; stroke/outline in white
+p <- p + xlab("FPR") + ylab("Sensitivity") + labs(fill="Baseline")
+p <- p + scale_fill_viridis(discrete=TRUE,
+                            labels=c(expression(phantom()==0),
+                                     expression(phantom()<=1),
+                                     expression(phantom()<=2),
+                                     expression(phantom()<=3),
+                                     expression(phantom()<=4)))
 p <- p + theme_pubr()
 p <- p + theme(aspect.ratio=1)  # square plot
 p.roc.color.baseline <- p
@@ -303,15 +336,15 @@ random.precision <- length(pos) / nrow(test.results)
 p <- ggplot(data.frame(pr$curve))
 p <- p + geom_line(aes(x=X1, y=X2), size=2)
 p <- p + geom_hline(yintercept=random.precision, linetype="dotted")    # representing random classifier
-p <- p + geom_point(data=baseline.results, aes(x=sensitivity, y=precision, color=hd), size=2) # dots for baseline
+p <- p + geom_point(data=baseline.results, aes(x=sensitivity, y=precision, fill=hd), size=4, shape=21, color="white", stroke=0.5) # dots for baseline; stroke/outline in white
 p <- p + xlab("Recall") + ylab("Precision") + labs(color="Threshold", color="Baseline")
 p <- p + ylim(0.8, 1.0)
-p <- p + scale_color_viridis(discrete=TRUE, direction=-1,
-                             labels=c(expression(phantom()==0),
-                                      expression(phantom()<=1),
-                                      expression(phantom()<=2),
-                                      expression(phantom()<=3),
-                                      expression(phantom()<=4)))
+p <- p + scale_fill_viridis(discrete=TRUE,
+                            labels=c(expression(phantom()==0),
+                                     expression(phantom()<=1),
+                                     expression(phantom()<=2),
+                                     expression(phantom()<=3),
+                                     expression(phantom()<=4)))
 p <- p + theme_pubr()
 p <- p + theme(aspect.ratio=1)  # square plot
 p.pr.color.baseline <- p
@@ -384,6 +417,56 @@ p.cas13a.pfs.pr <- p
 #####################################################################
 
 #####################################################################
+# Plot comparison of FPR between baseline and predictor
+# Show FPR on the horizontal axis because that is how it is shown on
+# a ROC curve
+
+# Make 'ADAPT' be black and the baselines be colored by Hamming distance
+# threshold
+pal <- c("black", viridis::viridis(n=length(baseline.results.hd.levels)))
+
+compare.to.baseline.fpr <- compare.to.baseline[compare.to.baseline$metric == "fpr",]
+
+p <- ggplot(compare.to.baseline.fpr, aes(x=hd, y=value, fill=color))
+p <- p + geom_bar(stat="identity", position=position_dodge(-0.7), width=0.7)    # make position dodge be negative to avoid coord_flip from reversing order of bars within groups
+p <- p + scale_fill_manual(values=pal,
+                           labels=c("ADAPT",
+                                    expression(phantom()==0),
+                                    expression(phantom()<=1),
+                                    expression(phantom()<=2),
+                                    expression(phantom()<=3),
+                                    expression(phantom()<=4)))
+p <- p + xlab("Threshold") + ylab("FPR")
+p <- p + coord_flip()
+p <- p + theme_pubr()
+p.compare.to.baseline.thresholds.fpr <- p
+#####################################################################
+
+#####################################################################
+# Plot comparison of precision between baseline and predictor
+
+# Make 'ADAPT' be black and the baselines be colored by Hamming distance
+# threshold
+pal <- c("black", viridis::viridis(n=length(baseline.results.hd.levels)))
+
+compare.to.baseline.precision <- compare.to.baseline[compare.to.baseline$metric == "precision",]
+
+p <- ggplot(compare.to.baseline.precision, aes(x=hd, y=value, fill=color))
+p <- p + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
+p <- p + scale_fill_manual(values=pal,
+                           labels=c("ADAPT",
+                                    expression(phantom()==0),
+                                    expression(phantom()<=1),
+                                    expression(phantom()<=2),
+                                    expression(phantom()<=3),
+                                    expression(phantom()<=4)))
+p <- p + xlab("Threshold") + ylab("Precision")
+p <- p + coord_cartesian(ylim=c(0.8, 1.0))  # this way instead of only ylim() to avoid throwing away the bars, since they extend outside the range
+p <- p + theme_pubr()
+p.compare.to.baseline.thresholds.precision <- p
+#####################################################################
+
+#####################################################################
 # Produce PDFs
 
 save <- function(p, filename, width, height) {
@@ -402,4 +485,6 @@ save(p.hamming.dist.roc, "hamming-dist-roc", 8, 8)
 save(p.hamming.dist.pr, "hamming-dist-pr", 8, 8)
 save(p.cas13a.pfs.roc, "cas13a-pfs-roc", 8, 8)
 save(p.cas13a.pfs.pr, "cas13a-pfs-pr", 8, 8)
+save(p.compare.to.baseline.thresholds.fpr, "compare-to-baseline-thresholds-fpr", 8, 4)
+save(p.compare.to.baseline.thresholds.precision, "compare-to-baseline-thresholds-precision", 4, 8)
 #####################################################################
