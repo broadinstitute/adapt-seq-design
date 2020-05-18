@@ -14,7 +14,7 @@ require(caret)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
-OUT.PDF <- args[2]
+OUT.DIR <- args[2]
 
 
 ## A helper function from:
@@ -325,16 +325,20 @@ p.cas13a.pfs.pr <- p
 #####################################################################
 
 #####################################################################
-# Produce PDF
-g <- ggarrange(p.roc,
-               p.pr,
-               p.hamming.dist.roc,
-               p.hamming.dist.pr,
-               p.cas13a.pfs.roc,
-               p.cas13a.pfs.pr,
-               ncol=1)
-ggsave(OUT.PDF, g, width=10, height=36, useDingbats=FALSE, limitsize=FALSE)
+# Produce PDFs
 
-# Remove the empty Rplots.pdf created above
-file.remove("Rplots.pdf")
+save <- function(p, filename, width, height) {
+    ggsave(file.path(OUT.DIR, paste0(filename, ".pdf")),
+           p,
+           width=width,
+           height=height,
+           useDingbats=FALSE)
+}
+
+save(p.roc, "roc", 8, 8)
+save(p.pr, "pr", 8, 8)
+save(p.hamming.dist.roc, "hamming-dist-roc", 8, 8)
+save(p.hamming.dist.pr, "hamming-dist-pr", 8, 8)
+save(p.cas13a.pfs.roc, "cas13a-pfs-roc", 8, 8)
+save(p.cas13a.pfs.pr, "cas13a-pfs-pr", 8, 8)
 #####################################################################

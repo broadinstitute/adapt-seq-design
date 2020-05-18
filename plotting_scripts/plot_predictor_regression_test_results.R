@@ -12,7 +12,7 @@ require(ggsignif)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
-OUT.PDF <- args[2]
+OUT.DIR <- args[2]
 
 ## A helper function from:
 ##   http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/#Helper%20functions
@@ -497,25 +497,29 @@ p.true.vs.predicted.summarized <- p
 #####################################################################
 
 #####################################################################
-# Produce PDF
-g <- arrangeGrob(p.output.dist,
-                 p.true.vs.predicted,
-                 p.true.vs.predicted.density.contours,
-                 p.true.vs.predicted.colored.by.hamming.dist,
-                 p.true.vs.predicted.facet.by.hamming.dist,
-                 p.true.vs.predicted.colored.by.pfs,
-                 p.true.vs.predicted.facet.by.pfs,
-                 #p.by.predicted.quantile.group,
-                 p.by.predicted.quantile.group.boxplot,
-                 p.by.predicted.quantile.group.boxplot.hamming.dist,
-                 p.by.predicted.quantile.group.boxplot.pfs,
-                 #p.true.vs.predicted.quantiles,
-                 #p.true.vs.predicted.faceted.by.crrna,
-                 p.rho.across.crrnas,
-                 #p.true.vs.predicted.summarized,
-                 ncol=1)
-ggsave(OUT.PDF, g, width=8, height=64, useDingbats=FALSE, limitsize=FALSE)
+# Produce PDFs
 
-# Remove the empty Rplots.pdf created above
-file.remove("Rplots.pdf")
+save <- function(p, filename, width, height) {
+    ggsave(file.path(OUT.DIR, paste0(filename, ".pdf")),
+           p,
+           width=width,
+           height=height,
+           useDingbats=FALSE)
+}
+
+save(p.output.dist, "output-dist", 8, 8)
+save(p.true.vs.predicted, "true-vs-predicted", 8, 8)
+save(p.true.vs.predicted.density.contours, "true-vs-predicted-density-contours", 8, 8)
+save(p.true.vs.predicted.colored.by.hamming.dist, "true-vs-predicted-colored-by-hamming-dist", 8, 8)
+save(p.true.vs.predicted.facet.by.hamming.dist, "true-vs-predicted-facet-by-hamming-dist", 8, 8)
+save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 8, 8)
+save(p.true.vs.predicted.facet.by.pfs, "true-vs-predicted-facet-by-pfs", 8, 8)
+save(p.by.predicted.quantile.group, "by-predicted-quantile-group", 8, 8)
+save(p.by.predicted.quantile.group.boxplot, "by-predicted-quantile-group-boxplot", 8, 8)
+save(p.by.predicted.quantile.group.boxplot.hamming.dist, "by-predicted-quantile-group-boxplot-hamming-dist", 8, 8)
+save(p.by.predicted.quantile.group.boxplot.pfs, "by-predicted-quantiled-group-boxplot-pfs", 8, 8)
+save(p.true.vs.predicted.quantiles, "true-vs-predicted-quantiles", 8, 8)
+save(p.true.vs.predicted.faceted.by.crrna, "true-vs-predicted-faceted-by-crrna", 8, 8)
+save(p.rho.across.crrnas, "rho-across-crrnas", 8, 8)
+save(p.true.vs.predicted.summarized, "true-vs-predicted-summarized", 8, 8)
 #####################################################################
