@@ -10,6 +10,7 @@ require(ggridges)
 require(viridis)
 require(ggsignif)
 require(ggpubr)
+require(ggstance)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
@@ -362,7 +363,32 @@ p.by.predicted.quantile.group.boxplot <- p
 # quantile, along with a boxplot
 # Use quartiles here (4 groupings)
 
-# TODO
+# This is tricky because geom_density_ridges() is usually shown horizontally
+# and boxplots are usually shown vertically. To have horizontal boxplots
+# in ggplot2, we would use coord_flip(), but this would not work with
+# the geom_density_ridges(). Thus, we use the ggstance package to have
+# horizontal boxplots through geom_boxploth()
+
+# Note that adding in p-values with geom_signif() doesn't work here
+# because it assumes horizontally-separated groupings, the groupings
+# are vertically-separated here
+
+p <- ggplot(test.results.with.quantile.group, aes(x=true.activity, y=predicted.quantile))
+p <- p + xlab("Activity") + ylab("Quartile")
+p <- p + geom_density_ridges(aes(fill=color),
+                             #color="white", # white outline
+                             scale=1.8, # 1 indicates the maximum of a ridge touches the base of the one above; >1 overlaps
+                             alpha=0.7) # some transparency in overlap
+p <- p + geom_boxploth(aes(color=color),
+                       width=0.15,   # really the height of the boxplot
+                       size=1,  # thickness of lines
+                       position=position_nudge(y=+0.1), # shift up slightly
+                       #fill=NA, # leave empty to see ridges
+                       outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
+p <- p + scale_color_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
+p <- p + scale_fill_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
+p <- p + theme_pubr()
+p.by.predicted.quantile.group.ridges.and.boxplot <- p
 #####################################################################
 
 #####################################################################
@@ -536,6 +562,7 @@ save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 8, 
 save(p.true.vs.predicted.facet.by.pfs, "true-vs-predicted-facet-by-pfs", 8, 8)
 save(p.by.predicted.quantile.group, "by-predicted-quantile-group", 8, 8)
 save(p.by.predicted.quantile.group.boxplot, "by-predicted-quantile-group-boxplot", 8, 8)
+save(p.by.predicted.quantile.group.ridges.and.boxplot, "by-predicted-quantile-group-ridges-and-boxplot", 8, 8)
 save(p.by.predicted.quantile.group.boxplot.hamming.dist, "by-predicted-quantile-group-boxplot-hamming-dist", 8, 8)
 save(p.by.predicted.quantile.group.boxplot.pfs, "by-predicted-quantiled-group-boxplot-pfs", 8, 8)
 save(p.true.vs.predicted.quantiles, "true-vs-predicted-quantiles", 8, 8)
