@@ -295,7 +295,7 @@ test.results.with.quantile.group$color <- ifelse(test.results.with.quantile.grou
 test.results.with.quantile.group$color <- factor(test.results.with.quantile.group$color, levels=c("all", "quantile"))
 
 p <- ggplot(test.results.with.quantile.group, aes(x=true.activity, y=predicted.quantile))
-p <- p + xlab("Activity") + ylab("Quartile")
+p <- p + xlab("True activity") + ylab("Quartile of prediction")
 p <- p + geom_density_ridges()
 p <- p + theme_pubr()
 p.by.predicted.quantile.group <- p
@@ -335,7 +335,7 @@ box.n <- function(x) {
 # For geom_boxplot(), we need the variable of interest to be y, so use
 # this and then do coord_flip()
 p <- ggplot(test.results.with.quantile.group, aes(y=true.activity, x=predicted.quantile))
-p <- p + ylab("Activity") + xlab("Quartile")
+p <- p + ylab("True activity") + xlab("Quartile of prediction")
 p <- p + geom_boxplot(aes(color=color),
                       #outlier.size=0.25,
                       #outlier.stroke=0,
@@ -374,7 +374,7 @@ p.by.predicted.quantile.group.boxplot <- p
 # are vertically-separated here
 
 p <- ggplot(test.results.with.quantile.group, aes(x=true.activity, y=predicted.quantile))
-p <- p + xlab("Activity") + ylab("Quartile")
+p <- p + xlab("True activity") + ylab("Quartile of prediction")
 p <- p + geom_density_ridges(aes(fill=color),
                              #color="white", # white outline
                              scale=1.8, # 1 indicates the maximum of a ridge touches the base of the one above; >1 overlaps
@@ -407,7 +407,7 @@ test.results.with.quantile.group.hd.limit <- test.results.with.quantile.group[te
 facet.ncol <- 3
 p <- ggplot(test.results.with.quantile.group.hd.limit, aes(y=true.activity, x=predicted.quantile))
 p <- p + facet_wrap(~ hamming.dist, ncol=facet.ncol, scales="fixed")
-p <- p + ylab("Activity") + xlab("Quartile")
+p <- p + ylab("True activity") + xlab("Quartile of prediction")
 p <- p + geom_boxplot(aes(color=color),
                       #outlier.size=0.25,
                       #outlier.stroke=0,
@@ -434,7 +434,7 @@ p.by.predicted.quantile.group.boxplot.hamming.dist <- p
 facet.ncol <- floor(sqrt(length(unique(test.results.with.quantile.group$cas13a.pfs))))
 p <- ggplot(test.results.with.quantile.group, aes(y=true.activity, x=predicted.quantile))
 p <- p + facet_wrap(~ cas13a.pfs, ncol=facet.ncol, scales="fixed")
-p <- p + ylab("Activity") + xlab("Quartile")
+p <- p + ylab("True activity") + xlab("Quartile of prediction")
 p <- p + geom_boxplot(aes(color=color),
                       #outlier.size=0.25,
                       #outlier.stroke=0,
@@ -477,17 +477,6 @@ p.true.vs.predicted.quantiles <- p
 # Also, make a density plot of the distribution of Spearman rho
 # rank correlation coefficients across the crRNAs
 
-facet.ncol <- floor(sqrt(length(unique(test.results$crrna.pos)))) + 1
-p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
-p <- p + geom_point(alpha=0.5, stroke=0, size=0.2)
-p <- p + facet_wrap( ~ crrna.pos, ncol=facet.ncol)
-p <- p + xlab("True activity") + ylab("Predicted activity")
-p <- p + theme_pubr()
-p <- p + theme(strip.background=element_blank(),    # remove background on facet label
-               panel.border=element_rect(color="gray", fill=NA, size=0.5), # border facet
-               aspect.ratio=1)  # square facets
-p.true.vs.predicted.faceted.by.crrna <- p
-
 # Compute a rank correlation coefficient for each crRNA
 rho.for.crrna <- do.call(rbind, lapply(unique(test.results$crrna.pos),
     function(crrna.pos) {
@@ -500,6 +489,22 @@ rho.for.crrna <- do.call(rbind, lapply(unique(test.results$crrna.pos),
                           rho=rho))
     }
 ))
+rho.for.crrna$rho.val.str <- format(rho.for.crrna$rho, digits=3)
+
+facet.ncol <- floor(sqrt(length(unique(test.results$crrna.pos)))) + 1
+p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(alpha=0.5, stroke=0, size=0.2)
+p <- p + facet_wrap( ~ crrna.pos, ncol=facet.ncol)
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + theme_pubr()
+p <- p + theme(strip.background=element_blank(),    # remove background on facet label
+               panel.border=element_rect(color="gray", fill=NA, size=0.5), # border facet
+               aspect.ratio=1)  # square facets
+# Include text with the rho value
+p <- p + geom_text(data=rho.for.crrna, aes(label=paste("rho==", rho.val.str)), parse=TRUE,
+                   x=Inf, y=Inf, hjust=1, vjust=1, size=3)
+p.true.vs.predicted.faceted.by.crrna <- p
+
 p <- ggplot(rho.for.crrna, aes(x=rho))
 p <- p + geom_density(fill="gray")
 p <- p + xlab("Spearman correlation") + ylab("Density")
