@@ -15,7 +15,8 @@ require(ggpubr)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
-OUT.DIR <- args[2]
+DECISION.THRESHOLD <- as.numeric(args[2])
+OUT.DIR <- args[3]
 
 
 ## A helper function from:
@@ -152,6 +153,20 @@ compare.to.baseline <- do.call(rbind, lapply(baseline.results.hd.levels,
 compare.to.baseline$color <- factor(compare.to.baseline$color,
                                     levels=c("ADAPT", baseline.results.hd.levels))
 
+# Find sensitivity, FPR, precision, recall at the given classifier threshold
+# Find the closest threshold in roc$curve and $pr$curve to the given one
+decision.threshold.roc.idx <- which(abs(roc.curve.df$X3 - DECISION.THRESHOLD) == min(abs(roc.curve.df$X3 - DECISION.THRESHOLD)))[[1]]
+decision.threshold.roc.fpr <- roc.curve.df[decision.threshold.roc.idx,]$X1
+decision.threshold.roc.sensitivity <- roc.curve.df[decision.threshold.roc.idx,]$X2
+decision.threshold.pr.idx <- which(abs(pr.curve.df$X3 - DECISION.THRESHOLD) == min(abs(pr.curve.df$X3 - DECISION.THRESHOLD)))[[1]]
+decision.threshold.pr.sensitivity <- pr.curve.df[decision.threshold.pr.idx,]$X1
+decision.threshold.pr.precision <- pr.curve.df[decision.threshold.pr.idx,]$X2
+print(paste0("At provided decision threshold = ", DECISION.THRESHOLD))
+print(paste0("  ROC curve: sensitivity = ", decision.threshold.roc.sensitivity,
+             " ; FPR = ", decision.threshold.roc.fpr))
+print(paste0("  PR curve: sensitivity (recall) = ", decision.threshold.pr.sensitivity,
+             " ;  precision = ", decision.threshold.pr.precision))
+
 #####################################################################
 # Compute ROC and PR curves for different choices of Hamming distance,
 # and separately for different choices of PFS
@@ -244,8 +259,9 @@ p <- ggplot(data.frame(roc$curve))
 p <- p + geom_line(aes(x=X1, y=X2, color=X3))
 p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for random classifier
 p <- p + geom_point(data=baseline.results, aes(x=fpr, y=sensitivity, shape=hd)) # dots for baseline
-p <- p + xlab("FPR") + ylab("Sensitivity") + labs(color="Threshold", shape="Baseline")
-p <- p + scale_color_viridis() # adjust color gradient
+p <- p + geom_point(aes(x=decision.threshold.roc.fpr, y=decision.threshold.roc.sensitivity), shape=3, size=4, color="#B73055", stroke=1.5)  # '+' at given decision threshold
+p <- p + xlab("FPR") + ylab("Sensitivity")
+p <- p + scale_color_viridis(name="Threshold") # adjust color gradient
 p <- p + scale_shape_discrete(name="Distance",
                               labels=c(expression(phantom()==0),
                                        expression(phantom()<=1),
@@ -262,9 +278,10 @@ p.roc <- p
 # Color points represent baseline decision thresholds
 
 p <- ggplot(data.frame(roc$curve))
-p <- p + geom_line(aes(x=X1, y=X2), size=2)
+p <- p + geom_line(aes(x=X1, y=X2), size=1.5)
 p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for random classifier
 p <- p + geom_point(data=baseline.results, aes(x=fpr, y=sensitivity, fill=hd), size=4, shape=21, color="white", stroke=0.5) # dots for baseline; stroke/outline in white
+p <- p + geom_point(aes(x=decision.threshold.roc.fpr, y=decision.threshold.roc.sensitivity), shape=3, size=4, color="#B73055", stroke=1.5)  # '+' at given decision threshold
 p <- p + xlab("FPR") + ylab("Sensitivity") + labs(fill="Baseline")
 p <- p + scale_fill_viridis(discrete=TRUE,
                             name="Distance",
@@ -316,9 +333,10 @@ p <- ggplot(data.frame(pr$curve))
 p <- p + geom_line(aes(x=X1, y=X2, color=X3))
 p <- p + geom_hline(yintercept=random.precision, linetype="dotted")    # representing random classifier
 p <- p + geom_point(data=baseline.results, aes(x=sensitivity, y=precision, shape=hd)) # dots for baseline
-p <- p + xlab("Recall") + ylab("Precision") + labs(color="Threshold", shape="Baseline")
+p <- p + geom_point(aes(x=decision.threshold.pr.sensitivity, y=decision.threshold.pr.precision), shape=3, size=4, color="#B73055", stroke=1.5)  # '+' at given decision threshold
+p <- p + xlab("Recall") + ylab("Precision")
 p <- p + ylim(0.8, 1.0)
-p <- p + scale_color_viridis() # adjust color gradient
+p <- p + scale_color_viridis(name="Threshold") # adjust color gradient
 p <- p + scale_shape_discrete(name="Distance",
                               labels=c(expression(phantom()==0),
                                        expression(phantom()<=1),
@@ -337,9 +355,10 @@ p.pr <- p
 random.precision <- length(pos) / nrow(test.results)
 
 p <- ggplot(data.frame(pr$curve))
-p <- p + geom_line(aes(x=X1, y=X2), size=2)
+p <- p + geom_line(aes(x=X1, y=X2), size=1.5)
 p <- p + geom_hline(yintercept=random.precision, linetype="dotted")    # representing random classifier
 p <- p + geom_point(data=baseline.results, aes(x=sensitivity, y=precision, fill=hd), size=4, shape=21, color="white", stroke=0.5) # dots for baseline; stroke/outline in white
+p <- p + geom_point(aes(x=decision.threshold.pr.sensitivity, y=decision.threshold.pr.precision), shape=3, size=4, color="#B73055", stroke=1.5)  # '+' at given decision threshold
 p <- p + xlab("Recall") + ylab("Precision") + labs(color="Threshold", color="Baseline")
 p <- p + ylim(0.8, 1.0)
 p <- p + scale_fill_viridis(discrete=TRUE,
