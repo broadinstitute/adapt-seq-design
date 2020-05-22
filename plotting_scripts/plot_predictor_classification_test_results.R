@@ -246,7 +246,8 @@ p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for ra
 p <- p + geom_point(data=baseline.results, aes(x=fpr, y=sensitivity, shape=hd)) # dots for baseline
 p <- p + xlab("FPR") + ylab("Sensitivity") + labs(color="Threshold", shape="Baseline")
 p <- p + scale_color_viridis() # adjust color gradient
-p <- p + scale_shape_discrete(labels=c(expression(phantom()==0),
+p <- p + scale_shape_discrete(name="Distance",
+                              labels=c(expression(phantom()==0),
                                        expression(phantom()<=1),
                                        expression(phantom()<=2),
                                        expression(phantom()<=3),
@@ -266,6 +267,7 @@ p <- p + geom_abline(slope=1, intercept=0, linetype="dotted")  # diagonal for ra
 p <- p + geom_point(data=baseline.results, aes(x=fpr, y=sensitivity, fill=hd), size=4, shape=21, color="white", stroke=0.5) # dots for baseline; stroke/outline in white
 p <- p + xlab("FPR") + ylab("Sensitivity") + labs(fill="Baseline")
 p <- p + scale_fill_viridis(discrete=TRUE,
+                            name="Distance",
                             labels=c(expression(phantom()==0),
                                      expression(phantom()<=1),
                                      expression(phantom()<=2),
@@ -317,7 +319,8 @@ p <- p + geom_point(data=baseline.results, aes(x=sensitivity, y=precision, shape
 p <- p + xlab("Recall") + ylab("Precision") + labs(color="Threshold", shape="Baseline")
 p <- p + ylim(0.8, 1.0)
 p <- p + scale_color_viridis() # adjust color gradient
-p <- p + scale_shape_discrete(labels=c(expression(phantom()==0),
+p <- p + scale_shape_discrete(name="Distance",
+                              labels=c(expression(phantom()==0),
                                        expression(phantom()<=1),
                                        expression(phantom()<=2),
                                        expression(phantom()<=3),
@@ -340,6 +343,7 @@ p <- p + geom_point(data=baseline.results, aes(x=sensitivity, y=precision, fill=
 p <- p + xlab("Recall") + ylab("Precision") + labs(color="Threshold", color="Baseline")
 p <- p + ylim(0.8, 1.0)
 p <- p + scale_fill_viridis(discrete=TRUE,
+                            name="Distance",
                             labels=c(expression(phantom()==0),
                                      expression(phantom()<=1),
                                      expression(phantom()<=2),
@@ -430,12 +434,19 @@ compare.to.baseline.fpr <- compare.to.baseline[compare.to.baseline$metric == "fp
 p <- ggplot(compare.to.baseline.fpr, aes(x=hd, y=value, fill=color))
 p <- p + geom_bar(stat="identity", position=position_dodge(-0.7), width=0.7)    # make position dodge be negative to avoid coord_flip from reversing order of bars within groups
 p <- p + scale_fill_manual(values=pal,
+                           guide=FALSE, # do not show legend
                            labels=c("ADAPT",
                                     expression(phantom()==0),
                                     expression(phantom()<=1),
                                     expression(phantom()<=2),
                                     expression(phantom()<=3),
                                     expression(phantom()<=4)))
+p <- p + scale_x_discrete(labels=c( # manually set x-axis labels (flipped, so y-axis)
+                                   "=0" = expression(phantom()==0),
+                                    "<=1" = expression(phantom()<=1),
+                                    "<=2" = expression(phantom()<=2),
+                                    "<=3" = expression(phantom()<=3),
+                                    "<=4" = expression(phantom()<=4)))
 p <- p + xlab("Threshold") + ylab("FPR")
 p <- p + coord_flip()
 p <- p + theme_pubr()
@@ -454,12 +465,19 @@ compare.to.baseline.precision <- compare.to.baseline[compare.to.baseline$metric 
 p <- ggplot(compare.to.baseline.precision, aes(x=hd, y=value, fill=color))
 p <- p + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
 p <- p + scale_fill_manual(values=pal,
+                           guide=FALSE, # do not show legend
                            labels=c("ADAPT",
                                     expression(phantom()==0),
                                     expression(phantom()<=1),
                                     expression(phantom()<=2),
                                     expression(phantom()<=3),
                                     expression(phantom()<=4)))
+p <- p + scale_x_discrete(labels=c( # manually set x-axis labels
+                                   "=0" = expression(phantom()==0),
+                                    "<=1" = expression(phantom()<=1),
+                                    "<=2" = expression(phantom()<=2),
+                                    "<=3" = expression(phantom()<=3),
+                                    "<=4" = expression(phantom()<=4)))
 p <- p + xlab("Threshold") + ylab("Precision")
 p <- p + coord_cartesian(ylim=c(0.8, 1.0))  # this way instead of only ylim() to avoid throwing away the bars, since they extend outside the range
 p <- p + theme_pubr()
@@ -485,6 +503,6 @@ save(p.hamming.dist.roc, "hamming-dist-roc", 8, 8)
 save(p.hamming.dist.pr, "hamming-dist-pr", 8, 8)
 save(p.cas13a.pfs.roc, "cas13a-pfs-roc", 8, 8)
 save(p.cas13a.pfs.pr, "cas13a-pfs-pr", 8, 8)
-save(p.compare.to.baseline.thresholds.fpr, "compare-to-baseline-thresholds-fpr", 8, 4)
+save(p.compare.to.baseline.thresholds.fpr, "compare-to-baseline-thresholds-fpr", 6.7, 4)
 save(p.compare.to.baseline.thresholds.precision, "compare-to-baseline-thresholds-precision", 4, 8)
 #####################################################################
