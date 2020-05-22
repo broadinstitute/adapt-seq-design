@@ -16,7 +16,7 @@ args <- commandArgs(trailingOnly=TRUE)
 IN.BASELINES.TSV <- args[1]
 IN.PREDICTOR.TSV <- args[2]
 IN.CLASSIFICATION.TEST.RESULTS.TSV <- args[3]  # classification results on test data set; only used for computing baseline precision
-OUT.PDF <- args[4]
+OUT.DIR <- args[4]
 
 
 ## A helper function from:
@@ -160,10 +160,12 @@ if ('mse' %in% colnames(results)) {
     p.rho <- p.rho + theme_pubr()
 
     # Save to PDF
-    g <- arrangeGrob(p.mse,
-                     p.rho,
-                     ncol=2)
-    ggsave(OUT.PDF, g, width=16, height=4, useDingbats=FALSE)
+    ggsave(file.path(OUT.DIR, "nested-cross-val.metrics.mse.pdf"),
+           p.mse,
+           width=8, height=4, useDingbats=FALSE)
+    ggsave(file.path(OUT.DIR, "nested-cross-val.metrics.rho.pdf"),
+           p.rho,
+           width=8, height=4, useDingbats=FALSE)
 } else {
     # Classification
 
@@ -217,11 +219,10 @@ if ('mse' %in% colnames(results)) {
     p.aupr <- p.aupr + theme_pubr()
 
     # Save to PDF
-    g <- arrangeGrob(p.auroc,
-                     p.aupr,
-                     ncol=2)
-    ggsave(OUT.PDF, g, width=16, height=4, useDingbats=FALSE)
+    ggsave(file.path(OUT.DIR, "nested-cross-val.metrics.auroc.pdf"),
+           p.auroc,
+           width=8, height=4, useDingbats=FALSE)
+    ggsave(file.path(OUT.DIR, "nested-cross-val.metrics.aupr.pdf"),
+           p.aupr,
+           width=8, height=4, useDingbats=FALSE)
 }
-
-# Remove the empty Rplots.pdf created above
-file.remove("Rplots.pdf")
