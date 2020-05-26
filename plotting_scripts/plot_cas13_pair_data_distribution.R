@@ -20,6 +20,7 @@ IN.TABLE <- "data/CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.g
 OUT.DIST.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.pdf"
 OUT.DIST.BLOCKS.FACETS.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.blocks.facets.pdf"
 OUT.DIST.BLOCKS.RIDGES.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.blocks.ridges.pdf"
+OUT.DIST.ACTIVITY.BY.POS.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.by-target-position.pdf"
 OUT.DIST.TRAIN.AND.TEST.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.train-and-test.pdf"
 OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.between-and-within-guides.pdf"
 OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDE.TARGET.PAIRS.PDF <- "out/cas13/dataset/cas13-pair-activity-dist.between-and-within-guide-target-pairs.pdf"
@@ -169,6 +170,23 @@ p <- p + geom_density_ridges()
 p <- p + xlab("Activity") + ylab("Block")
 p <- p + theme_pubr()
 p + ggsave(OUT.DIST.BLOCKS.RIDGES.PDF, width=8, height=48, useDingbats=FALSE)
+##############################################################################
+
+##############################################################################
+# Make a plot showing the distribution of just exp-and-pos wildtypes (i.e.,
+# where the gudie matches the target), summarized at every position for a guide
+# along the target
+# This is meant to show if there are position-specific effects (e.g., if guides
+# detecting one end of the target do worse than ones in the middle or on the
+# other end)
+p <- ggplot(mean.wildtype.activity, aes(x=guide.pos.nt, y=out.logk.measurement))
+p <- p + geom_point()
+p <- p + geom_errorbar(aes(x=guide.pos.nt,
+                           ymin=out.logk.measurement-ci, ymax=out.logk.measurement+ci),
+                       width=5, size=1, color="black")
+p <- p + xlab("Position along target") + ylab("Activity against wildtype target")
+p <- p + theme_pubr()
+p + ggsave(OUT.DIST.ACTIVITY.BY.POS.PDF, width=16, height=8, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
