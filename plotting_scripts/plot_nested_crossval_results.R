@@ -162,10 +162,10 @@ if ('mse' %in% colnames(results)) {
     # Save to PDF
     ggsave(file.path(OUT.DIR, "nested-cross-val.metrics.mse.pdf"),
            p.mse,
-           width=8, height=4, useDingbats=FALSE)
+           width=6.5, height=4, useDingbats=FALSE)
     ggsave(file.path(OUT.DIR, "nested-cross-val.metrics.rho.pdf"),
            p.rho,
-           width=8, height=4, useDingbats=FALSE)
+           width=6.5, height=4, useDingbats=FALSE)
 } else {
     # Classification
 
@@ -221,8 +221,8 @@ if ('mse' %in% colnames(results)) {
     # Save to PDF
     ggsave(file.path(OUT.DIR, "nested-cross-val.metrics.auroc.pdf"),
            p.auroc,
-           width=8, height=4, useDingbats=FALSE)
+           width=6.5, height=4, useDingbats=FALSE)
     ggsave(file.path(OUT.DIR, "nested-cross-val.metrics.aupr.pdf"),
            p.aupr,
-           width=8, height=4, useDingbats=FALSE)
+           width=6.5, height=4, useDingbats=FALSE)
 }
