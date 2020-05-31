@@ -377,12 +377,12 @@ p <- ggplot(test.results.with.quantile.group, aes(x=true.activity, y=predicted.q
 p <- p + xlab("True activity") + ylab("Quartile of prediction")
 p <- p + geom_density_ridges(aes(fill=color),
                              #color="white", # white outline
-                             scale=1.8, # 1 indicates the maximum of a ridge touches the base of the one above; >1 overlaps
+                             scale=1.2, # 1 indicates the maximum of a ridge touches the base of the one above; >1 overlaps
                              alpha=0.7) # some transparency in overlap
 p <- p + geom_boxploth(aes(color=color),
                        width=0.15,   # really the height of the boxplot
                        size=1,  # thickness of lines
-                       position=position_nudge(y=+0.1), # shift up slightly
+                       position=position_nudge(y=+0.2), # shift up
                        #fill=NA, # leave empty to see ridges
                        outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
 p <- p + scale_color_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
@@ -558,20 +558,20 @@ save <- function(p, filename, width, height) {
            useDingbats=FALSE)
 }
 
-save(p.output.dist, "output-dist", 8, 8)
-save(p.true.vs.predicted, "true-vs-predicted", 8, 8)
-save(p.true.vs.predicted.density.contours, "true-vs-predicted-density-contours", 8, 8)
-save(p.true.vs.predicted.colored.by.hamming.dist, "true-vs-predicted-colored-by-hamming-dist", 8, 8)
-save(p.true.vs.predicted.facet.by.hamming.dist, "true-vs-predicted-facet-by-hamming-dist", 8, 8)
-save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 8, 8)
-save(p.true.vs.predicted.facet.by.pfs, "true-vs-predicted-facet-by-pfs", 8, 8)
-save(p.by.predicted.quantile.group, "by-predicted-quantile-group", 8, 8)
-save(p.by.predicted.quantile.group.boxplot, "by-predicted-quantile-group-boxplot", 8, 8)
-save(p.by.predicted.quantile.group.ridges.and.boxplot, "by-predicted-quantile-group-ridges-and-boxplot", 8, 8)
-save(p.by.predicted.quantile.group.boxplot.hamming.dist, "by-predicted-quantile-group-boxplot-hamming-dist", 8, 8)
-save(p.by.predicted.quantile.group.boxplot.pfs, "by-predicted-quantiled-group-boxplot-pfs", 8, 8)
-save(p.true.vs.predicted.quantiles, "true-vs-predicted-quantiles", 8, 8)
-save(p.true.vs.predicted.faceted.by.crrna, "true-vs-predicted-faceted-by-crrna", 8, 8)
-save(p.rho.across.crrnas, "rho-across-crrnas", 8, 8)
-save(p.true.vs.predicted.summarized, "true-vs-predicted-summarized", 8, 8)
+save(p.output.dist, "output-dist", 6, 6)
+save(p.true.vs.predicted, "true-vs-predicted", 6, 6)
+save(p.true.vs.predicted.density.contours, "true-vs-predicted-density-contours", 4, 4)
+save(p.true.vs.predicted.colored.by.hamming.dist, "true-vs-predicted-colored-by-hamming-dist", 6, 6)
+save(p.true.vs.predicted.facet.by.hamming.dist, "true-vs-predicted-facet-by-hamming-dist", 6, 6)
+save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 6, 6)
+save(p.true.vs.predicted.facet.by.pfs, "true-vs-predicted-facet-by-pfs", 6, 6)
+save(p.by.predicted.quantile.group, "by-predicted-quantile-group", 6, 6)
+save(p.by.predicted.quantile.group.boxplot, "by-predicted-quantile-group-boxplot", 6, 6)
+save(p.by.predicted.quantile.group.ridges.and.boxplot, "by-predicted-quantile-group-ridges-and-boxplot", 6.25, 4)
+save(p.by.predicted.quantile.group.boxplot.hamming.dist, "by-predicted-quantile-group-boxplot-hamming-dist", 6, 6)
+save(p.by.predicted.quantile.group.boxplot.pfs, "by-predicted-quantiled-group-boxplot-pfs", 6, 6)
+save(p.true.vs.predicted.quantiles, "true-vs-predicted-quantiles", 6, 6)
+save(p.true.vs.predicted.faceted.by.crrna, "true-vs-predicted-faceted-by-crrna", 6, 6)
+save(p.rho.across.crrnas, "rho-across-crrnas", 6, 6)
+save(p.true.vs.predicted.summarized, "true-vs-predicted-summarized", 6, 6)
 #####################################################################

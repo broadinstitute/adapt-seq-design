@@ -516,14 +516,14 @@ save <- function(p, filename, width, height) {
            useDingbats=FALSE)
 }
 
-save(p.roc, "roc", 8, 8)
-save(p.pr, "pr", 8, 8)
-save(p.roc.color.baseline, "roc-color-baseline", 8, 8)
-save(p.pr.color.baseline, "pr-color-baseline", 8, 8)
-save(p.hamming.dist.roc, "hamming-dist-roc", 8, 8)
-save(p.hamming.dist.pr, "hamming-dist-pr", 8, 8)
-save(p.cas13a.pfs.roc, "cas13a-pfs-roc", 8, 8)
-save(p.cas13a.pfs.pr, "cas13a-pfs-pr", 8, 8)
+save(p.roc, "roc", 6, 6)
+save(p.pr, "pr", 6, 6)
+save(p.roc.color.baseline, "roc-color-baseline", 6, 6)
+save(p.pr.color.baseline, "pr-color-baseline", 6, 6)
+save(p.hamming.dist.roc, "hamming-dist-roc", 6, 6)
+save(p.hamming.dist.pr, "hamming-dist-pr", 6, 6)
+save(p.cas13a.pfs.roc, "cas13a-pfs-roc", 6, 6)
+save(p.cas13a.pfs.pr, "cas13a-pfs-pr", 6, 6)
 save(p.compare.to.baseline.thresholds.fpr, "compare-to-baseline-thresholds-fpr", 6.7, 4)
-save(p.compare.to.baseline.thresholds.precision, "compare-to-baseline-thresholds-precision", 6, 8)
+save(p.compare.to.baseline.thresholds.precision, "compare-to-baseline-thresholds-precision", 4.5, 6)
 #####################################################################
