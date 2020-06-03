@@ -243,16 +243,16 @@ p.sample.weight.scaling.factor <- plots("sample.weight.scaling.factor", "Sample 
 
 # Save plots to PDF
 g <- arrangeGrob(p.has.lc.layer$loss,
-                 p.has.lc.layer$measure,
                  p.lc.width$loss,
-                 p.lc.width$measure,
                  p.lc.dim$loss,
-                 p.lc.dim$measure,
                  p.has.conv.layer$loss,
-                 p.has.conv.layer$measure,
                  p.conv.width$loss,
-                 p.conv.width$measure,
                  p.conv.num.filters$loss,
+                 p.has.lc.layer$measure,
+                 p.lc.width$measure,
+                 p.lc.dim$measure,
+                 p.has.conv.layer$measure,
+                 p.conv.width$measure,
                  p.conv.num.filters$measure,
                  #p.l2.factor$loss,
                  #p.l2.factor$measure,
@@ -266,9 +266,9 @@ g <- arrangeGrob(p.has.lc.layer$loss,
                  #p.skip.batch.norm$measure,
                  #p.sample.weight.scaling.factor$loss,
                  #p.sample.weight.scaling.factor$measure,
-                 ncol=2)
-plot.width <- 4
-ggsave(OUT.PDF, g, width=plot.width*2, height=plot.width*6, useDingbats=FALSE, limitsize=FALSE)
+                 nrow=2)
+plot.width <- 3
+ggsave(OUT.PDF, g, width=plot.width*6, height=plot.width*2, useDingbats=FALSE, limitsize=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
