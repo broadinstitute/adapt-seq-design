@@ -128,7 +128,7 @@ p.sampling.all <- p.sampling.all + theme_pubr()
 g <- arrangeGrob(p.sampling.all,
                  #p.sampling.crrnas,
                  ncol=1)
-ggsave(OUT.PDF, g, width=8, height=8, useDingbats=FALSE)
+ggsave(OUT.PDF, g, width=4, height=4, useDingbats=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
