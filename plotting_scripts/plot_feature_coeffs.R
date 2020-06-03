@@ -143,7 +143,7 @@ g <- arrangeGrob(#p.no.regularization,
                  p.l2,
                  p.l1l2,
                  ncol=1)
-ggsave(OUT.PDF, g, width=10, height=16, useDingbats=FALSE)
+ggsave(OUT.PDF, g, width=6, height=12, useDingbats=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
