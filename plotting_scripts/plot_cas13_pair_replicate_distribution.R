@@ -118,7 +118,7 @@ p <- p + geom_density(alpha=0.8, color="black", fill="black", position='identity
 p <- p + xlab("Number of replicates") + ylab("Density")
 p <- p + xlim(0, 45)    # leave out outliers
 p <- p + theme_pubr()
-p + ggsave(OUT.REPLICATE.COUNT.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.REPLICATE.COUNT.PDF, width=4, height=4, useDingbats=FALSE)
 
 # Show a density plot of the standard deviation in measurement across
 # replicates for each guide-target pair; do this across all data
@@ -128,7 +128,7 @@ p <- ggplot(all.data, aes(x=out.logk.stdev))
 p <- p + geom_density(alpha=0.8, color="black", fill="black", position='identity')
 p <- p + xlab("Standard deviation of replicate measurements") + ylab("Density")
 p <- p + theme_pubr()
-p + ggsave(OUT.REPLICATE.STDEV.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.REPLICATE.STDEV.PDF, width=4, height=4, useDingbats=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")

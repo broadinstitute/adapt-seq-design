@@ -150,7 +150,7 @@ p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
 p <- p + labs(fill="", color="")    # remove legend title
 p <- p + xlab("Activity") + ylab("Density")
 p <- p + theme_pubr()
-p + ggsave(OUT.DIST.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -158,7 +158,7 @@ p + ggsave(OUT.DIST.PDF, width=8, height=8, useDingbats=FALSE)
 # (which will be used to split data in train/validate/test)
 p.faceted <- p + facet_wrap(. ~ crrna.block, scales="free")
 p <- p + theme_pubr()
-p.faceted + ggsave(OUT.DIST.BLOCKS.FACETS.PDF, width=8, height=8, useDingbats=FALSE)
+p.faceted + ggsave(OUT.DIST.BLOCKS.FACETS.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -169,7 +169,7 @@ p <- ggplot(guide.target.expandpos, aes(x=out.logk.measurement, y=crrna.block.fa
 p <- p + geom_density_ridges()
 p <- p + xlab("Activity") + ylab("Block")
 p <- p + theme_pubr()
-p + ggsave(OUT.DIST.BLOCKS.RIDGES.PDF, width=8, height=48, useDingbats=FALSE)
+p + ggsave(OUT.DIST.BLOCKS.RIDGES.PDF, width=4, height=24, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -186,7 +186,7 @@ p <- p + geom_errorbar(aes(x=guide.pos.nt,
                        width=5, size=1, color="black")
 p <- p + xlab("Position along target") + ylab("Activity against wildtype target")
 p <- p + theme_pubr()
-p + ggsave(OUT.DIST.ACTIVITY.BY.POS.PDF, width=16, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.ACTIVITY.BY.POS.PDF, width=8, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -199,7 +199,7 @@ p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
 p <- p + labs(fill="", color="")    # remove legend title
 p <- p + xlab("Activity") + ylab("Density")
 p <- p + theme_pubr()
-p + ggsave(OUT.DIST.TRAIN.AND.TEST.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.TRAIN.AND.TEST.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -237,11 +237,11 @@ p <- ggplot(guide.expandpos.summarized.ordered, aes(y=order))
 p <- p + geom_errorbarh(aes(xmin=lower, xmax=upper), height=0, size=0.5, color="black", alpha=0.5)
 p <- p + geom_point(aes(x=median), size=1)
 p <- p + geom_point(aes(x=out.logk.wildtype.mean), color="#42075E", size=1)    # show a purple dot for mean wildtype activity of the guide
-p <- p + xlab("Activity with variation is across targets") + ylab("Guide")
+p <- p + xlab("Activity with 20/80-percentile across targets") + ylab("Guide")
 p <- p + theme_pubr()
 p <- p + theme(axis.text.y=element_blank(), # y-axis text/ticks are meaningless
                axis.ticks.y=element_blank())
-p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDES.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -278,7 +278,7 @@ p <- p + xlab("Activity with 95% CI across replicate measurements") + ylab("Guid
 p <- p + theme_pubr()
 p <- p + theme(axis.text.y=element_blank(), # y-axis text/ticks are meaningless
                axis.ticks.y=element_blank())
-p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDE.TARGET.PAIRS.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.VARIATION.BETWEEN.AND.WITHIN.GUIDE.TARGET.PAIRS.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -305,7 +305,7 @@ p <- p + annotate(geom='text', x=Inf, y=Inf, hjust=1, vjust=1, size=5,
                   label=as.character(as.expression(substitute(
                       rho~"="~spearman.rho, list(spearman.rho=format(spearman.rho, digits=3))))),
                   parse=TRUE)
-p + ggsave(OUT.DIST.GC.CONTENT.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.GC.CONTENT.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -324,7 +324,7 @@ p <- p + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
 p <- p + xlab("Activity minus guide's wildtype activity") + ylab("Density")
 p <- p + labs(fill="", color="")    # remove legend title
 p <- p + theme_pubr()
-p + ggsave(OUT.DIST.DIFF.FROM.WILDTYPE.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.DIFF.FROM.WILDTYPE.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -341,7 +341,7 @@ p <- ggplot(guide.target.expandpos.trimmed, aes(x=guide.target.hamming.dist.fact
 p <- p + geom_sina(aes(group=guide.target.hamming.dist.factor), size=0.1)
 p <- p + xlab("Guide-target distance") + ylab("Activity")
 p <- p + theme_pubr()
-p + ggsave(OUT.DIST.HAMMING.DIST.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.HAMMING.DIST.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -353,7 +353,7 @@ p <- ggplot(guide.target.expandpos.trimmed, aes(x=guide.target.hamming.dist.fact
 p <- p + geom_violin(aes(group=guide.target.hamming.dist.factor), fill="gray")
 p <- p + xlab("Guide-target distance") + ylab("Activity")
 p <- p + theme_pubr()
-p + ggsave(OUT.DIST.HAMMING.DIST.VIOLIN.PDF, width=8, height=8, useDingbats=FALSE)
+p + ggsave(OUT.DIST.HAMMING.DIST.VIOLIN.PDF, width=4, height=4, useDingbats=FALSE)
 ##############################################################################
 
 ##############################################################################
@@ -365,7 +365,7 @@ p <- ggplot(guide.target.expandpos.trimmed, aes(y=guide.target.hamming.dist.fact
 p <- p + geom_density_ridges()
 p <- p + xlab("Activity") + ylab("Guide-target distance")
 p <- p + theme_pubr()
-p + ggsave(OUT.DIST.HAMMING.DIST.RIDGES.PDF, width=8, height=4, useDingbats=FALSE)
+p + ggsave(OUT.DIST.HAMMING.DIST.RIDGES.PDF, width=4, height=2, useDingbats=FALSE)
 ##############################################################################
 
 # Remove the empty Rplots.pdf created above
