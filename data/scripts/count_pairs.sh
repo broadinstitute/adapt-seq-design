@@ -25,6 +25,16 @@ echo "Number of guides: $numguides"
 echo "Number of targets: $numtargets"
 echo "Number of unique pairs: $numuniquepairs"
 echo "Average number of replicates: $avgnumreplicates"
+echo "The number of expected unique pairs should be: [(87 experimental guides)*(226 targets) + (4 positive control guides)*(1 unique target) = 19,666 pairs; however, only 19,665 is reported above. This is because the pair (block12_guide23, Target_MMM_104) is missing, possibly because it had 0 replicates (by chance) in the data. I think it is simpler to report that we have (87 experimental guides)*(226 targets) = 19,662 experimental guide-target pairs."
 
 rm $tmpf
 rm $nonnegunique
+
+
+# Also count the number of unique guide-target pairs included in the final
+# dataset; for this, include the context around the target because this
+# is included in the input to the model
+numuniquedatasetpairs=$(zcat CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz | tail -n +2 | awk '$7!="neg" {print}' | cut -f1,3,4,5 | sort | uniq | wc -l)
+numuniquedatasetpairswithoutcontext=$(zcat CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz | tail -n +2 | awk '$7!="neg" {print}' | cut -f1,3 | sort | uniq | wc -l)
+echo "Number of unique pairs (incl. context) in dataset: $numuniquedatasetpairs"
+echo "Number of unique pairs (not incl. context) in dataset: $numuniquedatasetpairswithoutcontext"
