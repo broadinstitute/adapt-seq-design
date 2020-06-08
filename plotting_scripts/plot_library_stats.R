@@ -100,6 +100,7 @@ library.design <- guide.target.expandpos[,c("guide.seq","target.at.guide","targe
 
 # Add information about PFS, and PFS + 1 nt
 library.design$pfs <- substr(library.design$target.after, 1, 1)
+library.design$pfs.1p <- substr(library.design$target.after, 2, 2)
 library.design$pfs.2nt <- substr(library.design$target.after, 1, 2)
 
 # Remove duplicate rows
@@ -117,9 +118,11 @@ p <- p + theme_pubr()
 p + ggsave(OUT.HAMMING.DIST.PDF, width=4, height=4, useDingbats=FALSE)
 
 # Show a bar chart of the number of pairs with each PFS
-p <- ggplot(library.design, aes(x=pfs))
-p <- p + geom_bar()
+# Stack each bar by the PFS+1 nt to see the nucleotide after the PFS
+p <- ggplot(library.design, aes(x=pfs, fill=pfs.1p))
+p <- p + geom_bar(position="stack")
 p <- p + xlab("PFS") + ylab("Number of pairs")
+p <- p + scale_fill_viridis(discrete=TRUE, name="PFS+1")
 p <- p + theme_pubr()
 p + ggsave(OUT.PFS.PDF, width=4, height=4, useDingbats=FALSE)
 
