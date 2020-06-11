@@ -67,7 +67,7 @@ if [[ $1 == "baseline" ]]; then
         for model in "${models[@]}"; do
             fn_prefix="$outdir/nested-cross-val.${model}.split-${outer_split}"
             if [ ! -f ${fn_prefix}.metrics.tsv.gz ]; then
-                echo "python -u predictor_baseline.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --models-to-use $model --nested-cross-val --nested-cross-val-outer-num-splits $num_outer_splits --nested-cross-val-run-for $outer_split --nested-cross-val-out-tsv ${fn_prefix}.metrics.tsv --nested-cross-val-feat-coeffs-out-tsv ${fn_prefix}.feature-coeffs.tsv &> ${fn_prefix}.out; gzip -f ${fn_prefix}.metrics.tsv; gzip -f ${fn_prefix}.feature-coeffs.tsv; gzip -f ${fn_prefix}.out" >> $cmds
+                echo "python -u predictor_baseline.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --regression-scoring-method rho --models-to-use $model --nested-cross-val --nested-cross-val-outer-num-splits $num_outer_splits --nested-cross-val-run-for $outer_split --nested-cross-val-out-tsv ${fn_prefix}.metrics.tsv --nested-cross-val-feat-coeffs-out-tsv ${fn_prefix}.feature-coeffs.tsv &> ${fn_prefix}.out; gzip -f ${fn_prefix}.metrics.tsv; gzip -f ${fn_prefix}.feature-coeffs.tsv; gzip -f ${fn_prefix}.out" >> $cmds
             fi
         done
     done

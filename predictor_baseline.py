@@ -72,7 +72,7 @@ def parse_args():
                   "guide"))
     parser.add_argument('--regression-scoring-method',
             choices=['mse', 'rho'],
-            default='mse',
+            default='rho',
             help=("Method to use for scoring regression results; 'mse' for "
                   "mean squared error, 'rho' for Spearman rank correlation"))
     parser.add_argument('--test-split-frac',
