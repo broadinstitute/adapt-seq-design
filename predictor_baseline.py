@@ -235,7 +235,7 @@ def random_search_cv(model_name, model_obj, cv, scorer, n_iter=100):
         n_jobs = 1
         if model_name == 'lstm':
             # Use a smaller search space; this is slow to train
-            n_iter = 25
+            n_iter = 50
     else:
         # Use all but 1 CPU (n_jobs=-2)
         n_jobs = -2
