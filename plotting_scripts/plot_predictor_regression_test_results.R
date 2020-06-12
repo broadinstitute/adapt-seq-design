@@ -371,7 +371,8 @@ p.by.predicted.quantile.group.boxplot <- p
 
 # Note that adding in p-values with geom_signif() doesn't work here
 # because it assumes horizontally-separated groupings, the groupings
-# are vertically-separated here
+# are vertically-separated here; however, they are equivalent to the ones
+# shown in the boxplot-only plot (p.by.predicted.quantile.group.boxplot)
 
 p <- ggplot(test.results.with.quantile.group, aes(x=true.activity, y=predicted.quantile))
 p <- p + xlab("True activity") + ylab("Quartile of prediction")
@@ -384,9 +385,11 @@ p <- p + geom_boxploth(aes(color=color),
                        size=1,  # thickness of lines
                        position=position_nudge(y=+0.2), # shift up
                        #fill=NA, # leave empty to see ridges
-                       outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
+                       outlier.shape=NA, # do not show outliers, which are hard to distinguish from whiskers
+                       coef=0)  # do not show whiskers
 p <- p + scale_color_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
 p <- p + scale_fill_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
+p <- p + xlim(-4.25, 0.1)  # a few points with true activity >0 extend the plot to the right; cut it off
 p <- p + theme_pubr()
 p.by.predicted.quantile.group.ridges.and.boxplot <- p
 #####################################################################
