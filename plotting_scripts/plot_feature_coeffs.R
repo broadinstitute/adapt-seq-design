@@ -99,8 +99,10 @@ feat.replace <- function(from, to) {
 }
 feat.replace("target-after-0-([ACGT])", "PFS = \\1")   # PFS
 feat.replace("target-after-1-([ACGT])", "PFS+1 = \\1")   # 1 after PFS
+feat.replace("pfs-([ACGT][ACGT])", "PFS = \\1")   # 2 nt PFS
 feat.replace("num-mismatches-seed", "Mismatches in seed")
 feat.replace("num-mismatches-nonseed", "Mismatches outside seed")
+feat.replace("num-mismatches", "Number of mismatches")
 feat.replace("guide-mismatch-allele-([0-9]+)-([ACGT])", "Mismatch at \\1 = \\2")
 feat.replace("target-at-guide-([0-9]+)-([ACGT])", "Match at \\1 = \\2")
 

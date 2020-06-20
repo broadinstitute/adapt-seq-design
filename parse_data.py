@@ -297,9 +297,15 @@ class Cas13ActivityParser:
                     'onehot-simple', 'combined']:
                 # For the baseline, only use a one-hot encoding of the
                 # target (and in a 1D array)
-                input_feats_context_after += v
-                self.baseline_descriptions += descriptions_for_onehot(
-                        'target-after-'+str(pos))
+                if self.make_feats_for_baseline == 'combined' and pos in [0, 1]:
+                    # We add a PFS feature, with 2 nt, below; so do not
+                    # add features here (this would just decouple the 2 nt in
+                    # that feature)
+                    pass
+                else:
+                    input_feats_context_after += v
+                    self.baseline_descriptions += descriptions_for_onehot(
+                            'target-after-'+str(pos))
             elif self.make_feats_for_baseline == 'handcrafted':
                 # No feature for the baseline here
                 pass
@@ -333,14 +339,27 @@ class Cas13ActivityParser:
             self.baseline_descriptions += ['gc-count']
             # Add a feature giving number of mismatches outside the seed region
             # and in the seed
-            seed_num_mismatches = len([p for p in baseline_mismatches_pos
-                if p >= self.SEED_START and p < self.SEED_END])
-            nonseed_num_mismatches = (len(baseline_mismatches_pos) -
-                seed_num_mismatches)
-            input_feats += [seed_num_mismatches]
-            self.baseline_descriptions += ['num-mismatches-seed']
-            input_feats += [nonseed_num_mismatches]
-            self.baseline_descriptions += ['num-mismatches-nonseed']
+            #seed_num_mismatches = len([p for p in baseline_mismatches_pos
+            #    if p >= self.SEED_START and p < self.SEED_END])
+            #nonseed_num_mismatches = (len(baseline_mismatches_pos) -
+            #    seed_num_mismatches)
+            #input_feats += [seed_num_mismatches]
+            #self.baseline_descriptions += ['num-mismatches-seed']
+            #input_feats += [nonseed_num_mismatches]
+            #self.baseline_descriptions += ['num-mismatches-nonseed']
+            total_num_mismatches = len(baseline_mismatches_pos)
+            input_feats += [total_num_mismatches]
+            self.baseline_descriptions += ['num-mismatches']
+            # Add PFS with 2 nt (canonical PFS and 1 nt after), one-hot
+            # encoded
+            # This essentially couples the target-after-0-* and
+            # target-after-1-* features, rather than leaving them decoupled
+            pfs2 = context_after[0:2]
+            for b1 in bases:
+                for b2 in bases:
+                    oh = (pfs2 == b1 + b2)
+                    input_feats += [oh]
+                    self.baseline_descriptions += ['pfs-'+b1+b2]
         input_feats = np.array(input_feats)
 
         # If baseline_descriptions is being set, check its length
