@@ -174,7 +174,9 @@ elif [[ $1 == "cnn" ]]; then
         # classification this could be the mean threshold across folds to achieve
         # precision of 0.975 (as output by classifier testing) and, for regression,
         # this could be the top 25% of predicted values on the subset of test
-        # data that is classified as active
+        # data that is classified as active (i.e., if we sort the predicted_activity
+        # column in out/cas13/cnn/regress/test/model-[regression model params id]/test.on-classified-active.tsv.gz,
+        # it is the value for the top 25%)
     elif [[ $3 == "learning-curve" ]]; then
         # Construct a learning curve
         # Run on different outer splits (so it can be in parallel), but
