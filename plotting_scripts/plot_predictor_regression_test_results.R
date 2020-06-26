@@ -171,10 +171,10 @@ all.rho.val.str <- format(all.metrics$rho, digits=3)
 all.rho.expr <- as.expression(bquote(rho~"="~.(all.rho.val.str)))
 
 p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
-p <- p + stat_density_2d(aes(fill=stat(level)), geom='polygon', contour=TRUE)
+p <- p + geom_point(shape='.', color='black', size=0.0005, stroke=0, alpha=0.1) # show the points as small black dots, behind the density map
+p <- p + stat_density_2d(aes(fill=stat(level)), geom='polygon', contour=TRUE, n=c(1000, 1000), h=c(0.5, 0.5))
 #p <- p + stat_density_2d(aes(fill=stat(density)), geom='raster', contour=FALSE) # density heatmap
 p <- p + scale_fill_viridis(name="Level", breaks=c(0.2, 0.5)) # specify tick labels on legend bar
-p <- p + geom_point(shape='.', color='black', size=0.005, alpha=0.1) # show the points as small black dots
 p <- p + xlim(ACTIVITY.RANGE.SIMPLE) + ylim(ACTIVITY.RANGE.SIMPLE)  # make ranges be the same
 p <- p + coord_fixed()  # make plot be square
 p <- p + xlab("True activity") + ylab("Predicted activity")
@@ -563,7 +563,7 @@ save <- function(p, filename, width, height) {
 
 save(p.output.dist, "output-dist", 6, 6)
 save(p.true.vs.predicted, "true-vs-predicted", 6, 6)
-save(p.true.vs.predicted.density.contours, "true-vs-predicted-density-contours", 4, 4)
+save(p.true.vs.predicted.density.contours, "true-vs-predicted-density-contours", 4.5, 4.5)
 save(p.true.vs.predicted.colored.by.hamming.dist, "true-vs-predicted-colored-by-hamming-dist", 6, 6)
 save(p.true.vs.predicted.facet.by.hamming.dist, "true-vs-predicted-facet-by-hamming-dist", 5, 4)
 save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 6, 6)
