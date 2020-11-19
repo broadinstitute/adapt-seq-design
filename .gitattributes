@@ -1,2 +1,2 @@
-data/CCF024_pairs_droplets.filtered.csv.gz filter=lfs diff=lfs merge=lfs -text
+data/orig/CCF024_pairs_droplets.filtered.csv.gz filter=lfs diff=lfs merge=lfs -text
 out/cas13/gan/evaluate_2500-gen-iter/evaluate.tsv.gz filter=lfs diff=lfs merge=lfs -text
