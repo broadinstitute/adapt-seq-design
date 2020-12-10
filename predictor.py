@@ -194,6 +194,11 @@ def parse_args():
             default=0.975,
             help=("If set, determine thresholds (across folds) that "
                   "achieve this precision; does not use test data"))
+    parser.add_argument('--compute-confusion-matrices-across-thresholds-and-folds',
+            help=("If set, compute confusion matrices at different thresholds "
+                  "(and across folds); does not use test data. The argument "
+                  "should give a path at which this writes a TSV file with "
+                  "the results"))
     parser.add_argument('--filter-test-data-by-classification-score',
             nargs=2,
             help=("If set, only test on data that is classified as active. "
@@ -624,6 +629,71 @@ def determine_classifier_threshold_for_precision(params, x, y,
             callback=find_threshold, dp=data_parser)
 
     return best_thresholds
+
+
+def compute_confusion_matrix_at_thresholds(params, x, y,
+        num_splits, data_parser, out_tsv=None):
+    """Calculate confusion matrix, across different splits.
+
+    It calculates the matrix at each output predicted value from the
+    classifier (each is a threshold that could change the confusion
+    matrix).
+
+    Args:
+        params: model parameters (model should *not* be pre-trained)
+        x, y: data to perform cross-validation with
+        num_splits: number of folds on which to compute confusion matrices
+        data_parser: object to parse data from parse_data
+        out_tsv: if set, write the results to this TSV file
+
+    Returns:
+        list [(i, S_i)] where each S_i represents a split of the data and
+        S_i is a list [(t, d)] where t gives a threshold and d is
+        a dict giving the number of true positives, false positives,
+        true negatives, and false negatives (keys: 'tp', 'fp', 'tn', 'fn')
+    """
+    # Construct a function that the test function will callback
+    curr_split = 0
+    results = []
+    def compute_confusion_matrices(y_true, y_pred):
+        nonlocal curr_split
+        nonlocal results
+
+        y_true = y_true.flatten()
+        y_pred = y_pred.flatten()
+
+        # Test thresholds of 0, 1, and all predicted values
+        thresholds_to_test = sorted(list(set([0] + list(y_pred) + [1])))
+        
+        # Calculate a confusion matrix at every threshold
+        cms = []
+        for thres in thresholds_to_test:
+            y_pred_decided = [int(y >= thres) for y in y_pred]
+            cm = sklearn.metrics.confusion_matrix(y_true, y_pred_decided,
+                    labels=[0, 1])
+            tn, fp, fn, tp = cm.ravel()
+            d = {'tn': tn, 'fp': fp, 'fn': fn, 'tp': tp}
+            cms += [(thres, d)]
+
+        results += [(curr_split, cms)]
+        curr_split += 1
+
+    import predictor_hyperparam_search as phs
+    phs.cross_validate(params, x, y, num_splits, False,
+            callback=compute_confusion_matrices, dp=data_parser)
+
+    if out_tsv is not None:
+        header = ['split', 'threshold', 'tn', 'fp', 'fn', 'tp']
+        with gzip.open(out_tsv, 'wt') as fw:
+            def write_row(row):
+                fw.write('\t'.join(str(x) for x in row) + '\n')
+            write_row(header)
+            for split, cms in results:
+                for thres, d in cms:
+                    row = [split, thres, d['tn'], d['fp'], d['fn'], d['tp']]
+                    write_row(row)
+
+    return results
 
 
 def filter_test_data_by_classification_score(x_test, y_test,
@@ -1714,6 +1784,16 @@ def main():
                 (args.determine_classifier_threshold_for_precision,
                     np.median(thresholds)))
         print('  Thresholds are:', thresholds)
+
+    if ((not regression) and (not args.load_model_as_tf_savedmodel) and
+            args.compute_confusion_matrices_across_thresholds_and_folds):
+        # Compute confusion matrices for classifer at different thresholds
+        print(('Computing confusion matrix for classifier across folds at '
+            'different thresholds'))
+        num_splits = 5
+        compute_confusion_matrix_at_thresholds(
+                params, x_train, y_train, num_splits, data_parser,
+                out_tsv=args.compute_confusion_matrices_across_thresholds_and_folds)
 
     if args.serialize_model_with_tf_savedmodel:
         # Serialize the model using TensorFlow's SavedModel format

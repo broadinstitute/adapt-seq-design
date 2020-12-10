@@ -175,7 +175,8 @@ elif [[ $1 == "cnn" ]]; then
 
         if [[ $2 == "classify" ]]; then
             classifier_threshold_arg="--determine-classifier-threshold-for-precision 0.975"
-            python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.tsv.gz $classifier_threshold_arg &> $outdirformodel/test.out
+            confusion_matrix_arg="--compute-confusion-matrices-across-thresholds-and-folds $outdirformodel/cross-validated-confusion-matrices.tsv.gz"
+            python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.tsv.gz $classifier_threshold_arg $confusion_matrix_arg &> $outdirformodel/test.out
             gzip -f $outdirformodel/test.out
         elif [[ $2 == "regress" ]]; then
             # Run this to test regressing only on true active data points ($method_arg uses --cas13-regress-only-on-active)
