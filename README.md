@@ -5,6 +5,8 @@ This repository contains training data and models used by ADAPT, as well as anal
 
 **For more information on ADAPT and on how to run it, please see the [ADAPT repository](https://github.com/broadinstitute/adapt) on GitHub.**
 
+If you find work in this repository useful, please [cite ADAPT](https://github.com/broadinstitute/adapt#citation) as described in the ADAPT repository.
+
 ## Summary of contents
 Below is a summary of this repository's contents:
 * `data/`: Library design and training/test data for CRISPR-Cas13a.
