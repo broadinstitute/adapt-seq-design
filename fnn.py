@@ -230,6 +230,21 @@ class CasCNNWithParallelFilters(tf.keras.Model):
                 activation=final_activation,
                 name='fc_final')
 
+        if (regression and 'regression_clip' in params and
+                params['regression_clip'] is True):
+            # Clip output to be >= min_out
+            min_out = -4
+            def clip(x):
+                return tf.keras.activations.relu(x - min_out) + min_out
+            self.clip_output = clip
+            alpha = params['regression_clip_alpha']
+            def clip_leaky(x):
+                return tf.keras.activations.relu(x - min_out,
+                        alpha=alpha) + min_out
+            self.clip_output_leaky = clip_leaky
+        else:
+            self.clip_output = None
+
         # Regularize weights on each layer
         l2_regularizer = tf.keras.regularizers.l2(params['l2_factor'])
         for layer in self.layers:
@@ -318,7 +333,13 @@ class CasCNNWithParallelFilters(tf.keras.Model):
             x = fc(x)
 
         x = dropout(x, training=training)
-        return self.fc_final(x)
+        x = self.fc_final(x)
+        if self.clip_output is not None:
+            if training:
+                x = self.clip_output_leaky(x)
+            else:
+                x = self.clip_output(x)
+        return x
 
 
 def construct_model(params, shape, regression=False):

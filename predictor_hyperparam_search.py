@@ -272,6 +272,8 @@ def hyperparam_random_dist(num_samples):
              'sample_weight_scaling_factor': constant(0),
              'batch_size': uniform_int(32, 256),
              'learning_rate': loguniform(-6.0, -1.0, 10.0),
+             'regression_clip': uniform_discrete([False, True]),
+             'regression_clip_alpha': loguniform(-6.0, -1.0, 10.0),
              'max_num_epochs': constant(1000)
     }
     for i in range(num_samples):
