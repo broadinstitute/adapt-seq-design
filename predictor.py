@@ -1444,7 +1444,7 @@ def test(model, x_test, y_test, data_parser, plot_roc_curve=None,
 #####################################################################
 #####################################################################
 def train_with_keras(model, x_train, y_train, x_validate, y_validate,
-        max_num_epochs=1000):
+        max_num_epochs=50):
     """Fit a model using Keras.
 
     The model must have already been compiled (e.g., with construct_model()
@@ -1460,7 +1460,7 @@ def train_with_keras(model, x_train, y_train, x_validate, y_validate,
     # Setup early stopping
     # The validation data is only used for early stopping
     es = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-            mode='min', patience=1)
+            mode='min', patience=10, restore_best_weights=True)
 
     # Fit the model
     model.fit(x_train, y_train, validation_data=(x_validate, y_validate),
