@@ -86,7 +86,7 @@ def determine_val_loss(results):
 
 
 def cross_validate(params, x, y, num_splits, regression,
-        callback=None, dp=None):
+        callback=None, dp=None, stop_early_for_loss=None):
     """Perform k-fold cross-validation.
 
     This uses data_parser.split() to split data, which uses stratified
@@ -101,6 +101,8 @@ def cross_validate(params, x, y, num_splits, regression,
         callback: if set, a function to have the test function call
         dp: if set, a data parser to use rather than the module-wide
             data_parser object
+        stop_early_for_loss: if set, stop early if any outer fold gives
+            a validation loss (default) that exceeds this value
 
     Returns:
         tuple ([default validation loss for each fold], dict {metric: [list of
@@ -155,6 +157,11 @@ def cross_validate(params, x, y, num_splits, regression,
         val_losses_default += [a]
         for k in b.keys():
             val_losses_different_metrics[k].append(b[k])
+
+        if stop_early_for_loss is not None:
+            if (a > stop_early_for_loss or np.isnan(a)) and i+1 < num_splits:
+                print(('STOPPING EARLY'))
+                break
 
         print(('FINISHED FOLD {} of {}').format(i+1, num_splits))
         i += 1
@@ -286,7 +293,7 @@ def hyperparam_random_dist(num_samples):
 
 def search_for_hyperparams(x, y, search_type, regression, context_nt,
         num_splits=5, loss_out=None, models_out=None, num_random_samples=None,
-        max_sem=None, dp=None):
+        max_sem=None, dp=None, stop_early_for_loss=None):
     """Search for optimal hyperparameters.
 
     This uses hyperparam_grid() to find the grid of hyperparameters over
@@ -316,6 +323,8 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
             choice of hyperparameters (if None, no limit)
         dp: if set, a data parser to use rather than the module-wide
             data_parser object
+        stop_early_for_loss: if set, stop early if any outer fold gives
+            a validation loss (default) that exceeds this value
 
     Returns:
         tuple (params, loss, sem) where params is the optimal choice of
@@ -345,10 +354,19 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
 
         # Compute a mean validation loss at this choice of params
         val_losses_default, val_losses_different_metrics = cross_validate(
-                params, x, y, num_splits, regression, dp=dp)
+                params, x, y, num_splits, regression, dp=dp,
+                stop_early_for_loss=stop_early_for_loss)
+
+        if len(val_losses_default) < num_splits:
+            # Cross-validation stopped early on an outer fold; skip this
+            # choice of hyperparameters
+            continue
 
         mean_loss = np.mean(val_losses_default)
-        sem_loss = scipy.stats.sem(val_losses_default)
+        if len(val_losses_default) == 1:
+            sem_loss = scipy.nan
+        else:
+            sem_loss = scipy.stats.sem(val_losses_default)
 
         if models_out is not None:
             # Train a model across all data, and save hyperparameters and
@@ -696,7 +714,8 @@ def main(args):
                 loss_out=params_mean_val_loss_out_tsv_f,
                 models_out=args.save_models,
                 num_random_samples=args.num_random_samples,
-                max_sem=args.max_sem)
+                max_sem=args.max_sem,
+                stop_early_for_loss=args.stop_early_for_loss)
 
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
@@ -863,6 +882,11 @@ if __name__ == "__main__":
                   "as the best choice. 0.10 is reasonable for most "
                   "applications. If not set (default), there is no "
                   "restriction on this"))
+    parser.add_argument('--stop-early-for-loss',
+            type=float,
+            help=("If set, stop a choice of hyperparameters early if any "
+                  "outer fold gives a default loss value exceeding this "
+                  "value"))
     parser.add_argument('--params-mean-val-loss-out-tsv',
             help=("If set, path to out TSV at which to write the mean "
                   "validation losses (across folds) for each choice of "
