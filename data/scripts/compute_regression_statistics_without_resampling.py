@@ -117,18 +117,21 @@ def print_stats(true, pred):
         pred: list of predicted activity values
     """
     rho = scipy.stats.spearmanr(true, pred)
-    print(rho)
+    print('Spearman:', rho)
 
     r = scipy.stats.pearsonr(true, pred)
-    print(r)
+    print('Pearson:', r)
 
 
 if __name__ == '__main__':
     args = parse_args()
     dp = read_results(args.regression_results_tsv)
 
+    print('Including error')
     p_with_error_true, p_with_error_pred = points_with_error(dp)
     print_stats(p_with_error_true, p_with_error_pred)
 
+    print()
+    print('Without error')
     p_without_error_true, p_without_error_pred = points_without_error(dp)
     print_stats(p_without_error_true, p_without_error_pred)
