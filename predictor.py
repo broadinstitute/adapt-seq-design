@@ -73,6 +73,10 @@ def parse_args():
                   "(matching) targets of g; this means prediction is "
                   "performed based on targeted differences (e.g., mismatches) "
                   "rather than inherent sequence of the crRNA"))
+    parser.add_argument('--use-median-measurement',
+            action='store_true',
+            help=("If set, use the median measurment across replicates "
+                  "(instead, resample)"))
     parser.add_argument('--context-nt',
             type=int,
             default=10,
@@ -257,7 +261,8 @@ def read_data(args, split_frac=None, make_feats_for_baseline=None):
             context_nt=args.context_nt,
             split=(train_frac, validation_frac, test_frac),
             shuffle_seed=args.seed,
-            stratify_by_pos=True)
+            stratify_by_pos=True,
+            use_median_measurement=args.use_median_measurement)
     if args.dataset == 'cas13':
         classify_activity = args.cas13_classify
         regress_on_all = args.cas13_regress_on_all

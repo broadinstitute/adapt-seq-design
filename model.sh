@@ -7,7 +7,7 @@
 #       2: 'classify' or 'regress'
 #           3: number of jobs to run in parallel
 #   1: 'cnn'
-#       2: 'classify' or 'regress'
+#       2: 'classify' or 'regress' (or 'regress-on-all' or 'regress-on-all-with-median')
 #           3: 'large-search'
 #               4: seed to use
 #               5: GPU to run on (0-based)
@@ -89,8 +89,16 @@ elif [[ $1 == "cnn" ]]; then
         outdir="out/cas13/cnn/regress"
         modeloutdir="models/cas13/regress"
         method_arg="--cas13-regress-only-on-active"
+    elif [[ $2 == "regress-on-all" ]]; then
+        outdir="out/cas13/cnn/regress-on-all"
+        modeloutdir="models/cas13/regress-on-all"
+        method_arg="--cas13-regress-on-all"
+    elif [[ $2 == "regress-on-all-with-median" ]]; then
+        outdir="out/cas13/cnn/regress-on-all-with-median"
+        modeloutdir="models/cas13/regress-on-all-with-median"
+        method_arg="--cas13-regress-on-all --use-median-measurement"
     else
-        echo "FATAL: #2 must be 'classify' or 'regress'"
+        echo "FATAL: #2 must be 'classify' or 'regress' or 'regress-on-all' or 'regress-on-all-with-median'"
         exit 1
     fi
 
@@ -154,6 +162,14 @@ elif [[ $1 == "cnn" ]]; then
             filter_test_data_arg="--filter-test-data-by-classification-score $5 $6"
             python -u predictor.py $COMMON_ARGS --cas13-regress-on-all --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.on-classified-active.tsv.gz $filter_test_data_arg &> $outdirformodel/test.on-classified-active.out
             gzip -f $outdirformodel/test.on-classified-active.out
+        elif [[ $2 == "regress-on-all" ]]; then
+            # Run this to test regressing only all data points ($method_arg uses --cas13-regress-on-all)
+            python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.on-all.tsv.gz &> $outdirformodel/test.on-all.out
+            gzip -f $outdirformodel/test.on-all.out
+        elif [[ $2 == "regress-on-all-with-median" ]]; then
+            # Run this to test regressing only all data points ($method_arg uses --cas13-regress-on-all --use-median-measurement)
+            python -u predictor.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --test-split-frac 0.3 --load-model models/cas13/${2}/model-${model_params_id} --write-test-tsv $outdirformodel/test.on-all.tsv.gz &> $outdirformodel/test.on-all.out
+            gzip -f $outdirformodel/test.on-all.out
         fi
     elif [[ $3 == "serialize-model" ]]; then
         # Load model, print test results, and serialize the model

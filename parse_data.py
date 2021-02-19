@@ -40,8 +40,10 @@ class Cas13ActivityParser:
 
     The output is numeric values (for regression) rather than labels.
     """
-    INPUT_TSV = os.path.join(SCRIPT_PATH,
+    INPUT_TSV_RESAMPLED = os.path.join(SCRIPT_PATH,
             'data/CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz')
+    INPUT_TSV_MEDIAN = os.path.join(SCRIPT_PATH,
+            'data/CCF-curated/CCF_merged_pairs_annotated.curated.median.tsv.gz')
 
     # Define crRNA (guide) length; used for determining range of crRNA
     # in nucleotide space
@@ -55,7 +57,8 @@ class Cas13ActivityParser:
     ACTIVITY_THRESHOLD = -4.0
 
     def __init__(self, subset=None, context_nt=10, split=(0.8, 0.1, 0.1),
-            shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False):
+            shuffle_seed=1, stratify_randomly=False, stratify_by_pos=False,
+            use_median_measurement=False):
         """
         Args:
             subset: either 'exp' (use only experimental data points, which
@@ -73,6 +76,8 @@ class Cas13ActivityParser:
                 train/validate/test
             stratify_by_pos: if set, consider the position along the target
                 and split based on this
+            use_median_measurement: if True, use median of replicate measurements;
+                otherwise, use resampled values
         """
         assert subset in (None, 'exp', 'pos', 'neg', 'exp-and-pos')
         self.subset = subset
@@ -99,6 +104,11 @@ class Cas13ActivityParser:
         self.use_difference_from_wildtype_activity = False
 
         self.was_read = False
+
+        if use_median_measurement:
+            self.INPUT_TSV = self.INPUT_TSV_MEDIAN
+        else:
+            self.INPUT_TSV = self.INPUT_TSV_RESAMPLED
 
     def set_activity_mode(self, classify_activity, regress_on_all,
             regress_only_on_active):
