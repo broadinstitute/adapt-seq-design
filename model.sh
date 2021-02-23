@@ -109,7 +109,14 @@ elif [[ $1 == "cnn" ]]; then
         gpu="$5"
         export CUDA_VISIBLE_DEVICES="$gpu"
 
-        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $seed --test-split-frac 0.3 --command hyperparam-search --hyperparam-search-cross-val-num-splits 5 --search-type random --num-random-samples 50 --params-mean-val-loss-out-tsv $outdirwithseed/search.tsv --save-models $modeloutdir &> $outdirwithseed/search.out
+        if [[ $2 == "regress-on-all" ]]; then
+            method_arg="$method_arg --stop-early-for-loss 0.3"
+        fi
+        if [[ $2 == "regress-on-all-with-median" ]]; then
+            method_arg="$method_arg --stop-early-for-loss 0.26"
+        fi
+
+        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $seed --test-split-frac 0.3 --command hyperparam-search --hyperparam-search-cross-val-num-splits 5 --search-type random --num-random-samples 500 --params-mean-val-loss-out-tsv $outdirwithseed/search.tsv --save-models $modeloutdir &> $outdirwithseed/search.out
         gzip -f $outdirwithseed/search.tsv
         gzip -f $outdirwithseed/search.out
     elif [[ $3 == "nested-cross-val" ]]; then
