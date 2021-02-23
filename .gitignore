@@ -133,7 +133,11 @@ dmypy.json
 models/cas13/*/model-*
 !models/cas13/classify/model-51373185
 !models/cas13/regress/model-f8b6fd5d
+!models/cas13/regress-on-all/model-98c69a6f
 
 # GAN
 !models/cas13/gan
+
+# out, separated by seed
+out/cas13/**/seed-*/*
 ######
