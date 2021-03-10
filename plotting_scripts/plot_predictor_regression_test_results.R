@@ -82,6 +82,13 @@ test.results.summarized.over.targets <- summarySE(test.results.melted,
                                                   measurevar="activity",
                                                   groupvars=c("crrna.pos", "activity.type"))
 
+# Average across technical replicates (differences in the true activity); there
+# may also be minor differences in the predicted activities due to numerical
+# calculations
+require(dplyr)
+test.results.without.error <- test.results %>% group_by(target, guide) %>%
+    mutate(true.activity=mean(true.activity), predicted.activity=mean(predicted.activity))
+
 # Because it is hard to visualize, print regression results
 # for different choices of guide-target Hamming distance and PFS
 # And save them
@@ -110,6 +117,8 @@ for (pfs in sort(unique(test.results$cas13a.pfs))) {
     print(paste0("    PFS=", pfs, ": ", pfs.metrics$str))
     pfs.rho <- rbind(pfs.rho, data.frame(cas13a.pfs=c(pfs), rho=c(pfs.metrics$rho)))
 }
+all.metrics.without.error <- metrics(test.results.without.error$true.activity,
+                                     test.results.without.error$predicted.activity)
 
 # Determine activity range for plots, so axes have the same range
 # Round to the nearest 0.5
@@ -171,10 +180,13 @@ all.rho.val.str <- format(all.metrics$rho, digits=3)
 all.rho.expr <- as.expression(bquote(rho~"="~.(all.rho.val.str)))
 
 p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
-p <- p + geom_point(shape='.', color='black', size=0.0005, stroke=0, alpha=0.1) # show the points as small black dots, behind the density map
-p <- p + stat_density_2d(aes(fill=stat(level)), geom='polygon', contour=TRUE, n=c(1000, 1000), h=c(0.5, 0.5))
+#p <- p + geom_point(shape='.', color='black', size=0.0005, stroke=0, alpha=0.1) # show the points as small black dots, behind the density map
+#p <- p + stat_density_2d(aes(fill=stat(level)), geom='polygon', contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75)    # h=c(0.6, 0.6) works too
+p <- p + stat_density_2d(aes(fill=stat(level)), geom="polygon", contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75)    # h=c(0.6, 0.6) works too
+p <- p + stat_density_2d(aes(fill=stat(level)), color="#5E5E5E", alpha=0.2, size=0.05, contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75)    # outline around contours; h=c(0.6, 0.6) works too
 #p <- p + stat_density_2d(aes(fill=stat(density)), geom='raster', contour=FALSE) # density heatmap
-p <- p + scale_fill_viridis(name="Level", breaks=c(0.2, 0.5)) # specify tick labels on legend bar
+#p <- p + scale_fill_viridis(name="Level", breaks=c(0.2, 0.5)) # viridis colors (purple=low, yellow=high); specify tick labels on legend bar
+p <- p + scale_fill_gradient(name="Level", breaks=c(0.2, 0.5), low="#FDF5FF", high="#470E55") # customize colors; specify tick labels on legend bar
 p <- p + xlim(ACTIVITY.RANGE.SIMPLE) + ylim(ACTIVITY.RANGE.SIMPLE)  # make ranges be the same
 p <- p + coord_fixed()  # make plot be square
 p <- p + xlab("True activity") + ylab("Predicted activity")
@@ -183,6 +195,27 @@ p <- p + theme_pubr()
 p <- p + annotate(geom="text", label=all.rho.expr,
                   x=Inf, y=Inf, hjust=1, vjust=1, size=3)
 p.true.vs.predicted.density.contours <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value with density
+# contours, without including measurement error in true activities
+
+all.rho.val.str.without.error <- format(all.metrics.without.error$rho, digits=3)
+all.rho.expr.without.error <- as.expression(bquote(rho~"="~.(all.rho.val.str.without.error)))
+
+p <- ggplot(test.results.without.error, aes(x=true.activity, y=predicted.activity))
+p <- p + stat_density_2d(aes(fill=stat(level)), geom="polygon", contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75)    # h=c(0.6, 0.6) works too
+p <- p + stat_density_2d(aes(fill=stat(level)), color="#5E5E5E", alpha=0.2, size=0.05, contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75)    # outline around contours; h=c(0.6, 0.6) works too
+p <- p + scale_fill_gradient(name="Level", breaks=c(0.2, 0.5), low="#FDF5FF", high="#470E55") # customize colors; specify tick labels on legend bar
+p <- p + xlim(ACTIVITY.RANGE.SIMPLE) + ylim(ACTIVITY.RANGE.SIMPLE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + theme_pubr()
+# Include text with the rho value
+p <- p + annotate(geom="text", label=all.rho.expr.without.error,
+                  x=Inf, y=Inf, hjust=1, vjust=1, size=3)
+p.true.vs.predicted.density.contours.without.error <- p
 #####################################################################
 
 #####################################################################
@@ -395,6 +428,64 @@ p.by.predicted.quantile.group.ridges.and.boxplot <- p
 #####################################################################
 
 #####################################################################
+# Repeat the ridges and boxplot plot above, except using the data without
+# error in the true activities
+
+# Create a separate data frame with a quantile factor that also
+# includes 'All' for all data points
+require(dplyr)
+test.results.without.error.with.quantile.group <- data.frame(test.results.without.error)
+test.results.without.error.with.quantile.group$predicted.quantile <- ntile(test.results.without.error.with.quantile.group$predicted.activity, 4)
+test.results.without.error.all <- data.frame(test.results.without.error)
+test.results.without.error.all$predicted.quantile <- rep("All", n=nrow(test.results.without.error.all))
+test.results.without.error.with.quantile.group <- rbind(test.results.without.error.with.quantile.group,
+                                          test.results.without.error.all)
+test.results.without.error.with.quantile.group$predicted.quantile <- factor(test.results.without.error.with.quantile.group$predicted.quantile,
+                                                              levels=c("All", "1", "2", "3", "4"))
+
+# Add a 'color' factor that is "quantile" for quantile groups and "all" for All
+test.results.without.error.with.quantile.group$color <- ifelse(test.results.without.error.with.quantile.group$predicted.quantile == "All", "all", "quantile")
+test.results.without.error.with.quantile.group$color <- factor(test.results.without.error.with.quantile.group$color, levels=c("all", "quantile"))
+
+p <- ggplot(test.results.without.error.with.quantile.group, aes(x=true.activity, y=predicted.quantile))
+p <- p + xlab("True activity") + ylab("Quartile of prediction")
+p <- p + geom_density_ridges(aes(fill=color),
+                             #color="white", # white outline
+                             scale=1.2, # 1 indicates the maximum of a ridge touches the base of the one above; >1 overlaps
+                             alpha=0.7) # some transparency in overlap
+p <- p + geom_boxploth(aes(color=color),
+                       width=0.15,   # really the height of the boxplot
+                       size=1,  # thickness of lines
+                       position=position_nudge(y=+0.2), # shift up
+                       #fill=NA, # leave empty to see ridges
+                       outlier.shape=NA, # do not show outliers, which are hard to distinguish from whiskers
+                       coef=0)  # do not show whiskers
+p <- p + scale_color_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
+p <- p + scale_fill_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
+p <- p + xlim(-4.25, 0.1)  # a few points with true activity >0 extend the plot to the right; cut it off
+p <- p + theme_pubr()
+p.by.predicted.quantile.group.ridges.and.boxplot.without.error <- p
+#####################################################################
+
+#####################################################################
+# Print p-values comparing quantile groupings -- i.e., whether
+# the best quartile of predictions has higher true activity than
+# the second best quartile -- for the data without error
+# Use Wilcoxon rank sum (Mann Whitney U) test
+
+compare.quartile.without.error <- function(a, b) {
+    a.vals <- test.results.without.error.with.quantile.group$true.activity[test.results.without.error.with.quantile.group$predicted.quantile == a]
+    b.vals <- test.results.without.error.with.quantile.group$true.activity[test.results.without.error.with.quantile.group$predicted.quantile == b]
+    return(wilcox.test(a.vals, b.vals, paired=FALSE, alternative="greater")$p.value)
+}
+
+print("p-values for quartile comparisons, without error in true activities (quartile 4 is best predictions, 1 is worst):")
+print(paste0("  4 > 3: p=", compare.quartile.without.error("4", "3")))
+print(paste0("  3 > 2: p=", compare.quartile.without.error("3", "2")))
+print(paste0("  2 > 1: p=", compare.quartile.without.error("2", "1")))
+#####################################################################
+
+#####################################################################
 # Plot true activity value for different predicted quantile groupings,
 # with facet for each choice of Hamming distance
 # y-axis shows the quantile (grouped) for the predicted activity and
@@ -564,13 +655,15 @@ save <- function(p, filename, width, height) {
 save(p.output.dist, "output-dist", 6, 6)
 save(p.true.vs.predicted, "true-vs-predicted", 6, 6)
 save(p.true.vs.predicted.density.contours, "true-vs-predicted-density-contours", 4.5, 4.5)
+save(p.true.vs.predicted.density.contours.without.error, "true-vs-predicted-density-contours-without-error", 4.5, 4.5)
 save(p.true.vs.predicted.colored.by.hamming.dist, "true-vs-predicted-colored-by-hamming-dist", 6, 6)
 save(p.true.vs.predicted.facet.by.hamming.dist, "true-vs-predicted-facet-by-hamming-dist", 5, 4)
 save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 6, 6)
 save(p.true.vs.predicted.facet.by.pfs, "true-vs-predicted-facet-by-pfs", 6, 2.5)
 save(p.by.predicted.quantile.group, "by-predicted-quantile-group", 6, 6)
-save(p.by.predicted.quantile.group.boxplot, "by-predicted-quantile-group-boxplot", 6, 6)
+save(p.by.predicted.quantile.group.boxplot, "by-predicted-quantile-group-boxplot", 6.5, 6)
 save(p.by.predicted.quantile.group.ridges.and.boxplot, "by-predicted-quantile-group-ridges-and-boxplot", 6.25, 4)
+save(p.by.predicted.quantile.group.ridges.and.boxplot.without.error, "by-predicted-quantile-group-ridges-and-boxplot-without-error", 6.25, 4)
 save(p.by.predicted.quantile.group.boxplot.hamming.dist, "by-predicted-quantile-group-boxplot-hamming-dist", 6, 6)
 save(p.by.predicted.quantile.group.boxplot.pfs, "by-predicted-quantiled-group-boxplot-pfs", 6, 6)
 save(p.true.vs.predicted.quantiles, "true-vs-predicted-quantiles", 6, 6)
