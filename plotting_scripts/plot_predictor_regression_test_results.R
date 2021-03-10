@@ -428,7 +428,7 @@ p.by.predicted.quantile.group.ridges.and.boxplot <- p
 #####################################################################
 
 #####################################################################
-# Repeat the ridges and boxplot plot above, except using the data without
+# Repeat the ridges and boxplot plots above, except using the data without
 # error in the true activities
 
 # Create a separate data frame with a quantile factor that also
@@ -446,6 +446,27 @@ test.results.without.error.with.quantile.group$predicted.quantile <- factor(test
 # Add a 'color' factor that is "quantile" for quantile groups and "all" for All
 test.results.without.error.with.quantile.group$color <- ifelse(test.results.without.error.with.quantile.group$predicted.quantile == "All", "all", "quantile")
 test.results.without.error.with.quantile.group$color <- factor(test.results.without.error.with.quantile.group$color, levels=c("all", "quantile"))
+
+# For geom_boxplot(), we need the variable of interest to be y, so use
+# this and then do coord_flip()
+p <- ggplot(test.results.without.error.with.quantile.group, aes(y=true.activity, x=predicted.quantile))
+p <- p + ylab("True activity") + xlab("Quartile of prediction")
+p <- p + geom_boxplot(aes(color=color),
+                      #outlier.size=0.25,
+                      #outlier.stroke=0,
+                      #outlier.color="gray46",
+                      outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
+# Add p-values, using Wilcoxon rank sum (aka, Mann Whitney U) test to
+# compare whether predictions in each quartile are 'better' (have
+# higher true activity) than predictions from another quartile
+p <- p + geom_signif(comparisons=list(c("4","3"), c("3","2"), c("2","1")),
+                     test="wilcox.test", test.args=list(paired=FALSE, alternative="greater"),
+                     step_increase=0.1, size=0.1)
+p <- p + stat_summary(fun.data=box.n, geom="text", size=2) # show number of observations
+p <- p + scale_color_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
+p <- p + coord_flip()
+p <- p + theme_pubr()
+p.by.predicted.quantile.group.boxplot.without.error <- p
 
 p <- ggplot(test.results.without.error.with.quantile.group, aes(x=true.activity, y=predicted.quantile))
 p <- p + xlab("True activity") + ylab("Quartile of prediction")
@@ -662,6 +683,7 @@ save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 6, 
 save(p.true.vs.predicted.facet.by.pfs, "true-vs-predicted-facet-by-pfs", 6, 2.5)
 save(p.by.predicted.quantile.group, "by-predicted-quantile-group", 6, 6)
 save(p.by.predicted.quantile.group.boxplot, "by-predicted-quantile-group-boxplot", 6.5, 6)
+save(p.by.predicted.quantile.group.boxplot.without.error, "by-predicted-quantile-group-boxplot-without-error", 6.5, 6)
 save(p.by.predicted.quantile.group.ridges.and.boxplot, "by-predicted-quantile-group-ridges-and-boxplot", 6.25, 4)
 save(p.by.predicted.quantile.group.ridges.and.boxplot.without.error, "by-predicted-quantile-group-ridges-and-boxplot-without-error", 6.25, 4)
 save(p.by.predicted.quantile.group.boxplot.hamming.dist, "by-predicted-quantile-group-boxplot-hamming-dist", 6, 6)
