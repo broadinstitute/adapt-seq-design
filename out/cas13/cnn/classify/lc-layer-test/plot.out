@@ -1,0 +1,37 @@
+Loading required package: ggplot2
+Warning message:
+package ‘ggplot2’ was built under R version 3.6.3 
+Loading required package: gridExtra
+Loading required package: reshape2
+Loading required package: stringr
+Loading required package: ggpubr
+Warning message:
+package ‘ggpubr’ was built under R version 3.6.3 
+Loading required package: ggsignif
+[1] "Paired t-test for auROC"
+
+	Paired t-test
+
+data:  measure.lc.no and measure.lc.yes
+t = -2.327, df = 4, p-value = 0.04026
+alternative hypothesis: true difference in means is less than 0
+95 percent confidence interval:
+         -Inf -0.001079217
+sample estimates:
+mean of the differences 
+             -0.0128693 
+
+[1] "Paired t-test for auPR"
+
+	Paired t-test
+
+data:  measure2.lc.no and measure2.lc.yes
+t = -2.0733, df = 4, p-value = 0.05341
+alternative hypothesis: true difference in means is less than 0
+95 percent confidence interval:
+         -Inf 9.039506e-05
+sample estimates:
+mean of the differences 
+           -0.003203607 
+
+[1] TRUE

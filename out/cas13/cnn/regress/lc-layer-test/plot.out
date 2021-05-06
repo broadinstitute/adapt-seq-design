@@ -1,0 +1,24 @@
+Loading required package: ggplot2
+Warning message:
+package ‘ggplot2’ was built under R version 3.6.3 
+Loading required package: gridExtra
+Loading required package: reshape2
+Loading required package: stringr
+Loading required package: ggpubr
+Warning message:
+package ‘ggpubr’ was built under R version 3.6.3 
+Loading required package: ggsignif
+[1] "Paired t-test for Spearman correlation"
+
+	Paired t-test
+
+data:  measure.lc.no and measure.lc.yes
+t = -2.0522, df = 4, p-value = 0.05471
+alternative hypothesis: true difference in means is less than 0
+95 percent confidence interval:
+        -Inf 0.001303961
+sample estimates:
+mean of the differences 
+            -0.03361775 
+
+[1] TRUE
