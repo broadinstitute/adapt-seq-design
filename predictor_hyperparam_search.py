@@ -205,12 +205,13 @@ def hyperparam_grid():
         yield params
 
 
-def hyperparam_random_dist(num_samples):
+def hyperparam_random_dist(num_samples, lc_layer='either'):
     """Construct distribution of hyperparameters.
 
     Args:
         num_samples: number of random points to yield from the space
             (if None, use default)
+        lc_layer: whether to force an LC layer ('yes', 'no', or 'either')
 
     Iterates:
         params where each is a dict of possible parameter values (i.e.,
@@ -283,6 +284,12 @@ def hyperparam_random_dist(num_samples):
              'regression_clip_alpha': loguniform(-6.0, -1.0, 10.0),
              'max_num_epochs': constant(1000)
     }
+
+    if lc_layer == 'yes':
+        space['locally_connected_width'] = uniform_discrete([[1], [2], [1, 2]])
+    elif lc_layer == 'no':
+        space['locally_connected_width'] = constant(None)
+
     for i in range(num_samples):
         params = {}
         for k in space.keys():
@@ -293,7 +300,8 @@ def hyperparam_random_dist(num_samples):
 
 def search_for_hyperparams(x, y, search_type, regression, context_nt,
         num_splits=5, loss_out=None, models_out=None, num_random_samples=None,
-        max_sem=None, dp=None, stop_early_for_loss=None):
+        max_sem=None, dp=None, stop_early_for_loss=None,
+        lc_layer='either'):
     """Search for optimal hyperparameters.
 
     This uses hyperparam_grid() to find the grid of hyperparameters over
@@ -325,6 +333,7 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
             data_parser object
         stop_early_for_loss: if set, stop early if any outer fold gives
             a validation loss (default) that exceeds this value
+        lc_layer: whether to force an LC layer ('yes', 'no', or 'either')
 
     Returns:
         tuple (params, loss, sem) where params is the optimal choice of
@@ -340,7 +349,8 @@ def search_for_hyperparams(x, y, search_type, regression, context_nt,
     if search_type == 'grid':
         params_iter = hyperparam_grid()
     elif search_type == 'random':
-        params_iter = hyperparam_random_dist(num_random_samples)
+        params_iter = hyperparam_random_dist(num_random_samples,
+                lc_layer=lc_layer)
     else:
         raise Exception("Unknown search type '%s'" % search_type)
 
@@ -427,7 +437,8 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
         num_outer_splits=5, num_inner_splits=5, loss_out=None,
         num_random_samples=None,
         max_sem=None,
-        outer_splits_to_run=None):
+        outer_splits_to_run=None,
+        lc_layer='either'):
     """Perform nested cross-validation to validate model and search.
 
     This is useful to verify the overall model and model fitting approach
@@ -460,6 +471,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
             choice of hyperparameters (if None, no limit)
         outer_splits_to_run: if set, a list of outer splits to run (0-based);
             if not set, run all
+        lc_layer: whether to force an LC layer ('yes', 'no', or 'either')
 
     Returns:
         list x where x[i] is a tuple (params, loss, metrics) where params is an
@@ -471,7 +483,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
     """
     optimal_choices = []
     i = 0
-    outer_split_iter = dp.split(x, y, num_splits=num_outer_splits,
+    outer_split_iter = data_parser.split(x, y, num_splits=num_outer_splits,
             stratify_by_pos=True)
     for x_train, y_train, x_validate, y_validate in outer_split_iter:
         print('STARTING OUTER FOLD {} of {}'.format(i+1, num_outer_splits))
@@ -500,7 +512,8 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
                 search_type, regression, context_nt,
                 num_splits=num_inner_splits, loss_out=loss_out,
                 num_random_samples=num_random_samples,
-                max_sem=max_sem)
+                max_sem=max_sem,
+                lc_layer=lc_layer)
 
         # Compute a loss for this choice of parameters as follows:
         #   (1) train the model on all the training data (in the inner
@@ -516,7 +529,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
                 regression, compile_for_keras=True, y_train=y_train)
         # Split x_train,y_train into train/validate sets and the validation
         # data is used only for early stopping during training
-        train_split_iter = dp.split(x_train, y_train,
+        train_split_iter = data_parser.split(x_train, y_train,
                 num_inner_splits,
                 stratify_by_pos=True)
         # Only take the first split of the generator as the train/validation
@@ -527,7 +540,7 @@ def nested_cross_validate(x, y, search_type, regression, context_nt,
                 x_train_for_es, y_train_for_es)
         # Test the model on the validation data
         val_results = predictor.test_with_keras(best_model,
-                x_validate, y_validate, dp)
+                x_validate, y_validate, data_parser)
         val_loss, val_loss_different_metrics = determine_val_loss(val_results)
         optimal_choices += [(best_params, val_loss, val_loss_different_metrics)]
 
@@ -716,7 +729,8 @@ def main(args):
                 models_out=args.save_models,
                 num_random_samples=args.num_random_samples,
                 max_sem=args.max_sem,
-                stop_early_for_loss=args.stop_early_for_loss)
+                stop_early_for_loss=args.stop_early_for_loss,
+                lc_layer=args.lc_layer)
 
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
@@ -766,7 +780,8 @@ def main(args):
                 loss_out=params_mean_val_loss_out_tsv_f,
                 num_random_samples=args.num_random_samples,
                 max_sem=args.max_sem,
-                outer_splits_to_run=args.nested_cross_val_run_for)
+                outer_splits_to_run=args.nested_cross_val_run_for,
+                lc_layer=args.lc_layer)
 
         if params_mean_val_loss_out_tsv_f is not None:
             params_mean_val_loss_out_tsv_f.close()
@@ -908,6 +923,13 @@ if __name__ == "__main__":
             type=int,
             help=("If set, only run the given outer splits (0-based). If "
                   "not set, run for all."))
+    parser.add_argument('--lc-layer',
+            choices=['yes', 'no', 'either'],
+            default='either',
+            help=("Whether to force a locally connected layer. If 'yes', "
+                  "force it in the model. If 'no', do not allow it in the "
+                  "model. If 'either', use the hyperparameter search space. "
+                  "This is helpful for evaluating the effect of an LC layer."))
     parser.add_argument('--save-models',
             help=("If set, path to directory in which to save parameters and "
                   "model weights for each model validated (each is in a "

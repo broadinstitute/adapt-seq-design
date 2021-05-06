@@ -14,6 +14,9 @@
 #           3: 'nested-cross-val'
 #               4: outer split to run (0-based)
 #               5: GPU to run on (0-based)
+#           3: 'evaluate-lc-layer'
+#               4: outer split to run (0-based)
+#               5: GPU to run on (0-based)
 #           3: 'test'
 #               4: params id of model to test
 #                   if 'regress', then:
@@ -143,6 +146,27 @@ elif [[ $1 == "cnn" ]]; then
         gzip -f $outdirwithsplit/nested-cross-val.models.tsv
         gzip -f $outdirwithsplit/nested-cross-val.folds.tsv
         gzip -f $outdirwithsplit/nested-cross-val.out
+    elif [[ $3 == "evaluate-lc-layer" ]]; then
+        # Perform a large nested cross-validation with and without requiring an LC layer
+        # Run on different outer splits (so it can be in parallel), but
+        # results must be manually concatenated
+        outer_split="$4"
+        outdirwithsplit="$outdir/lc-layer-test/split-${outer_split}"
+        mkdir -p $outdirwithsplit
+
+        # Set the GPU to use
+        gpu="$5"
+        export CUDA_VISIBLE_DEVICES="$gpu"
+
+        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 100 --params-mean-val-loss-out-tsv $outdirwithsplit/nested-cross-val.models.yes.tsv --nested-cross-val-out-tsv $outdirwithsplit/nested-cross-val.folds.yes.tsv --nested-cross-val-run-for $outer_split --lc-layer yes &> $outdirwithsplit/nested-cross-val.yes.out
+        gzip -f $outdirwithsplit/nested-cross-val.models.yes.tsv
+        gzip -f $outdirwithsplit/nested-cross-val.folds.yes.tsv
+        gzip -f $outdirwithsplit/nested-cross-val.yes.out
+
+        python -u predictor_hyperparam_search.py $COMMON_ARGS $method_arg --seed $DEFAULT_SEED --command nested-cross-val --hyperparam-search-cross-val-num-splits 5 --nested-cross-val-outer-num-splits 5 --search-type random --num-random-samples 100 --params-mean-val-loss-out-tsv $outdirwithsplit/nested-cross-val.models.no.tsv --nested-cross-val-out-tsv $outdirwithsplit/nested-cross-val.folds.no.tsv --nested-cross-val-run-for $outer_split --lc-layer no &> $outdirwithsplit/nested-cross-val.no.out
+        gzip -f $outdirwithsplit/nested-cross-val.models.no.tsv
+        gzip -f $outdirwithsplit/nested-cross-val.folds.no.tsv
+        gzip -f $outdirwithsplit/nested-cross-val.no.out
     elif [[ $3 == "test" ]]; then
         # Run model on the test set and save results
         model_params_id="$4"
