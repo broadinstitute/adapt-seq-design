@@ -97,7 +97,7 @@ metrics <- function(x, y) {
     rho <- cor(x, y, method="spearman")
     return(list(r=r, rho=rho, str=paste0("r=", r, "; rho=", rho)))
 }
-print("Metrics:")
+print("Metrics, including error:")
 print("  All data points:")
 all.metrics <- metrics(test.results$true.activity, test.results$predicted.activity)
 print(paste0("    ", all.metrics$str))
@@ -117,8 +117,27 @@ for (pfs in sort(unique(test.results$cas13a.pfs))) {
     print(paste0("    PFS=", pfs, ": ", pfs.metrics$str))
     pfs.rho <- rbind(pfs.rho, data.frame(cas13a.pfs=c(pfs), rho=c(pfs.metrics$rho)))
 }
+print("Metrics, without error:")
+print("  All data points:")
 all.metrics.without.error <- metrics(test.results.without.error$true.activity,
                                      test.results.without.error$predicted.activity)
+print(paste0("    ", all.metrics.without.error$str))
+print("  Each value of Hamming distance:")
+hd.rho.without.error <- data.frame(hamming.dist=c(), rho=c())
+for (hd in sort(unique(test.results.without.error$hamming.dist))) {
+    tr.hd <- test.results.without.error[test.results.without.error$hamming.dist == hd, ]
+    hd.metrics <- metrics(tr.hd$true.activity, tr.hd$predicted.activity)
+    print(paste0("    Dist=", hd, ": ", hd.metrics$str))
+    hd.rho.without.error <- rbind(hd.rho.without.error, data.frame(hamming.dist=c(hd), rho=c(hd.metrics$rho)))
+}
+print("  Each PFS:")
+pfs.rho.without.error <- data.frame(cas13a.pfs=c(), rho=c())
+for (pfs in sort(unique(test.results.without.error$cas13a.pfs))) {
+    tr.pfs <- test.results.without.error[test.results.without.error$cas13a.pfs == pfs, ]
+    pfs.metrics <- metrics(tr.pfs$true.activity, tr.pfs$predicted.activity)
+    print(paste0("    PFS=", pfs, ": ", pfs.metrics$str))
+    pfs.rho.without.error <- rbind(pfs.rho.without.error, data.frame(cas13a.pfs=c(pfs), rho=c(pfs.metrics$rho)))
+}
 
 # Determine activity range for plots, so axes have the same range
 # Round to the nearest 0.5
@@ -267,6 +286,36 @@ p.true.vs.predicted.facet.by.hamming.dist <- p
 # Plot true activity value vs. predicted activity value
 # This is a scatter plot, where each dot represents a target/crRNA
 # pair (test data point)
+# There is a facet for each guide-target Hamming distance
+# Only show up to Hamming distance of 5; there are few points beyond that
+# Do this without including measurement error in the true activities
+
+hd.rho.without.error$rho.val.str <- format(hd.rho.without.error$rho, digits=3)
+
+test.results.without.error.hd.limit <- test.results.without.error[test.results.without.error$hamming.dist <= 5,]
+hd.rho.without.error.hd.limit <- hd.rho.without.error[hd.rho.without.error$hamming.dist <= 5,]
+
+#facet.ncol <- floor(sqrt(length(unique(test.results.without.error$hamming.dist)))) + 1
+facet.ncol <- 3
+p <- ggplot(test.results.without.error.hd.limit, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(alpha=0.5, stroke=0, size=0.2)
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + facet_wrap(~ hamming.dist, ncol=facet.ncol)
+p <- p + theme_pubr()
+p <- p + theme(strip.background=element_blank(),    # remove background on facet label
+               panel.border=element_rect(color="gray", fill=NA, size=0.5)) # border facet
+# Include text with the rho value
+p <- p + geom_text(data=hd.rho.without.error.hd.limit, aes(label=paste("rho==", rho.val.str)), parse=TRUE,
+                   x=Inf, y=Inf, hjust=1, vjust=1, size=3)
+p.true.vs.predicted.facet.by.hamming.dist.without.error <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value
+# This is a scatter plot, where each dot represents a target/crRNA
+# pair (test data point)
 # The points are colored by Cas13 PFS
 
 p <- ggplot(test.results, aes(x=true.activity, y=predicted.activity))
@@ -302,6 +351,32 @@ p <- p + theme(strip.background=element_blank(),    # remove background on facet
 p <- p + geom_text(data=pfs.rho, aes(label=paste("rho==", rho.val.str)), parse=TRUE,
                    x=Inf, y=Inf, hjust=1, vjust=1, size=3)
 p.true.vs.predicted.facet.by.pfs <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value
+# This is a scatter plot, where each dot represents a target/crRNA
+# pair (test data point)
+# There is a facet for each Cas13a PFS
+# Do this without including measurement error in the true activities
+
+pfs.rho.without.error$rho.val.str <- format(pfs.rho.without.error$rho, digits=3)
+
+#facet.ncol <- floor(sqrt(length(unique(test.results.without.error$cas13a.pfs)))) + 1
+facet.ncol <- 4
+p <- ggplot(test.results.without.error, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(alpha=0.5, stroke=0, size=0.2)
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + facet_wrap(~ cas13a.pfs, ncol=facet.ncol)
+p <- p + theme_pubr()
+p <- p + theme(strip.background=element_blank(),    # remove background on facet label
+               panel.border=element_rect(color="gray", fill=NA, size=0.5)) # border facet
+# Include text with the rho value
+p <- p + geom_text(data=pfs.rho.without.error, aes(label=paste("rho==", rho.val.str)), parse=TRUE,
+                   x=Inf, y=Inf, hjust=1, vjust=1, size=3)
+p.true.vs.predicted.facet.by.pfs.without.error <- p
 #####################################################################
 
 #####################################################################
@@ -539,6 +614,38 @@ p.by.predicted.quantile.group.boxplot.hamming.dist <- p
 
 #####################################################################
 # Plot true activity value for different predicted quantile groupings,
+# with facet for each choice of Hamming distance
+# y-axis shows the quantile (grouped) for the predicted activity and
+# x-axis shows the true activity as a boxplot
+# Use quartiles here (4 groupings)
+# coord_flip() does not work well with facet_wrap(), so we cannot use
+# the approach above to coord_flip()
+# Only show up to a Hamming distance of 5; there are few points beyond this
+# Do this without including measurement error in the true activities
+
+test.results.without.error.with.quantile.group.hd.limit <- test.results.without.error.with.quantile.group[test.results.without.error.with.quantile.group$hamming.dist <= 5,]
+
+#facet.ncol <- floor(sqrt(length(unique(test.results.without.error.with.quantile.group$hamming.dist)))) + 1
+facet.ncol <- 3
+p <- ggplot(test.results.without.error.with.quantile.group.hd.limit, aes(y=true.activity, x=predicted.quantile))
+p <- p + facet_wrap(~ hamming.dist, ncol=facet.ncol, scales="fixed")
+p <- p + ylab("True activity") + xlab("Quartile of prediction")
+p <- p + geom_boxplot(aes(color=color),
+                      #outlier.size=0.25,
+                      #outlier.stroke=0,
+                      #outlier.color="gray46",
+                      outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
+p <- p + stat_summary(fun.data=box.n, geom="text", size=2) # show N
+p <- p + scale_color_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
+p <- p + coord_flip()
+p <- p + theme_pubr()
+p <- p + theme(strip.background=element_blank(),    # remove background on facet label
+               panel.border=element_rect(color="gray", fill=NA, size=0.5)) # border facet
+p.by.predicted.quantile.group.boxplot.hamming.dist.without.error <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value for different predicted quantile groupings,
 # with facet for each choice of PFS
 # y-axis shows the quantile (grouped) for the predicted activity and
 # x-axis shows the true activity as a boxplot
@@ -562,6 +669,34 @@ p <- p + theme_pubr()
 p <- p + theme(strip.background=element_blank(),    # remove background on facet label
                panel.border=element_rect(color="gray", fill=NA, size=0.5)) # border facet
 p.by.predicted.quantile.group.boxplot.pfs <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value for different predicted quantile groupings,
+# with facet for each choice of PFS
+# y-axis shows the quantile (grouped) for the predicted activity and
+# x-axis shows the true activity as a boxplot
+# Use quartiles here (4 groupings)
+# coord_flip() does not work well with facet_wrap(), so we cannot use
+# the approach above to coord_flip()
+# Do this without including measurement error in the true activities
+
+facet.ncol <- floor(sqrt(length(unique(test.results.without.error.with.quantile.group$cas13a.pfs))))
+p <- ggplot(test.results.without.error.with.quantile.group, aes(y=true.activity, x=predicted.quantile))
+p <- p + facet_wrap(~ cas13a.pfs, ncol=facet.ncol, scales="fixed")
+p <- p + ylab("True activity") + xlab("Quartile of prediction")
+p <- p + geom_boxplot(aes(color=color),
+                      #outlier.size=0.25,
+                      #outlier.stroke=0,
+                      #outlier.color="gray46",
+                      outlier.shape=NA) # do not show outliers, which are hard to distinguish from whiskers
+p <- p + stat_summary(fun.data=box.n, geom="text", size=2) # show N
+p <- p + scale_color_manual(values=c("gray", "black"), guide=FALSE)  # gray for 'all'; black for 'quantile's; guide=FALSE to skip legend
+p <- p + coord_flip()
+p <- p + theme_pubr()
+p <- p + theme(strip.background=element_blank(),    # remove background on facet label
+               panel.border=element_rect(color="gray", fill=NA, size=0.5)) # border facet
+p.by.predicted.quantile.group.boxplot.pfs.without.error <- p
 #####################################################################
 
 #####################################################################
@@ -679,15 +814,19 @@ save(p.true.vs.predicted.density.contours, "true-vs-predicted-density-contours",
 save(p.true.vs.predicted.density.contours.without.error, "true-vs-predicted-density-contours-without-error", 4.5, 4.5)
 save(p.true.vs.predicted.colored.by.hamming.dist, "true-vs-predicted-colored-by-hamming-dist", 6, 6)
 save(p.true.vs.predicted.facet.by.hamming.dist, "true-vs-predicted-facet-by-hamming-dist", 5, 4)
+save(p.true.vs.predicted.facet.by.hamming.dist.without.error, "true-vs-predicted-facet-by-hamming-dist-without-error", 5, 4)
 save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 6, 6)
 save(p.true.vs.predicted.facet.by.pfs, "true-vs-predicted-facet-by-pfs", 6, 2.5)
+save(p.true.vs.predicted.facet.by.pfs.without.error, "true-vs-predicted-facet-by-pfs-without-error", 6, 2.5)
 save(p.by.predicted.quantile.group, "by-predicted-quantile-group", 6, 6)
 save(p.by.predicted.quantile.group.boxplot, "by-predicted-quantile-group-boxplot", 6.5, 6)
 save(p.by.predicted.quantile.group.boxplot.without.error, "by-predicted-quantile-group-boxplot-without-error", 6.5, 6)
 save(p.by.predicted.quantile.group.ridges.and.boxplot, "by-predicted-quantile-group-ridges-and-boxplot", 6.25, 4)
 save(p.by.predicted.quantile.group.ridges.and.boxplot.without.error, "by-predicted-quantile-group-ridges-and-boxplot-without-error", 6.25, 4)
 save(p.by.predicted.quantile.group.boxplot.hamming.dist, "by-predicted-quantile-group-boxplot-hamming-dist", 6, 6)
+save(p.by.predicted.quantile.group.boxplot.hamming.dist.without.error, "by-predicted-quantile-group-boxplot-hamming-dist-without-error", 6, 6)
 save(p.by.predicted.quantile.group.boxplot.pfs, "by-predicted-quantiled-group-boxplot-pfs", 6, 6)
+save(p.by.predicted.quantile.group.boxplot.pfs.without.error, "by-predicted-quantiled-group-boxplot-pfs-without-error", 6, 6)
 save(p.true.vs.predicted.quantiles, "true-vs-predicted-quantiles", 6, 6)
 save(p.true.vs.predicted.faceted.by.crrna, "true-vs-predicted-faceted-by-crrna", 7.5, 9)
 save(p.rho.across.crrnas, "rho-across-crrnas", 6, 6)
