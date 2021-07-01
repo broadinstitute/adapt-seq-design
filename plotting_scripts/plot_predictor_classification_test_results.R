@@ -82,7 +82,9 @@ roc <- roc.curve(scores.class0=pos, scores.class1=neg, curve=TRUE,
                  max.compute=TRUE, min.compute=TRUE, rand.compute=TRUE)
 pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE,
                max.compute=TRUE, min.compute=TRUE, rand.compute=TRUE)
+print("Stats on ROC curve, all data points:")
 print(roc)
+print("Stats on PR curve, all data points:")
 print(pr)
 
 # For a baseline to compare to, let's imagine choosing positive points
@@ -179,7 +181,7 @@ pr.df.all$hamming.dist <- rep("All", nrow(pr.df.all))
 pr.df.all$cas13a.pfs <- rep("All", nrow(pr.df.all))
 
 # ROC - Hamming distance
-hamming.dist.roc <- do.call(rbind, lapply(unique(test.results$hamming.dist),
+hamming.dist.roc <- do.call(rbind, lapply(sort(unique(test.results$hamming.dist)),
     function(hamming.dist) {
         if (hamming.dist > 5) {
             # Only use hamming.dist <= 5; higher values have too little data
@@ -188,7 +190,10 @@ hamming.dist.roc <- do.call(rbind, lapply(unique(test.results$hamming.dist),
         vals <- test.results[test.results$hamming.dist == hamming.dist, ]
         pos <- vals$predicted.activity[vals$true.activity == 1]
         neg <- vals$predicted.activity[vals$true.activity == 0]
-        roc <- roc.curve(scores.class0=pos, scores.class1=neg, curve=TRUE)
+        roc <- roc.curve(scores.class0=pos, scores.class1=neg, curve=TRUE,
+                         max.compute=TRUE, min.compute=TRUE, rand.compute=TRUE)
+        print(paste0("Stats on ROC curve, Hamming distance = ", hamming.dist))
+        print(roc)
         roc.df <- data.frame(roc$curve)
         roc.df$hamming.dist <- rep(hamming.dist, nrow(roc.df))
         roc.df$cas13a.pfs <- rep(NA, nrow(roc.df))
@@ -199,7 +204,7 @@ hamming.dist.roc$hamming.dist <- factor(hamming.dist.roc$hamming.dist)
 hamming.dist.roc <- rbind(hamming.dist.roc, roc.df.all)
 
 # PR - Hamming distance
-hamming.dist.pr <- do.call(rbind, lapply(unique(test.results$hamming.dist),
+hamming.dist.pr <- do.call(rbind, lapply(sort(unique(test.results$hamming.dist)),
     function(hamming.dist) {
         if (hamming.dist > 5) {
             # Only use hamming.dist <= 5; higher values have too little data
@@ -208,7 +213,10 @@ hamming.dist.pr <- do.call(rbind, lapply(unique(test.results$hamming.dist),
         vals <- test.results[test.results$hamming.dist == hamming.dist, ]
         pos <- vals$predicted.activity[vals$true.activity == 1]
         neg <- vals$predicted.activity[vals$true.activity == 0]
-        pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE)
+        pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE,
+                       max.compute=TRUE, min.compute=TRUE, rand.compute=TRUE)
+        print(paste0("Stats on PR curve, Hamming distance = ", hamming.dist))
+        print(pr)
         pr.df <- data.frame(pr$curve)
         pr.df$hamming.dist <- rep(hamming.dist, nrow(pr.df))
         pr.df$cas13a.pfs <- rep(NA, nrow(pr.df))
@@ -219,12 +227,15 @@ hamming.dist.pr$hamming.dist <- factor(hamming.dist.pr$hamming.dist)
 hamming.dist.pr <- rbind(hamming.dist.pr, pr.df.all)
 
 # ROC - Cas13a PFS
-cas13a.pfs.roc <- do.call(rbind, lapply(unique(test.results$cas13a.pfs),
+cas13a.pfs.roc <- do.call(rbind, lapply(sort(unique(test.results$cas13a.pfs)),
     function(cas13a.pfs) {
         vals <- test.results[test.results$cas13a.pfs == cas13a.pfs, ]
         pos <- vals$predicted.activity[vals$true.activity == 1]
         neg <- vals$predicted.activity[vals$true.activity == 0]
-        roc <- roc.curve(scores.class0=pos, scores.class1=neg, curve=TRUE)
+        roc <- roc.curve(scores.class0=pos, scores.class1=neg, curve=TRUE,
+                         max.compute=TRUE, min.compute=TRUE, rand.compute=TRUE)
+        print(paste0("Stats on ROC curve, PFS = ", cas13a.pfs))
+        print(roc)
         roc.df <- data.frame(roc$curve)
         roc.df$cas13a.pfs <- rep(cas13a.pfs, nrow(roc.df))
         roc.df$hamming.dist <- rep(NA, nrow(roc.df))
@@ -235,12 +246,15 @@ cas13a.pfs.roc$cas13a.pfs <- factor(cas13a.pfs.roc$cas13a.pfs)
 cas13a.pfs.roc <- rbind(cas13a.pfs.roc, roc.df.all)
 
 # PR - Cas13a PFS
-cas13a.pfs.pr <- do.call(rbind, lapply(unique(test.results$cas13a.pfs),
+cas13a.pfs.pr <- do.call(rbind, lapply(sort(unique(test.results$cas13a.pfs)),
     function(cas13a.pfs) {
         vals <- test.results[test.results$cas13a.pfs == cas13a.pfs, ]
         pos <- vals$predicted.activity[vals$true.activity == 1]
         neg <- vals$predicted.activity[vals$true.activity == 0]
-        pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE)
+        pr <- pr.curve(scores.class0=pos, scores.class1=neg, curve=TRUE,
+                       max.compute=TRUE, min.compute=TRUE, rand.compute=TRUE)
+        print(paste0("Stats on PR curve, PFS = ", cas13a.pfs))
+        print(pr)
         pr.df <- data.frame(pr$curve)
         pr.df$cas13a.pfs <- rep(cas13a.pfs, nrow(pr.df))
         pr.df$hamming.dist <- rep(NA, nrow(pr.df))
