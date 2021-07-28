@@ -1,0 +1,44 @@
+Loading required package: ggplot2
+Warning message:
+package ‘ggplot2’ was built under R version 3.6.3 
+Loading required package: gridExtra
+Loading required package: reshape2
+Loading required package: ggridges
+Loading required package: viridis
+Loading required package: viridisLite
+Loading required package: ggsignif
+Loading required package: ggpubr
+Warning message:
+package ‘ggpubr’ was built under R version 3.6.3 
+Loading required package: ggstance
+
+Attaching package: ‘ggstance’
+
+The following objects are masked from ‘package:ggplot2’:
+
+    geom_errorbarh, GeomErrorbarh
+
+Warning message:
+package ‘ggstance’ was built under R version 3.6.3 
+Loading required package: dplyr
+
+Attaching package: ‘dplyr’
+
+The following object is masked from ‘package:gridExtra’:
+
+    combine
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+Warning message:
+In cor.test.default(x, y, method = "spearman") :
+  Cannot compute exact p-value with ties
+[1] "r=0.228954420966794; rho=0.342519492822681; r.pvalue=7.76091156391553e-39; rho.pvalue=1.24313238690711e-87"
+Warning message:
+In is.na(x) : is.na() applied to non-(list or vector) of type 'expression'

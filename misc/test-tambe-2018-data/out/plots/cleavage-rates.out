@@ -1,0 +1,25 @@
+Loading required package: ggplot2
+Warning message:
+package ‘ggplot2’ was built under R version 3.6.3 
+Loading required package: gridExtra
+Loading required package: reshape2
+Loading required package: ggridges
+Loading required package: viridis
+Loading required package: viridisLite
+Loading required package: ggsignif
+Loading required package: ggpubr
+Warning message:
+package ‘ggpubr’ was built under R version 3.6.3 
+Loading required package: ggstance
+
+Attaching package: ‘ggstance’
+
+The following objects are masked from ‘package:ggplot2’:
+
+    geom_errorbarh, GeomErrorbarh
+
+Warning message:
+package ‘ggstance’ was built under R version 3.6.3 
+[1] "r=0.154489820107197; rho=0.359993577146745"
+Warning message:
+In is.na(x) : is.na() applied to non-(list or vector) of type 'expression'
