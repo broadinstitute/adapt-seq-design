@@ -189,6 +189,9 @@ def parse_args():
             help=("If set, path to .tsv.gz at which to write test results, "
                   "including sequences in the test set and predictions "
                   "(one row per test data point)"))
+    parser.add_argument('--write-test-confusion-matrices',
+            help=("If set, path to .tsv.gz at which to write confusion "
+                  "matrices at different thresholds using the test data"))
     parser.add_argument('--determine-classifier-threshold-for-precision',
             type=float,
             default=0.975,
@@ -631,7 +634,7 @@ def determine_classifier_threshold_for_precision(params, x, y,
     return best_thresholds
 
 
-def compute_confusion_matrix_at_thresholds(params, x, y,
+def compute_confusion_matrix_at_thresholds_across_splits(params, x, y,
         num_splits, data_parser, out_tsv=None):
     """Calculate confusion matrix, across different splits.
 
@@ -694,6 +697,62 @@ def compute_confusion_matrix_at_thresholds(params, x, y,
                     write_row(row)
 
     return results
+
+
+def compute_confusion_matrix_at_thresholds(y_true, y_pred, out_tsv=None):
+    """Calculate confusion matrix on test data.
+
+    It calculates the matrix at each output predicted value from the
+    classifier (each is a threshold that could change the confusion
+    matrix).
+
+    Args:
+        y_true/y_pred: arrays of true and predicted values for the test data
+        out_tsv: if set, write the results to this TSV file
+
+    Returns:
+        list [(t, d)] where t gives a threshold and d is a dict giving
+        statistics at that threshold
+    """
+    y_true = y_true.flatten()
+    y_pred = y_pred.flatten()
+
+    # Test thresholds of 0, 1, and all predicted values
+    thresholds_to_test = sorted(list(set([0] + list(y_pred) + [1])))
+    
+    # Calculate a confusion matrix at every threshold
+    cms = []
+    for thres in thresholds_to_test:
+        y_pred_decided = [int(y >= thres) for y in y_pred]
+        cm = sklearn.metrics.confusion_matrix(y_true, y_pred_decided,
+                labels=[0, 1])
+        tn, fp, fn, tp = cm.ravel()
+        sensitivity = tp / (tp + fn)
+        specificity = tn / (tn + fp)
+        youden = sensitivity + specificity - 1
+        precision = tp / (tp + fp)
+        npv = tn / (tn + fn)
+        accuracy = (tp + tn) / (tp + tn + fp + fn)
+        f1 = 2*tp / (2*tp + fp + fn)
+        d = {'tn': tn, 'fp': fp, 'fn': fn, 'tp': tp,
+                'sensitivity': sensitivity, 'specificity': specificity,
+                'youden': youden, 'precision': precision,
+                'npv': npv, 'accuracy': accuracy, 'f1': f1}
+        cms += [(thres, d)]
+
+    if out_tsv is not None:
+        header = ['threshold', 'tn', 'fp', 'fn', 'tp',
+                'sensitivity', 'specificity', 'youden', 'precision',
+                'npv', 'accuracy', 'f1']
+        with gzip.open(out_tsv, 'wt') as fw:
+            def write_row(row):
+                fw.write('\t'.join(str(x) for x in row) + '\n')
+            write_row(header)
+            for thres, d in cms:
+                row = [thres] + [d[h] for h in header[1:]]
+                write_row(row)
+
+    return cms
 
 
 def filter_test_data_by_classification_score(x_test, y_test,
@@ -1546,7 +1605,7 @@ def train_with_keras(model, x_train, y_train, x_validate, y_validate,
 
 
 def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None,
-        callback=None, regression=False):
+        write_test_confusion_matrices=None, callback=None, regression=False):
     """Test a model.
 
     This prints metrics.
@@ -1558,6 +1617,9 @@ def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None,
         data_parser: data parser object from parse_data
         write_test_tsv: if set, path to TSV at which to write data on predictions
             as well as the testing sequences (one row per data point)
+        write_test_confusion_matrices: if set, path to TSV at which to write
+            a confusion matrix (and other statistics) for different thresholds;
+            only relevant for the classifier (and ignored for regression)
         callback: if set, a function to call that accepts the true and
             predicted test values -- called like callback(y_true, f_pred)
         regression: True iff this is testing a model for regression;
@@ -1665,6 +1727,10 @@ def test_with_keras(model, x_test, y_test, data_parser, write_test_tsv=None,
 
     print('TEST METRICS:', test_metrics)
 
+    if not regression and write_test_confusion_matrices:
+        compute_confusion_matrix_at_thresholds(y_true, y_pred,
+                out_tsv=write_test_confusion_matrices)
+
     if callback is not None:
         callback(y_true, y_pred)
 
@@ -1765,6 +1831,7 @@ def main():
     # Test the model
     test_with_keras(model, x_test, y_test, data_parser,
             write_test_tsv=args.write_test_tsv,
+            write_test_confusion_matrices=args.write_test_confusion_matrices,
             regression=regression)
 
     if (not regression) and (not args.load_model_as_tf_savedmodel):
@@ -1791,7 +1858,7 @@ def main():
         print(('Computing confusion matrix for classifier across folds at '
             'different thresholds'))
         num_splits = 5
-        compute_confusion_matrix_at_thresholds(
+        compute_confusion_matrix_at_thresholds_across_splits(
                 params, x_train, y_train, num_splits, data_parser,
                 out_tsv=args.compute_confusion_matrices_across_thresholds_and_folds)
 
