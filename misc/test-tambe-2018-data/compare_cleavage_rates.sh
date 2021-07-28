@@ -15,7 +15,7 @@ cat data/cleavage-rates.for-adapt.tsv | tail -n +2 | awk '{print $1"\t"$2}' > $A
 # Run ADAPT's predictive model
 ADAPT_PREDICTIONS=$(mktemp)
 conda activate adapt
-python ../../predictor_call.py ~/adapt/models/classify/model-51373185 ~/adapt/models/regress/model-f8b6fd5d $ADAPT_CALL_IN $ADAPT_PREDICTIONS
+python ../../predictor_call.py ~/adapt/adapt/models/classify/cas13a/v1_0 ~/adapt/adapt/models/regress/cas13a/v1_0 $ADAPT_CALL_IN $ADAPT_PREDICTIONS
 
 # Merge predictions with Tambe et al. data
 ADAPT_PREDICTIONS_COL=$(mktemp)
