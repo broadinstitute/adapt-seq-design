@@ -72,7 +72,7 @@ p <- ggplot(test.results, aes(x=tambe.value, y=adapt.prediction)) +
         theme(aspect.ratio=1) +  # make plot be square
         annotate(geom="text", label=test.results.rho.expr, # include text with rho value
                  x=Inf, y=Inf, hjust=1, vjust=1, size=3)
-ggsave(OUT.PDF.SCATTER, p, width=8, height=8, useDingbats=FALSE)
+ggsave(OUT.PDF.SCATTER, p, width=4.5, height=4.5, useDingbats=FALSE)
 
 # Plot stacked bar for each quartile of ADAPT's predicted value, showing
 # the Tambe et al. value
@@ -86,5 +86,5 @@ p <- ggplot(test.results, aes(x=adapt.prediction.quartile, fill=forcats::fct_rev
         theme(axis.title.x=element_blank(), # remove x-axis
               axis.text.x=element_blank(),
               axis.ticks.x=element_blank())
-ggsave(OUT.PDF.QUARTILES, p, width=8, height=4, useDingbats=FALSE)
+ggsave(OUT.PDF.QUARTILES, p, width=7, height=4.5, useDingbats=FALSE)
 

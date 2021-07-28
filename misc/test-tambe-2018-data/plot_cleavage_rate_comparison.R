@@ -37,7 +37,7 @@ print(test.results.metrics$str)
 test.results$number.of.mismatches <- factor(test.results$number.of.mismatches)
 
 p <- ggplot(test.results, aes(x=tambe.value, y=adapt.prediction)) +
-        geom_point(aes(color=number.of.mismatches), size=5) +
+        geom_point(aes(color=number.of.mismatches), size=3) +
         xlab("Measured cleavage rate (Tambe et al. 2018)") + ylab("Model prediction") +
         geom_vline(xintercept=100, linetype="dashed") +   # vertical line at normalized (0-mismatch) Tambe et al. value
         scale_color_viridis(discrete=TRUE) + # adjust colors
@@ -45,5 +45,5 @@ p <- ggplot(test.results, aes(x=tambe.value, y=adapt.prediction)) +
         theme(aspect.ratio=1) +  # make plot be square
         annotate(geom="text", label=test.results.rho.expr, # include text with rho value
                  x=Inf, y=Inf, hjust=1, vjust=1, size=3)
-ggsave(OUT.PDF, p, width=8, height=8, useDingbats=FALSE)
+ggsave(OUT.PDF, p, width=4.5, height=4.5, useDingbats=FALSE)
 
