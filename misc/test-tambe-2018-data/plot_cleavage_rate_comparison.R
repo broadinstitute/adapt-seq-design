@@ -24,14 +24,21 @@ names(test.results) <- gsub("_", ".", names(test.results))
 # prediction
 metrics <- function(x, y) {
     r <- cor(x, y, method="pearson")
+    r.pvalue <- cor.test(x, y, method="pearson")$p.value
     rho <- cor(x, y, method="spearman")
-    return(list(r=r, rho=rho, str=paste0("r=", r, "; rho=", rho)))
+    rho.pvalue <- cor.test(x, y, method="spearman")$p.value
+    return(list(r=r, r.pvalue=r.pvalue, rho=rho, rho.pvalue=rho.pvalue, str=paste0("r=", r, "; rho=", rho, "; r.pvalue=", r.pvalue, "; rho.pvalue=", rho.pvalue)))
 }
 test.results.metrics <- metrics(test.results$tambe.value, test.results$adapt.prediction)
 test.results.rho.str <- format(test.results.metrics$rho, digits=3)
 test.results.rho.expr <- as.expression(bquote(rho~"="~.(test.results.rho.str)))
 
 print(test.results.metrics$str)
+
+# Also compute and print metrics for the data where mismatches harm activity
+test.results.harm <- test.results[test.results$tambe.value <= 100,]
+test.results.harm.metrics <- metrics(test.results.harm$tambe.value, test.results.harm$adapt.prediction)
+print(paste("Subset where mismatches hurt activity:", test.results.harm.metrics$str))
 
 # Since there are only a few choices of number of mismatches, convert it to a factor
 test.results$number.of.mismatches <- factor(test.results$number.of.mismatches)
