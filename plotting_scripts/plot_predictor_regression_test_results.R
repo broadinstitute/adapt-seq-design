@@ -85,9 +85,12 @@ test.results.summarized.over.targets <- summarySE(test.results.melted,
 # Average across technical replicates (differences in the true activity); there
 # may also be minor differences in the predicted activities due to numerical
 # calculations
+# Include hamming.dist and cas13a.pfs in the group_by() so that these are kept
+# in the data frame after the summary (it shouldn't matter if we only grouped
+# by (target, guide)); they are used later on
 require(dplyr)
-test.results.without.error <- test.results %>% group_by(target, guide) %>%
-    mutate(true.activity=mean(true.activity), predicted.activity=mean(predicted.activity))
+test.results.without.error <- test.results %>% group_by(target, guide, hamming.dist, cas13a.pfs) %>%
+    summarise(true.activity=mean(true.activity), predicted.activity=mean(predicted.activity))
 
 # Because it is hard to visualize, print regression results
 # for different choices of guide-target Hamming distance and PFS
@@ -226,7 +229,7 @@ all.rho.expr.without.error <- as.expression(bquote(rho~"="~.(all.rho.val.str.wit
 p <- ggplot(test.results.without.error, aes(x=true.activity, y=predicted.activity))
 p <- p + stat_density_2d(aes(fill=stat(level)), geom="polygon", contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75)    # h=c(0.6, 0.6) works too
 p <- p + stat_density_2d(aes(fill=stat(level)), color="#5E5E5E", alpha=0.2, size=0.05, contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75)    # outline around contours; h=c(0.6, 0.6) works too
-p <- p + scale_fill_gradient(name="Level", breaks=c(0.2, 0.5), low="#FDF5FF", high="#470E55") # customize colors; specify tick labels on legend bar
+p <- p + scale_fill_gradient(name="Level", breaks=c(0.1, 0.2, 0.3), low="#FDF5FF", high="#470E55") # customize colors; specify tick labels on legend bar
 p <- p + xlim(ACTIVITY.RANGE.SIMPLE) + ylim(ACTIVITY.RANGE.SIMPLE)  # make ranges be the same
 p <- p + coord_fixed()  # make plot be square
 p <- p + xlab("True activity") + ylab("Predicted activity")
