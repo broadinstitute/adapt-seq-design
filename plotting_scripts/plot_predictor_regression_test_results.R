@@ -257,6 +257,23 @@ p.true.vs.predicted.colored.by.hamming.dist <- p
 # Plot true activity value vs. predicted activity value
 # This is a scatter plot, where each dot represents a target/crRNA
 # pair (test data point)
+# The points are colored by guide-target Hamming distance
+# Do this without including measurement error in the true activities
+
+p <- ggplot(test.results.without.error, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(aes(color=hamming.dist), alpha=0.5, stroke=0)
+p <- p + scale_color_viridis(name="Hamming distance") # adjust color gradient
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + theme_pubr()
+p.true.vs.predicted.colored.by.hamming.dist.without.error <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value
+# This is a scatter plot, where each dot represents a target/crRNA
+# pair (test data point)
 # There is a facet for each guide-target Hamming distance
 # Only show up to Hamming distance of 5; there are few points beyond that
 
@@ -326,6 +343,23 @@ p <- p + coord_fixed()  # make plot be square
 p <- p + xlab("True activity") + ylab("Predicted activity")
 p <- p + theme_pubr()
 p.true.vs.predicted.colored.by.pfs <- p
+#####################################################################
+
+#####################################################################
+# Plot true activity value vs. predicted activity value
+# This is a scatter plot, where each dot represents a target/crRNA
+# pair (test data point)
+# The points are colored by Cas13 PFS
+# Do this without including measurement error in the true activities
+
+p <- ggplot(test.results.without.error, aes(x=true.activity, y=predicted.activity))
+p <- p + geom_point(aes(color=cas13a.pfs), alpha=0.5, stroke=0)
+p <- p + scale_color_viridis(name="PFS", discrete=TRUE) # adjust color gradient
+p <- p + xlim(ACTIVITY.RANGE) + ylim(ACTIVITY.RANGE)  # make ranges be the same
+p <- p + coord_fixed()  # make plot be square
+p <- p + xlab("True activity") + ylab("Predicted activity")
+p <- p + theme_pubr()
+p.true.vs.predicted.colored.by.pfs.without.error <- p
 #####################################################################
 
 #####################################################################
@@ -813,9 +847,11 @@ save(p.true.vs.predicted, "true-vs-predicted", 6, 6)
 save(p.true.vs.predicted.density.contours, "true-vs-predicted-density-contours", 4.5, 4.5)
 save(p.true.vs.predicted.density.contours.without.error, "true-vs-predicted-density-contours-without-error", 4.5, 4.5)
 save(p.true.vs.predicted.colored.by.hamming.dist, "true-vs-predicted-colored-by-hamming-dist", 6, 6)
+save(p.true.vs.predicted.colored.by.hamming.dist.without.error, "true-vs-predicted-colored-by-hamming-dist-without-error", 6, 6)
 save(p.true.vs.predicted.facet.by.hamming.dist, "true-vs-predicted-facet-by-hamming-dist", 5, 4)
 save(p.true.vs.predicted.facet.by.hamming.dist.without.error, "true-vs-predicted-facet-by-hamming-dist-without-error", 5, 4)
 save(p.true.vs.predicted.colored.by.pfs, "true-vs-predicted-colored-by-pfs", 6, 6)
+save(p.true.vs.predicted.colored.by.pfs.without.error, "true-vs-predicted-colored-by-pfs-without-error", 6, 6)
 save(p.true.vs.predicted.facet.by.pfs, "true-vs-predicted-facet-by-pfs", 6, 2.5)
 save(p.true.vs.predicted.facet.by.pfs.without.error, "true-vs-predicted-facet-by-pfs-without-error", 6, 2.5)
 save(p.by.predicted.quantile.group, "by-predicted-quantile-group", 6, 6)
