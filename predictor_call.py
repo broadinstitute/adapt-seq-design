@@ -181,7 +181,7 @@ class Predictor:
             x[i] = input_vec
         return x
 
-    def _predict_from_onehot(self, model, pairs_onehot):
+    def _predict_from_onehot(self, model, pairs_onehot, batch_size=100):
         """Predict activity, from one-hot encoded nucleotide sequence,
         using a model.
 
@@ -194,9 +194,13 @@ class Predictor:
             list of outputs (float) directly from model, with one
             value per item in pairs
         """
-        pred_activity = model.call(pairs_onehot, training=False)
-        pred_activity = [p[0] for p in pred_activity.numpy()]
-        return pred_activity
+        o = []
+        for i in range(0, len(pairs_onehot), batch_size):
+            batch = pairs_onehot[i:min(i + batch_size, len(pairs_onehot))]
+            pred_activity = model.call(batch, training=False)
+            pred_activity = [p[0] for p in pred_activity.numpy()]
+            o.extend(pred_activity)
+        return o
 
     def _classify_and_decide(self, pairs_onehot):
         """Run classification model and decide activity.
