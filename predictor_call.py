@@ -51,7 +51,8 @@ class Predictor:
 
     def __init__(self, classification_model_path, regression_model_path,
             classification_threshold=None,
-            regression_threshold=None):
+            regression_threshold=None,
+            no_hurdle=False):
         """
         Args:
             classification_model_path: path to serialized classification model
@@ -63,6 +64,8 @@ class Predictor:
                 when regression prediction (on active data points) is
                 >= this threshold (in [0,4]); if None, use default
                 threshold with model
+            no_hurdle: if True, instead of using a hurdle model, multiply
+                the classifier's prediction by the regression's
         """
         # Load classification and regression models
         self.classification_model = tf.keras.models.load_model(
@@ -140,6 +143,8 @@ class Predictor:
                 raise ValueError(("Regression threshold should be >= 0"))
         self.regression_threshold = regression_threshold
 
+        self.no_hurdle = no_hurdle
+
         # Memoize evaluations, organized by guide start position:
         #   {guide start: {pair: X}}
         # where each X is a tuple of (overall activity, False/True indicating
@@ -202,6 +207,21 @@ class Predictor:
             o.extend(pred_activity)
         return o
 
+    def _classify(self, pairs_onehot):
+        """Run classification model.
+
+        Args:
+            pairs_onehot: list of one-hot encoded pairs of target and guide
+
+        Returns:
+            list of classification results
+        """
+        if len(pairs_onehot) == 0:
+            return []
+        pred_classification_score = self._predict_from_onehot(
+                self.classification_model, pairs_onehot)
+        return pred_classification_score
+
     def _classify_and_decide(self, pairs_onehot):
         """Run classification model and decide activity.
 
@@ -213,10 +233,7 @@ class Predictor:
             based on classification, after making decision based on
             self.classification_threshold
         """
-        if len(pairs_onehot) == 0:
-            return []
-        pred_classification_score = self._predict_from_onehot(
-                self.classification_model, pairs_onehot)
+        pred_classification_score = self._classify(pairs_onehot)
         return [bool(p >= self.classification_threshold)
                 for p in pred_classification_score]
 
@@ -294,7 +311,8 @@ class Predictor:
         all results.
 
         This runs classification on all pairs, and then regression
-        on just the ones decided to be active.
+        on just the ones decided to be active. (Or, if self.no_hurdle
+        is True, it runs both models on all pairs.)
 
         It memoizes results returned by _combine_model_results().
 
@@ -305,20 +323,35 @@ class Predictor:
         # Create one-hot encoding of pairs
         pairs_onehot = self._model_input_from_nt(pairs)
 
-        # Run classification on all pairs
-        classification_results = self._classify_and_decide(pairs_onehot)
+        # Simply multiply the classifier's prediction by the regression's
+        if self.no_hurdle:
+            # Run classification on all pairs
+            classification_results = self._classify(pairs_onehot)
 
-        # Pull out pairs that are active
-        pairs_onehot_active = [pair_onehot
-                for pair_onehot, p in zip(pairs_onehot, classification_results)
-                if p is True]
+            # Run regression on all pairs
+            regression_results = self._regress(pairs_onehot)
 
-        # Run regression on the active pairs
-        regression_results = self._regress(pairs_onehot_active)
+            combined_results = []
+            for c, r in zip(classification_results, regression_results):
+                activity = c * r
+                is_highly_active = (c >= self.classification_threshold and
+                        r >= self.regression_threshold)
+                combined_results += [(activity, is_highly_active)]
+        else:
+            # Run classification on all pairs
+            classification_results = self._classify_and_decide(pairs_onehot)
 
-        # Compute results
-        combined_results = self._combine_model_results(classification_results,
-                regression_results)
+            # Pull out pairs that are active
+            pairs_onehot_active = [pair_onehot
+                    for pair_onehot, p in zip(pairs_onehot, classification_results)
+                    if p is True]
+
+            # Run regression on the active pairs
+            regression_results = self._regress(pairs_onehot_active)
+
+            # Compute results
+            combined_results = self._combine_model_results(classification_results,
+                    regression_results)
 
         # Memoize results
         if start_pos not in self._memoized_evaluations:
@@ -424,7 +457,8 @@ def write_preds(inputs, preds, fn):
 
 def main(args):
     predictor = Predictor(args.classification_model_path,
-            args.regression_model_path)
+            args.regression_model_path,
+            no_hurdle=args.no_hurdle)
     inputs = read_inputs(args.input_seqs)
 
     # Check context_nt matches input data
@@ -458,6 +492,12 @@ if __name__ == "__main__":
     parser.add_argument('output',
             help=("Path to output TSV; format is the input TSV, with an "
                   "added column giving predicted value"))
+    parser.add_argument('--no-hurdle',
+            dest='no_hurdle',
+            action='store_true',
+            help=("If set, do not use a hurdle model; instead, multiply the "
+                  "classifier's prediction by the regression's. This helps "
+                  "the output be more continuous, if needed."))
 
     args = parser.parse_args()
 
