@@ -111,7 +111,7 @@ ggsave(OUT.PDF.SCATTER, p, width=4.5, height=4.5, useDingbats=FALSE)
 # the Tambe et al. value
 # Use `forcats::fct_rev(..)` to flip the order of each stacked bar
 p <- ggplot(test.results, aes(x=adapt.prediction.quartile, fill=forcats::fct_rev(tambe.value.quartile))) +
-        geom_bar(stat="count") +
+        geom_bar(position="fill") +
         xlab("Quartile of predicted activity for detection") +
         theme_pubr() +
         coord_flip() +    # flip axes
@@ -125,7 +125,7 @@ ggsave(OUT.PDF.QUARTILES, p, width=7, height=4.5, useDingbats=FALSE)
 # ADAPT's predicted value
 # Use `forcats::fct_rev(..)` to flip the order of each stacked bar
 p <- ggplot(test.results, aes(x=tambe.value.quartile, fill=forcats::fct_rev(adapt.prediction.quartile))) +
-        geom_bar(stat="count") +
+        geom_bar(position="fill") +
         xlab("Quartile of binding fold-change (Tambe et al. 2018)") +
         theme_pubr() +
         coord_flip() +    # flip axes
