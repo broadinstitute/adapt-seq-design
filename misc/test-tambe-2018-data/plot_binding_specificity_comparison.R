@@ -17,7 +17,9 @@ args <- commandArgs(trailingOnly=TRUE)
 IN.TSV <- args[1]
 OUT.PDF.SCATTER <- args[2]
 OUT.PDF.QUARTILES <- args[3]
-OUT.PDF.SCATTER.HARM <- args[4]
+OUT.PDF.QUARTILES.REV <- args[4]
+OUT.PDF.SCATTER.HARM <- args[5]
+OUT.PDF.SCATTER.1MM <- args[6]
 
 # Read TSV of results and replace '_' in column names with '.'
 test.results <- read.table(gzfile(IN.TSV), header=TRUE, sep="\t")
@@ -74,6 +76,16 @@ test.results.harm.rho.expr <- as.expression(bquote(rho~"="~.(test.results.harm.r
 test.results.harm.r.str <- format(test.results.harm.metrics$r, digits=3)
 test.results.harm.r.expr <- as.expression(bquote(r~"="~.(test.results.harm.r.str)))
 
+# Also compute and print metrics for only 1 mismatch data (since this is what
+# is mostly used for cleavage rate data)
+test.results.1mm <- test.results[test.results$number.of.mismatches == 1,]
+test.results.1mm.metrics <- metrics(test.results.1mm$tambe.value, test.results.1mm$adapt.prediction)
+print(paste("Subset with only 1 mismatch:", test.results.1mm.metrics$str))
+test.results.1mm.rho.str <- format(test.results.1mm.metrics$rho, digits=3)
+test.results.1mm.rho.expr <- as.expression(bquote(rho~"="~.(test.results.1mm.rho.str)))
+test.results.1mm.r.str <- format(test.results.1mm.metrics$r, digits=3)
+test.results.1mm.r.expr <- as.expression(bquote(r~"="~.(test.results.1mm.r.str)))
+
 # Compute quartiles
 test.results$tambe.value.quartile <- factor(ntile(test.results$tambe.value, 4))
 test.results$adapt.prediction.quartile <- factor(ntile(test.results$adapt.prediction, 4))
@@ -109,6 +121,20 @@ p <- ggplot(test.results, aes(x=adapt.prediction.quartile, fill=forcats::fct_rev
               axis.ticks.x=element_blank())
 ggsave(OUT.PDF.QUARTILES, p, width=7, height=4.5, useDingbats=FALSE)
 
+# Plot stacked bar for each quartile of the Tambe et al. value, showing
+# ADAPT's predicted value
+# Use `forcats::fct_rev(..)` to flip the order of each stacked bar
+p <- ggplot(test.results, aes(x=tambe.value.quartile, fill=forcats::fct_rev(adapt.prediction.quartile))) +
+        geom_bar(stat="count") +
+        xlab("Quartile of binding fold-change (Tambe 2018)") +
+        theme_pubr() +
+        coord_flip() +    # flip axes
+        scale_fill_viridis(name="Quartile of predicted activity for detection", discrete=TRUE) +   # legend label and fill colors
+        theme(axis.title.x=element_blank(), # remove x-axis
+              axis.text.x=element_blank(),
+              axis.ticks.x=element_blank())
+ggsave(OUT.PDF.QUARTILES.REV, p, width=7, height=4.5, useDingbats=FALSE)
+
 # Plot scatter plot of measured Tambe val. versus predicted value, only for
 # data where the Tambe value decreases against the wildtype (i.e., mismatches
 # harms activity)
@@ -123,3 +149,17 @@ p <- ggplot(test.results.harm, aes(x=tambe.value, y=adapt.prediction)) +
         annotate(geom="text", label=test.results.harm.r.expr, # include text with r value
                  x=Inf, y=Inf, hjust=1, vjust=2, size=3)
 ggsave(OUT.PDF.SCATTER.HARM, p, width=4.5, height=4.5, useDingbats=FALSE)
+
+# Plot scatter plot of measured Tambe val. versus predicted value, only for
+# data with 1 mismatch
+p <- ggplot(test.results.1mm, aes(x=tambe.value, y=adapt.prediction)) +
+        geom_point(aes(color=number.of.mismatches), size=1, stroke=0, alpha=0.8) +
+        xlab("Binding fold-change (Tambe 2018)") + ylab("Predicted activity for detection") +
+        scale_color_viridis(discrete=TRUE, name="Mismatches") + # adjust colors
+        theme_pubr() +
+        theme(aspect.ratio=1) +  # make plot be square
+        annotate(geom="text", label=test.results.1mm.rho.expr, # include text with rho value
+                 x=Inf, y=Inf, hjust=1, vjust=1, size=3) +
+        annotate(geom="text", label=test.results.1mm.r.expr, # include text with r value
+                 x=Inf, y=Inf, hjust=1, vjust=2, size=3)
+ggsave(OUT.PDF.SCATTER.1MM, p, width=4.5, height=4.5, useDingbats=FALSE)
