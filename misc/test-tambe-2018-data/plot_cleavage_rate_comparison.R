@@ -53,7 +53,7 @@ test.results.harm.r.expr <- as.expression(bquote(r~"="~.(test.results.harm.r.str
 # Scatter plot of all results
 p <- ggplot(test.results, aes(x=tambe.value, y=adapt.prediction)) +
         geom_point(aes(color=number.of.mismatches), size=3) +
-        xlab("Measured cleavage rate (Tambe et al. 2018)") + ylab("Model prediction") +
+        xlab("Cleavage rate (Tambe et al. 2018)") + ylab("Predicted activity for detection") +
         geom_vline(xintercept=100, linetype="dashed") +   # vertical line at normalized (0-mismatch) Tambe et al. value
         scale_color_viridis(discrete=TRUE, name="Mismatches") + # adjust colors
         theme_pubr() +
@@ -68,7 +68,7 @@ ggsave(OUT.PDF, p, width=4.5, height=4.5, useDingbats=FALSE)
 # wildtype (i.e., mismatches harm activity)
 p <- ggplot(test.results.harm, aes(x=tambe.value, y=adapt.prediction)) +
         geom_point(aes(color=number.of.mismatches), size=3) +
-        xlab("Measured cleavage rate (Tambe et al. 2018)") + ylab("Model prediction") +
+        xlab("Cleavage rate (Tambe et al. 2018)") + ylab("Predicted activity for detection") +
         geom_vline(xintercept=100, linetype="dashed") +   # vertical line at normalized (0-mismatch) Tambe et al. value
         scale_color_viridis(discrete=TRUE, name="Mismatches") + # adjust colors
         theme_pubr() +

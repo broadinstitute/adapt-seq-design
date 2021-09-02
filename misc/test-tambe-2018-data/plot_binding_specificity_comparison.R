@@ -97,7 +97,7 @@ p <- ggplot(test.results, aes(x=tambe.value, y=adapt.prediction)) +
         #stat_density_2d(aes(fill=stat(level)), geom="polygon", contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75) +   # h=c(0.6, 0.6) works too
         #stat_density_2d(aes(fill=stat(level)), color="#5E5E5E", alpha=0.2, size=0.05, contour=TRUE, n=c(1000, 1000), h=NULL, adjust=1.75) +   # outline around contours; h=c(0.6, 0.6) works too
         #scale_fill_gradient(name="Level", breaks=c(0.2, 0.5), low="#FDF5FF", high="#470E55") +  # customize colors; specify tick labels on legend bar
-        xlab("Measured fold-change for binding (Tambe et al. 2018)") + ylab("Model prediction for detection") +
+        xlab("Binding fold-change (Tambe et al. 2018)") + ylab("Predicted activity for detection") +
         scale_color_viridis(discrete=TRUE, name="Mismatches") + # adjust colors
         theme_pubr() +
         theme(aspect.ratio=1) +  # make plot be square
@@ -112,10 +112,10 @@ ggsave(OUT.PDF.SCATTER, p, width=4.5, height=4.5, useDingbats=FALSE)
 # Use `forcats::fct_rev(..)` to flip the order of each stacked bar
 p <- ggplot(test.results, aes(x=adapt.prediction.quartile, fill=forcats::fct_rev(tambe.value.quartile))) +
         geom_bar(stat="count") +
-        xlab("Quartile of model prediction for detection") +
+        xlab("Quartile of predicted activity for detection") +
         theme_pubr() +
         coord_flip() +    # flip axes
-        scale_fill_viridis(name="Quartile of measured fold-change for binding (Tambe et al. 2018)", discrete=TRUE) +   # legend label and fill colors
+        scale_fill_viridis(name="Quartile of binding fold-change (Tambe et al. 2018)", discrete=TRUE) +   # legend label and fill colors
         theme(axis.title.x=element_blank(), # remove x-axis
               axis.text.x=element_blank(),
               axis.ticks.x=element_blank())
@@ -126,7 +126,7 @@ ggsave(OUT.PDF.QUARTILES, p, width=7, height=4.5, useDingbats=FALSE)
 # Use `forcats::fct_rev(..)` to flip the order of each stacked bar
 p <- ggplot(test.results, aes(x=tambe.value.quartile, fill=forcats::fct_rev(adapt.prediction.quartile))) +
         geom_bar(stat="count") +
-        xlab("Quartile of binding fold-change (Tambe 2018)") +
+        xlab("Quartile of binding fold-change (Tambe et al. 2018)") +
         theme_pubr() +
         coord_flip() +    # flip axes
         scale_fill_viridis(name="Quartile of predicted activity for detection", discrete=TRUE) +   # legend label and fill colors
@@ -140,7 +140,7 @@ ggsave(OUT.PDF.QUARTILES.REV, p, width=7, height=4.5, useDingbats=FALSE)
 # harms activity)
 p <- ggplot(test.results.harm, aes(x=tambe.value, y=adapt.prediction)) +
         geom_point(aes(color=number.of.mismatches), size=1, stroke=0, alpha=0.8) +
-        xlab("Measured fold-change for binding (Tambe et al. 2018)") + ylab("Model prediction for detection") +
+        xlab("Binding fold-change (Tambe et al. 2018)") + ylab("Predicted activity for detection") +
         scale_color_viridis(discrete=TRUE, name="Mismatches") + # adjust colors
         theme_pubr() +
         theme(aspect.ratio=1) +  # make plot be square
@@ -154,7 +154,7 @@ ggsave(OUT.PDF.SCATTER.HARM, p, width=4.5, height=4.5, useDingbats=FALSE)
 # data with 1 mismatch
 p <- ggplot(test.results.1mm, aes(x=tambe.value, y=adapt.prediction)) +
         geom_point(aes(color=number.of.mismatches), size=1, stroke=0, alpha=0.8) +
-        xlab("Binding fold-change (Tambe 2018)") + ylab("Predicted activity for detection") +
+        xlab("Binding fold-change (Tambe et al. 2018)") + ylab("Predicted activity for detection") +
         scale_color_viridis(discrete=TRUE, name="Mismatches") + # adjust colors
         theme_pubr() +
         theme(aspect.ratio=1) +  # make plot be square
