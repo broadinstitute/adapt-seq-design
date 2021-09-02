@@ -23,10 +23,18 @@ package ‘ggstance’ was built under R version 3.6.3
 Warning message:
 In cor.test.default(x, y, method = "spearman") :
   Cannot compute exact p-value with ties
-[1] "r=0.154489820107197; rho=0.359993577146745; r.pvalue=0.451121985848656; rho.pvalue=0.0708476800618199"
+[1] "r=0.15448981304657; rho=0.359993577146745; r.pvalue=0.451122006788085; rho.pvalue=0.0708476800618199"
 Warning message:
 In cor.test.default(x, y, method = "spearman") :
   Cannot compute exact p-value with ties
-[1] "Subset where mismatches hurt activity: r=0.783528156627424; rho=0.816348629307097; r.pvalue=0.000119770965782336; rho.pvalue=3.5922047867537e-05"
-Warning message:
-In is.na(x) : is.na() applied to non-(list or vector) of type 'expression'
+[1] "Subset where mismatches hurt activity: r=0.78352815621022; rho=0.816348629307097; r.pvalue=0.000119770967458578; rho.pvalue=3.5922047867537e-05"
+Warning messages:
+1: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+2: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+Warning messages:
+1: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+2: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'

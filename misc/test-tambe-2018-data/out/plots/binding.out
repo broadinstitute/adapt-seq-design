@@ -39,6 +39,24 @@ The following objects are masked from ‘package:base’:
 Warning message:
 In cor.test.default(x, y, method = "spearman") :
   Cannot compute exact p-value with ties
-[1] "r=0.228954420966794; rho=0.342519492822681; r.pvalue=7.76091156391553e-39; rho.pvalue=1.24313238690711e-87"
+[1] "r=0.199664202839733; rho=0.33946425560649; r.pvalue=7.87144248649434e-07; rho.pvalue=1.05864934201657e-17"
 Warning message:
-In is.na(x) : is.na() applied to non-(list or vector) of type 'expression'
+In cor.test.default(x, y, method = "spearman") :
+  Cannot compute exact p-value with ties
+[1] "Subset where mismatches hurt activity: r=0.347315545558839; rho=0.413028969245501; r.pvalue=4.82685733733884e-12; rho.pvalue=7.68635779641172e-17"
+[1] "Subset with only 1 mismatch: r=0.268345175974564; rho=0.248364816214054; r.pvalue=0.000899654640193048; rho.pvalue=0.00223891547878539"
+Warning messages:
+1: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+2: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+Warning messages:
+1: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+2: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+Warning messages:
+1: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+2: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
