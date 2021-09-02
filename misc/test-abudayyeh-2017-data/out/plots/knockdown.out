@@ -1,0 +1,31 @@
+Loading required package: ggplot2
+Warning message:
+package ‘ggplot2’ was built under R version 3.6.3 
+Loading required package: gridExtra
+Loading required package: reshape2
+Loading required package: ggridges
+Loading required package: viridis
+Loading required package: viridisLite
+Loading required package: ggsignif
+Loading required package: ggpubr
+Warning message:
+package ‘ggpubr’ was built under R version 3.6.3 
+Loading required package: ggstance
+
+Attaching package: ‘ggstance’
+
+The following objects are masked from ‘package:ggplot2’:
+
+    geom_errorbarh, GeomErrorbarh
+
+Warning message:
+package ‘ggstance’ was built under R version 3.6.3 
+Warning message:
+In cor.test.default(x, y, method = "spearman") :
+  Cannot compute exact p-value with ties
+[1] "r=-0.867715789605809; rho=-0.825850894121747; r.pvalue=1.03005866775385e-13; rho.pvalue=1.67619809876277e-11"
+Warning messages:
+1: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
+2: In is.na(x) :
+  is.na() applied to non-(list or vector) of type 'expression'
