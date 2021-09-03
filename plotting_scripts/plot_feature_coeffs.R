@@ -13,7 +13,7 @@ require(stringr)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.FEATURE.COEFFS.TSV <- args[1]
-OUT.PDF <- args[2]
+OUT.PDF.DIR <- args[2]
 
 # Show the best 20 features (ranked by mean of abs. value across splits)
 TOP.N <- 20
@@ -162,6 +162,10 @@ plot.combined.feats.for.model <- function(model, model.name) {
     p <- p + ylab("Feature") + xlab("Coefficient")
     p <- p + ggtitle(model.name)
     p <- p + theme_pubr()
+
+    file.save.path <- paste0(OUT.PDF.DIR, "/",
+                             "nested-cross-val.feature-coeffs.", model, ".pdf")
+    ggsave(file.save.path, p, width=3.5, height=5, useDingbats=FALSE)
     return(p)
 }
 ##############################
@@ -169,26 +173,19 @@ plot.combined.feats.for.model <- function(model, model.name) {
 
 if ("lr" %in% data$model) {
     # Linear regression models
-    p.combined.no.regularization <- plot.combined.feats.for.model("lr", "Linear regression")
-    p.combined.l1 <- plot.combined.feats.for.model("l1_lr", "L1 linear regression")
-    p.combined.l2 <- plot.combined.feats.for.model("l2_lr", "L2 linear regression")
-    p.combined.l1l2 <- plot.combined.feats.for.model("l1l2_lr", "L1+L2 linear regression")
+    plot.combined.feats.for.model("lr", "Linear regression")
+    plot.combined.feats.for.model("l1_lr", "L1 linear regression")
+    plot.combined.feats.for.model("l2_lr", "L2 linear regression")
+    plot.combined.feats.for.model("l1l2_lr", "L1+L2 linear regression")
 } else if ("logit" %in% data$model) {
     # Classification models
-    p.combined.no.regularization <- plot.combined.feats.for.model("logit", "Logistic regression")
-    p.combined.l1 <- plot.combined.feats.for.model("l1_logit", "L1 logistic regression")
-    p.combined.l2 <- plot.combined.feats.for.model("l2_logit", "L2 logistic regression")
-    p.combined.l1l2 <- plot.combined.feats.for.model("l1l2_logit", "L1+L2 logistic regression")
+    plot.combined.feats.for.model("logit", "Logistic regression")
+    plot.combined.feats.for.model("l1_logit", "L1 logistic regression")
+    plot.combined.feats.for.model("l2_logit", "L2 logistic regression")
+    plot.combined.feats.for.model("l1l2_logit", "L1+L2 logistic regression")
 } else {
     stop("Unknown whether this is regression or classification")
 }
-
-g <- arrangeGrob(#p.combined.no.regularization,
-                 p.combined.l1,
-                 p.combined.l2,
-                 p.combined.l1l2,
-                 ncol=1)
-ggsave(OUT.PDF, g, width=6, height=12, useDingbats=FALSE)
 
 # Remove the empty Rplots.pdf created above
 file.remove("Rplots.pdf")
