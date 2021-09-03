@@ -78,42 +78,82 @@ names(feature.coeffs) <- gsub("_", ".", names(feature.coeffs))
 feature.coeffs.summarized <- summarySE(feature.coeffs,
                                        measurevar="coeff",
                                        groupvars=c("model", "feats.type", "feat.description"))
+data <- feature.coeffs.summarized
 
-# Only used the 'combined' feats.type (handcrafted and one-hot features)
-feature.coeffs.summarized <- feature.coeffs.summarized[feature.coeffs.summarized$feats.type == "combined", ]
+# Determine position along the target
+# Number these such that the 5' end of the protospacer is position 1
+# and the 3' end is position 28; the PFS (nt immediately 3' of the protospacer
+# is position 29; the position immediately 5' of the protospacer is position -1;
+# and the most 5' end of the target sequence (10 nt upstream of the start of
+# the protospacer) is position -10
+# Note that target-before-* positions start at 10 and end at 19 because
+# their positions are with respect to a full 20 nt of context before the
+# protospacer, but as features we only used the 10 nt adjacent to the
+# protospacer (so 10 should be -10 and 19 should be -1)
+data$feat.str.pos <- str_replace_all(data$feat.description,
+                                     ".+-([0-9]+)-([ACGT])", "\\1")
+data$feat.str.pos <- as.numeric(data$feat.str.pos)
+data$allele <- str_replace_all(data$feat.description,
+                               ".+-([0-9]+)-([ACGT])", "\\2")
+data$allele <- factor(data$allele, levels=c("A", "C", "G", "T"))
+data$target.pos <- NA
+data$target.pos <- ifelse(grepl("target-before-", data$feat.description),
+                          data$feat.str.pos - 20,
+                          data$target.pos)
+data$target.pos <- ifelse(grepl("target-at-guide-", data$feat.description),
+                          data$feat.str.pos + 1,
+                           data$target.pos)
+data$target.pos <- ifelse(grepl("target-after-", data$feat.description),
+                          data$feat.str.pos + 29,
+                          data$target.pos)
+data$target.pos <- ifelse(grepl("guide-mismatch-", data$feat.description),
+                          data$feat.str.pos + 1,
+                          data$target.pos)
+
+# Rename some feat.description values with prettier versions
+data$feat.description.pretty <- data$feat.description
+feat.pretty <- function(from, to) {
+    # '<<-' is needed to modify outside scope
+    data$feat.description.pretty <<- str_replace_all(data$feat.description.pretty, from, to)
+}
+#feat.pretty("target-after-0-([ACGT])", "PFS = \\1")   # PFS
+#feat.pretty("target-after-1-([ACGT])", "PFS+1 = \\1")   # 1 after PFS
+feat.pretty("pfs-([ACGT][ACGT])", "PFS = \\1")   # 2 nt PFS
+feat.pretty("num-mismatches", "Mismatch count")
+#feat.pretty("guide-mismatch-allele-([0-9]+)-([ACGT])", "Mismatch at \\1 = \\2")
+#feat.pretty("target-at-guide-([0-9]+)-([ACGT])", "Match at \\1 = \\2")
+data$feat.description.pretty <- ifelse(grepl("target-", data$feat.description),
+                                       paste0("Target @ ", data$target.pos, " = ", data$allele),
+                                       data$feat.description.pretty)
+data$feat.description.pretty <- ifelse(grepl("guide-mismatch-", data$feat.description),
+                                       paste0("MM @ ", data$target.pos, " = ", data$allele),
+                                       data$feat.description.pretty)
+
+##############################
+# Prepare for combined feature plots (handcrafted and one-hot features)
+# These show features sorted by importance (coefficient value)
+
+# Only used the 'combined' feats.type
+data.combined <- data[data$feats.type == "combined", ]
 
 # Sort by abs(mean coeff) and pull out the highest TOP.N coefficients for
 # each group of model,feats.type
 require(dplyr)
-feature.coeffs.summarized$coeff.abs <- abs(feature.coeffs.summarized$coeff)
-data <- feature.coeffs.summarized %>%
+data.combined$coeff.abs <- abs(data.combined$coeff)
+data.combined <- data.combined %>%
     group_by(model, feats.type) %>%
     arrange(desc(coeff.abs), .by_group=TRUE) %>%
     top_n(n=TOP.N, wt=coeff.abs)
-data <- data.frame(data)
+data.combined <- data.frame(data.combined)
 
-# Rename some feat.description values
-feat.replace <- function(from, to) {
-    # '<<-' is needed to modify outside scope
-    data$feat.description <<- str_replace_all(data$feat.description, from, to)
-}
-feat.replace("target-after-0-([ACGT])", "PFS = \\1")   # PFS
-feat.replace("target-after-1-([ACGT])", "PFS+1 = \\1")   # 1 after PFS
-feat.replace("pfs-([ACGT][ACGT])", "PFS = \\1")   # 2 nt PFS
-feat.replace("num-mismatches-seed", "Mismatches in seed")
-feat.replace("num-mismatches-nonseed", "Mismatches outside seed")
-feat.replace("num-mismatches", "Number of mismatches")
-feat.replace("guide-mismatch-allele-([0-9]+)-([ACGT])", "Mismatch at \\1 = \\2")
-feat.replace("target-at-guide-([0-9]+)-([ACGT])", "Match at \\1 = \\2")
-
-plot.for.model <- function(model, model.name) {
+plot.combined.feats.for.model <- function(model, model.name) {
     # Produce plot for model
-    data.for.model <- data.frame(data[data$model == model, ])
+    data.for.model <- data.frame(data.combined[data.combined$model == model, ])
 
-    # Make feat.description be a factor, preserving its order
-    data.for.model$feat.description <- factor(data.for.model$feat.description, levels=unique(data.for.model$feat.description))
+    # Make feat.description.pretty be a factor, preserving its order
+    data.for.model$feat.description.pretty <- factor(data.for.model$feat.description.pretty, levels=unique(data.for.model$feat.description.pretty))
 
-    p <- ggplot(data.for.model, aes(x=feat.description, y=coeff))
+    p <- ggplot(data.for.model, aes(x=feat.description.pretty, y=coeff))
     p <- p + geom_bar(stat="identity")
     p <- p + geom_errorbar(aes(ymin=coeff-ci, ymax=coeff+ci), width=0.3)
     p <- p + xlab("Feature") + ylab("Coefficient")
@@ -123,27 +163,29 @@ plot.for.model <- function(model, model.name) {
                    plot.margin=margin(t=10, r=10, b=10, l=50)) # add margin on left so x label is not cutoff
     return(p)
 }
+##############################
+
 
 if ("lr" %in% data$model) {
     # Linear regression models
-    p.no.regularization <- plot.for.model("lr", "Linear regression")
-    p.l1 <- plot.for.model("l1_lr", "L1 linear regression")
-    p.l2 <- plot.for.model("l2_lr", "L2 linear regression")
-    p.l1l2 <- plot.for.model("l1l2_lr", "L1+L2 linear regression")
+    p.combined.no.regularization <- plot.combined.feats.for.model("lr", "Linear regression")
+    p.combined.l1 <- plot.combined.feats.for.model("l1_lr", "L1 linear regression")
+    p.combined.l2 <- plot.combined.feats.for.model("l2_lr", "L2 linear regression")
+    p.combined.l1l2 <- plot.combined.feats.for.model("l1l2_lr", "L1+L2 linear regression")
 } else if ("logit" %in% data$model) {
     # Classification models
-    p.no.regularization <- plot.for.model("logit", "Logistic regression")
-    p.l1 <- plot.for.model("l1_logit", "L1 logistic regression")
-    p.l2 <- plot.for.model("l2_logit", "L2 logistic regression")
-    p.l1l2 <- plot.for.model("l1l2_logit", "L1+L2 logistic regression")
+    p.combined.no.regularization <- plot.combined.feats.for.model("logit", "Logistic regression")
+    p.combined.l1 <- plot.combined.feats.for.model("l1_logit", "L1 logistic regression")
+    p.combined.l2 <- plot.combined.feats.for.model("l2_logit", "L2 logistic regression")
+    p.combined.l1l2 <- plot.combined.feats.for.model("l1l2_logit", "L1+L2 logistic regression")
 } else {
     stop("Unknown whether this is regression or classification")
 }
 
-g <- arrangeGrob(#p.no.regularization,
-                 p.l1,
-                 p.l2,
-                 p.l1l2,
+g <- arrangeGrob(#p.combined.no.regularization,
+                 p.combined.l1,
+                 p.combined.l2,
+                 p.combined.l1l2,
                  ncol=1)
 ggsave(OUT.PDF, g, width=6, height=12, useDingbats=FALSE)
 
