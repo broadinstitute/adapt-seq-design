@@ -153,14 +153,15 @@ plot.combined.feats.for.model <- function(model, model.name) {
     # Make feat.description.pretty be a factor, preserving its order
     data.for.model$feat.description.pretty <- factor(data.for.model$feat.description.pretty, levels=unique(data.for.model$feat.description.pretty))
 
-    p <- ggplot(data.for.model, aes(x=feat.description.pretty, y=coeff))
-    p <- p + geom_bar(stat="identity")
-    p <- p + geom_errorbar(aes(ymin=coeff-ci, ymax=coeff+ci), width=0.3)
-    p <- p + xlab("Feature") + ylab("Coefficient")
+    p <- ggplot(data.for.model, aes(y=feat.description.pretty, x=coeff))
+    #p <- p + geom_bar(stat="identity")
+    p <- p + geom_point()
+    p <- p + geom_errorbar(aes(xmin=coeff-ci, xmax=coeff+ci), width=0.3)
+    p <- p + geom_vline(xintercept=0, linetype="dashed", color="gray")
+    p <- p + scale_y_discrete(limits=rev(levels(data.for.model$feat.description.pretty)))  # reverse y-axis order
+    p <- p + ylab("Feature") + xlab("Coefficient")
     p <- p + ggtitle(model.name)
     p <- p + theme_pubr()
-    p <- p + theme(axis.text.x=element_text(angle=45, hjust=1), # rotate x labels
-                   plot.margin=margin(t=10, r=10, b=10, l=50)) # add margin on left so x label is not cutoff
     return(p)
 }
 ##############################
