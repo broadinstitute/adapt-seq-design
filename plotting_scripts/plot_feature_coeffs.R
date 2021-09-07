@@ -124,7 +124,7 @@ feat.pretty("num-mismatches", "Mismatch count")
 #feat.pretty("guide-mismatch-allele-([0-9]+)-([ACGT])", "Mismatch at \\1 = \\2")
 #feat.pretty("target-at-guide-([0-9]+)-([ACGT])", "Match at \\1 = \\2")
 data$feat.description.pretty <- ifelse(grepl("target-", data$feat.description),
-                                       paste0("Target @ ", data$target.pos, " = ", data$allele),
+                                       paste0("Target: pos. ", data$target.pos, " = ", data$allele),
                                        data$feat.description.pretty)
 data$feat.description.pretty <- ifelse(grepl("guide-mismatch-", data$feat.description),
                                        paste0("MM: pos. ", data$target.pos, " = ", data$allele),
