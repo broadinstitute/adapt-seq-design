@@ -83,13 +83,13 @@ data <- feature.coeffs.summarized
 # Determine position along the target
 # Number these such that the 5' end of the protospacer is position 1
 # and the 3' end is position 28; the PFS (nt immediately 3' of the protospacer
-# is position 29; the position immediately 5' of the protospacer is position -1;
+# is position 29; the position immediately 5' of the protospacer is position 0;
 # and the most 5' end of the target sequence (10 nt upstream of the start of
-# the protospacer) is position -10
+# the protospacer) is position -9
 # Note that target-before-* positions start at 10 and end at 19 because
 # their positions are with respect to a full 20 nt of context before the
 # protospacer, but as features we only used the 10 nt adjacent to the
-# protospacer (so 10 should be -10 and 19 should be -1)
+# protospacer (so 10 should be -9 and 19 should be 0)
 data$feat.str.pos <- str_replace_all(data$feat.description,
                                      ".+-([0-9]+)-([ACGT])", "\\1")
 data$feat.str.pos <- as.numeric(data$feat.str.pos)
@@ -98,7 +98,7 @@ data$allele <- str_replace_all(data$feat.description,
 data$allele <- factor(data$allele, levels=c("A", "C", "G", "T"))
 data$target.pos <- NA
 data$target.pos <- ifelse(grepl("target-before-", data$feat.description),
-                          data$feat.str.pos - 20,
+                          data$feat.str.pos - 19,
                           data$target.pos)
 data$target.pos <- ifelse(grepl("target-at-guide-", data$feat.description),
                           data$feat.str.pos + 1,
@@ -126,7 +126,7 @@ data$feat.description.pretty <- ifelse(grepl("target-", data$feat.description),
                                        paste0("Target @ ", data$target.pos, " = ", data$allele),
                                        data$feat.description.pretty)
 data$feat.description.pretty <- ifelse(grepl("guide-mismatch-", data$feat.description),
-                                       paste0("MM @ ", data$target.pos, " = ", data$allele),
+                                       paste0("MM: pos. ", data$target.pos, " = ", data$allele),
                                        data$feat.description.pretty)
 
 ##############################
