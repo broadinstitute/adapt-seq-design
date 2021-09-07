@@ -10,6 +10,7 @@ require(ggplot2)
 require(gridExtra)
 require(ggpubr)
 require(stringr)
+require(viridis)
 
 args <- commandArgs(trailingOnly=TRUE)
 IN.FEATURE.COEFFS.TSV <- args[1]
@@ -165,8 +166,61 @@ plot.combined.feats.for.model <- function(model, model.name) {
 
     file.save.path <- paste0(OUT.PDF.DIR, "/",
                              "nested-cross-val.feature-coeffs.", model, ".pdf")
-    ggsave(file.save.path, p, width=3.5, height=5, useDingbats=FALSE)
+    ggsave(file.save.path, p, width=3.1, height=4, useDingbats=FALSE)
     return(p)
+}
+##############################
+
+##############################
+# Prepare for onehot-simple plots (just target bases and mismatch alleles)
+# These show coefficient values ordered along the guide/target
+
+# Only used the 'onehot-simple' feats.type
+data.onehot <- data[data$feats.type == "onehot-simple", ]
+
+# Break up the data frame based on whether the row represents a target
+# base or a mismatch allele
+data.onehot.target <- data.onehot[grepl("target-", data.onehot$feat.description),]
+data.onehot.mismatch <- data.onehot[grepl("guide-mismatch-", data.onehot$feat.description),]
+
+plot.onehot.target.for.model <- function(model, model.name) {
+    # Produce plot for model
+    data.for.model <- data.frame(data.onehot.target[data.onehot.target$model == model, ])
+
+    p <- ggplot(data.for.model, aes(x=target.pos, y=coeff, fill=allele))
+    p <- p + geom_rect(data=subset(data.for.model, target.pos %% 2 == 0), aes(xmin=target.pos-0.55, xmax=target.pos+0.55, ymin=-Inf, ymax=Inf, alpha=target.pos.background.alpha), color="white", fill="black", alpha=0.03) # alternate (striped) backgrounds of gray and white; put gray rectangle for even positions
+    p <- p + geom_bar(stat="identity", width=0.8, position=position_dodge())
+    p <- p + geom_errorbar(aes(ymin=coeff-ci, ymax=coeff+ci, group=allele), size=0.1, width=0.5, position=position_dodge(width=0.8))
+    p <- p + xlab("Position in target") + ylab("Coefficient")
+    p <- p + ggtitle(model.name)
+    p <- p + scale_fill_viridis(discrete=TRUE, name="") # adjust fill gradient
+    p <- p + theme_pubr()
+
+    file.save.path <- paste0(OUT.PDF.DIR, "/",
+                             "nested-cross-val.feature-coeffs-onehot-target-bases.", model, ".pdf")
+    ggsave(file.save.path, p, width=7, height=2.5, useDingbats=FALSE)
+    return(p)
+    # Produce plot for model
+}
+
+plot.onehot.mismatches.for.model <- function(model, model.name) {
+    # Produce plot for model
+    data.for.model <- data.frame(data.onehot.mismatch[data.onehot.mismatch$model == model, ])
+
+    p <- ggplot(data.for.model, aes(x=target.pos, y=coeff, fill=allele))
+    p <- p + geom_rect(data=subset(data.for.model, target.pos %% 2 == 0), aes(xmin=target.pos-0.55, xmax=target.pos+0.55, ymin=-Inf, ymax=Inf, alpha=target.pos.background.alpha), color="white", fill="black", alpha=0.03) # alternate (striped) backgrounds of gray and white; put gray rectangle for even positions
+    p <- p + geom_bar(stat="identity", width=0.8, position=position_dodge())
+    p <- p + geom_errorbar(aes(ymin=coeff-ci, ymax=coeff+ci, group=allele), size=0.1, width=0.5, position=position_dodge(width=0.8))
+    p <- p + xlab("Position in target") + ylab("Coefficient")
+    p <- p + ggtitle(model.name)
+    p <- p + scale_fill_viridis(discrete=TRUE, name="") # adjust fill gradient
+    p <- p + theme_pubr()
+
+    file.save.path <- paste0(OUT.PDF.DIR, "/",
+                             "nested-cross-val.feature-coeffs-onehot-mismatch-alleles.", model, ".pdf")
+    ggsave(file.save.path, p, width=7, height=2.5, useDingbats=FALSE)
+    return(p)
+    # Produce plot for model
 }
 ##############################
 
@@ -177,12 +231,28 @@ if ("lr" %in% data$model) {
     plot.combined.feats.for.model("l1_lr", "L1 linear regression")
     plot.combined.feats.for.model("l2_lr", "L2 linear regression")
     plot.combined.feats.for.model("l1l2_lr", "L1+L2 linear regression")
+    plot.onehot.target.for.model("lr", "Linear regression - target bases")
+    plot.onehot.target.for.model("l1_lr", "L1 linear regression - target bases")
+    plot.onehot.target.for.model("l2_lr", "L2 linear regression - target bases")
+    plot.onehot.target.for.model("l1l2_lr", "L1+L2 linear regression - target bases")
+    plot.onehot.mismatches.for.model("lr", "Linear regression - mismatch alleles")
+    plot.onehot.mismatches.for.model("l1_lr", "L1 linear regression - mismatch alleles")
+    plot.onehot.mismatches.for.model("l2_lr", "L2 linear regression - mismatch alleles")
+    plot.onehot.mismatches.for.model("l1l2_lr", "L1+L2 linear regression - mismatch alleles")
 } else if ("logit" %in% data$model) {
     # Classification models
     plot.combined.feats.for.model("logit", "Logistic regression")
     plot.combined.feats.for.model("l1_logit", "L1 logistic regression")
     plot.combined.feats.for.model("l2_logit", "L2 logistic regression")
     plot.combined.feats.for.model("l1l2_logit", "L1+L2 logistic regression")
+    plot.onehot.target.for.model("logit", "Logistic regression - target bases")
+    plot.onehot.target.for.model("l1_logit", "L1 logistic regression - target bases")
+    plot.onehot.target.for.model("l2_logit", "L2 logistic regression - target bases")
+    plot.onehot.target.for.model("l1l2_logit", "L1+L2 logistic regression - target bases")
+    plot.onehot.mismatches.for.model("logit", "Logistic regression - mismatch alleles")
+    plot.onehot.mismatches.for.model("l1_logit", "L1 logistic regression - mismatch alleles")
+    plot.onehot.mismatches.for.model("l2_logit", "L2 logistic regression - mismatch alleles")
+    plot.onehot.mismatches.for.model("l1l2_logit", "L1+L2 logistic regression - mismatch alleles")
 } else {
     stop("Unknown whether this is regression or classification")
 }
