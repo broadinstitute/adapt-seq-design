@@ -136,6 +136,12 @@ if ('mse' %in% colnames(results)) {
                                         groupvars=c("model", "feats.type"))
     p.mse <- ggplot(results.mse.summarized, aes(x=model, y=mse, fill=feats.type))
     p.mse <- p.mse + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
+    # Note that jitterdodge requires fill
+    #   (see https://github.com/tidyverse/ggplot2/issues/3656)
+    p.mse <- p.mse + geom_point(data=results,  # show actual data points
+                                aes(x=model, y=mse, fill=feats.type),
+                                color="gray40", shape=21, size=1, stroke=0.4,
+                                position=position_jitterdodge(jitter.width=0.4, dodge.width=0.7))
     p.mse <- p.mse + geom_errorbar(aes(ymin=mse-ci, ymax=mse+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
     p.mse <- p.mse + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.mse <- p.mse + xlab("Model") + ylab("Mean squared error")
@@ -153,6 +159,12 @@ if ('mse' %in% colnames(results)) {
                                         groupvars=c("model", "feats.type"))
     p.rho <- ggplot(results.rho.summarized, aes(x=model, y=rho, fill=feats.type))
     p.rho <- p.rho + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
+    # Note that jitterdodge requires fill
+    #   (see https://github.com/tidyverse/ggplot2/issues/3656)
+    p.rho <- p.rho + geom_point(data=results,  # show actual data points
+                                aes(x=model, y=rho, fill=feats.type),
+                                color="gray40", shape=21, size=1, stroke=0.4,
+                                position=position_jitterdodge(jitter.width=0.4, dodge.width=0.7))
     p.rho <- p.rho + geom_errorbar(aes(ymin=rho-ci, ymax=rho+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
     p.rho <- p.rho + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.rho <- p.rho + xlab("Model") + ylab("Spearman correlation")
@@ -190,7 +202,13 @@ if ('mse' %in% colnames(results)) {
     results.auroc.baseline <- 0.5   # auROC of random classifier
     p.auroc <- ggplot(results.auroc.summarized, aes(x=model, y=auc.roc, fill=feats.type))
     p.auroc <- p.auroc + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
-    p.auroc <- p.auroc + geom_errorbar(aes(ymin=auc.roc-ci, ymax=auc.roc+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
+    # Note that jitterdodge requires fill
+    #   (see https://github.com/tidyverse/ggplot2/issues/3656)
+    p.auroc <- p.auroc + geom_point(data=results,  # show actual data points
+                                    aes(x=model, y=auc.roc, fill=feats.type),
+                                    color="gray40", shape=21, size=1, stroke=0.4,
+                                    position=position_jitterdodge(jitter.width=0.4, dodge.width=0.7))
+    p.auroc <- p.auroc + geom_errorbar(aes(ymin=auc.roc-ci, ymax=auc.roc+ci), width=0.3, alpha=0.7, position=position_dodge(0.7))   # 95% CI
     p.auroc <- p.auroc + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.auroc <- p.auroc + geom_hline(yintercept=results.auroc.baseline, linetype="dotted")    # representing random classifier
     p.auroc <- p.auroc + scale_y_continuous(limits=c(0.4,1.0), oob=rescale_none)    # ylim() does not work, as described at https://stackoverflow.com/a/10365218
@@ -210,6 +228,12 @@ if ('mse' %in% colnames(results)) {
     results.aupr.baseline <- random.precision # auPR of random classifier
     p.aupr <- ggplot(results.aupr.summarized, aes(x=model, y=auc.pr, fill=feats.type))
     p.aupr <- p.aupr + geom_bar(stat="identity", position=position_dodge(0.7), width=0.7)
+    # Note that jitterdodge requires fill
+    #   (see https://github.com/tidyverse/ggplot2/issues/3656)
+    p.aupr <- p.aupr + geom_point(data=results,  # show actual data points
+                                  aes(x=model, y=auc.pr, fill=feats.type),
+                                  color="gray40", shape=21, size=1, stroke=0.4,
+                                  position=position_jitterdodge(jitter.width=0.4, dodge.width=0.7))
     p.aupr <- p.aupr + geom_errorbar(aes(ymin=auc.pr-ci, ymax=auc.pr+ci), width=0.3, alpha=0.8, position=position_dodge(0.7))   # 95% CI
     p.aupr <- p.aupr + scale_fill_viridis(discrete=TRUE) # adjust fill gradient
     p.aupr <- p.aupr + geom_hline(yintercept=results.aupr.baseline, linetype="dotted")    # representing random classifier

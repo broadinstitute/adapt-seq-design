@@ -74,12 +74,7 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
 feature.coeffs <- read.table(gzfile(IN.FEATURE.COEFFS.TSV), header=TRUE, sep="\t")
 names(feature.coeffs) <- gsub("_", ".", names(feature.coeffs))
 
-# Summarize results across splits (i.e., mean for each coefficient for each
-# input type, taken across splits)
-feature.coeffs.summarized <- summarySE(feature.coeffs,
-                                       measurevar="coeff",
-                                       groupvars=c("model", "feats.type", "feat.description"))
-data <- feature.coeffs.summarized
+data <- feature.coeffs
 
 # Determine position along the target
 # Number these such that the 5' end of the protospacer is position 1
@@ -129,6 +124,14 @@ data$feat.description.pretty <- ifelse(grepl("target-", data$feat.description),
 data$feat.description.pretty <- ifelse(grepl("guide-mismatch-", data$feat.description),
                                        paste0("MM: pos. ", data$target.pos, " = ", data$allele),
                                        data$feat.description.pretty)
+
+# Summarize data across splits (i.e., mean for each coefficient for each
+# input type, taken across splits)
+data.nonsummarized <- data.frame(data)
+data.summarized <- summarySE(data,
+                             measurevar="coeff",
+                             groupvars=c("model", "feats.type", "feat.description", "allele", "target.pos", "feat.description.pretty"))
+data <- data.summarized
 
 ##############################
 # Prepare for combined feature plots (handcrafted and one-hot features)
@@ -183,13 +186,26 @@ data.onehot <- data[data$feats.type == "onehot-simple", ]
 data.onehot.target <- data.onehot[grepl("target-", data.onehot$feat.description),]
 data.onehot.mismatch <- data.onehot[grepl("guide-mismatch-", data.onehot$feat.description),]
 
+# Do the same for the nonsummarized data
+data.nonsummarized.onehot <- data.nonsummarized[data.nonsummarized$feats.type == "onehot-simple", ]
+data.nonsummarized.onehot.target <- data.nonsummarized.onehot[grepl("target-", data.nonsummarized.onehot$feat.description),]
+data.nonsummarized.onehot.mismatch <- data.nonsummarized.onehot[grepl("guide-mismatch-", data.nonsummarized.onehot$feat.description),]
+
 plot.onehot.target.for.model <- function(model, model.name) {
     # Produce plot for model
     data.for.model <- data.frame(data.onehot.target[data.onehot.target$model == model, ])
+    data.for.model.nonsummarized <- data.frame(data.nonsummarized.onehot.target[data.nonsummarized.onehot.target$model == model, ])
+
+    # Note that jitterdodge requires fill
+    #   (see https://github.com/tidyverse/ggplot2/issues/3656)
 
     p <- ggplot(data.for.model, aes(x=target.pos, y=coeff, fill=allele))
     p <- p + geom_rect(data=subset(data.for.model, target.pos %% 2 == 0), aes(xmin=target.pos-0.55, xmax=target.pos+0.55, ymin=-Inf, ymax=Inf, alpha=target.pos.background.alpha), color="white", fill="black", alpha=0.03) # alternate (striped) backgrounds of gray and white; put gray rectangle for even positions
     p <- p + geom_bar(stat="identity", width=0.8, position=position_dodge())
+    p <- p + geom_point(data=data.for.model.nonsummarized,  # show actual data points
+                        aes(x=target.pos, y=coeff, fill=allele),
+                        color="gray40", shape=21, size=0.2, stroke=0.1,
+                        position=position_jitterdodge(jitter.width=0.5, dodge.width=0.8))
     p <- p + geom_errorbar(aes(ymin=coeff-ci, ymax=coeff+ci, group=allele), size=0.1, width=0.5, position=position_dodge(width=0.8))
     p <- p + xlab("Position in target") + ylab("Coefficient")
     p <- p + ggtitle(model.name)
@@ -206,10 +222,18 @@ plot.onehot.target.for.model <- function(model, model.name) {
 plot.onehot.mismatches.for.model <- function(model, model.name) {
     # Produce plot for model
     data.for.model <- data.frame(data.onehot.mismatch[data.onehot.mismatch$model == model, ])
+    data.for.model.nonsummarized <- data.frame(data.nonsummarized.onehot.mismatch[data.nonsummarized.onehot.mismatch$model == model, ])
+
+    # Note that jitterdodge requires fill
+    #   (see https://github.com/tidyverse/ggplot2/issues/3656)
 
     p <- ggplot(data.for.model, aes(x=target.pos, y=coeff, fill=allele))
     p <- p + geom_rect(data=subset(data.for.model, target.pos %% 2 == 0), aes(xmin=target.pos-0.55, xmax=target.pos+0.55, ymin=-Inf, ymax=Inf, alpha=target.pos.background.alpha), color="white", fill="black", alpha=0.03) # alternate (striped) backgrounds of gray and white; put gray rectangle for even positions
     p <- p + geom_bar(stat="identity", width=0.8, position=position_dodge())
+    p <- p + geom_point(data=data.for.model.nonsummarized,  # show actual data points
+                        aes(x=target.pos, y=coeff, fill=allele),
+                        color="gray40", shape=21, size=0.2, stroke=0.1,
+                        position=position_jitterdodge(jitter.width=0.5, dodge.width=0.8))
     p <- p + geom_errorbar(aes(ymin=coeff-ci, ymax=coeff+ci, group=allele), size=0.1, width=0.5, position=position_dodge(width=0.8))
     p <- p + xlab("Position in target") + ylab("Coefficient")
     p <- p + ggtitle(model.name)
