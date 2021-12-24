@@ -1,0 +1,8 @@
+Number of guides: 91
+Number of targets: 226
+Number of unique pairs: 19665
+Average number of replicates: 14.4545
+The number of expected unique pairs should be: [(87 experimental guides)*(226 targets) + (4 positive control guides)*(1 unique target) = 19,666 pairs; however, only 19,665 is reported above. This is because the pair (block12_guide23, Target_MMM_104) is missing, possibly because it had 0 replicates (by chance) in the data. I think it is simpler to report that we have (87 experimental guides)*(226 targets) = 19,662 experimental guide-target pairs.
+Number of unique pairs (incl. context) in dataset: 19209
+Number of unique pairs (not incl. context) in dataset: 18253
+Number of unique pairs (not incl. context, incl. negative controls) in dataset: 18508

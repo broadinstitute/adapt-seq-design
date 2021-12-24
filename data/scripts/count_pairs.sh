@@ -7,7 +7,7 @@
 # Combine CCF005 and CCF024
 # Pull out of the following columns, in order: crRNA name, target name, replicate count
 tmpf=$(mktemp)
-cat <(tail -n +2 CCF005_pairs_annotated.csv) <(tail -n +2 CCF024_pairs_annotated.csv) | awk -F',' '{print $2"\t"$3"\t"$6}' > $tmpf
+cat <(tail -n +2 orig/CCF005_pairs_annotated.csv) <(tail -n +2 orig/CCF024_pairs_annotated.csv) | awk -F',' '{print $2"\t"$3"\t"$6}' > $tmpf
 
 # Remove pairs where guide or target is a negative control
 # Also remove Target_WT_{2,3,4} since these are equivalent to Target_WT_1
@@ -36,5 +36,7 @@ rm $nonnegunique
 # is included in the input to the model
 numuniquedatasetpairs=$(zcat CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz | tail -n +2 | awk '$7!="neg" {print}' | cut -f1,3,4,5 | sort | uniq | wc -l)
 numuniquedatasetpairswithoutcontext=$(zcat CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz | tail -n +2 | awk '$7!="neg" {print}' | cut -f1,3 | sort | uniq | wc -l)
+numuniquedatasetpairswithoutcontextwithnegs=$(zcat CCF-curated/CCF_merged_pairs_annotated.curated.resampled.tsv.gz | tail -n +2 | cut -f1,3 | sort | uniq | wc -l)
 echo "Number of unique pairs (incl. context) in dataset: $numuniquedatasetpairs"
 echo "Number of unique pairs (not incl. context) in dataset: $numuniquedatasetpairswithoutcontext"
+echo "Number of unique pairs (not incl. context, incl. negative controls) in dataset: $numuniquedatasetpairswithoutcontextwithnegs"
